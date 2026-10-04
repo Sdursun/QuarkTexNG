@@ -110,6 +110,17 @@ GLvoid stub_glDepthPoints(GLsizei count, const GLfloat* xyz) {
 	for (GLsizei i = 0; i < 3 * count; ++i) r << xyz[i];
 }
 
+// ffp::ChromaTest, ffp::ChromaBounds (Warp3D's chroma test).
+GLvoid stub_glChromaTest(GLboolean enable) {
+	Record r("ChromaTest");
+	r << enable;
+}
+
+GLvoid stub_glChromaBounds(GLuint texture, GLint mode, GLuint lower, GLuint upper) {
+	Record r("ChromaBounds");
+	r << texture << mode << lower << upper;
+}
+
 // ffp::StencilPoints: the count, then x, y, value of each pixel.
 GLvoid stub_glStencilPoints(GLsizei count, const GLfloat* xy, const GLuint* values) {
 	Record r("StencilPoints");
@@ -479,6 +490,24 @@ int main() {
 		qt_flush();
 		check(joined() == "StencilPoints(4,5.5,6.5,1,6.5,6.5,2,5.5,7.5,2,6.5,7.5,255) StencilFunc(514,3,255)",
 			"QT_W3D_WRITE_STENCIL: " + joined());
+	}
+
+	// W3D_SetChromaTestBounds(W3D_CHROMATEST_EXCLUSIVE) on texture 7, then
+	// W3D_SetState(W3D_CHROMATEST, W3D_ENABLE).
+	{
+		ULONG* w = qt_reserve(5);
+		w[0] = (static_cast<ULONG>(QT_W3D_CHROMA) << 16) | 5;
+		w[1] = 7;
+		w[2] = 0x00102030;
+		w[3] = 0x00405060;
+		w[4] = 3;
+		w = qt_reserve(3);
+		w[0] = (static_cast<ULONG>(QT_W3D_SET_STATE) << 16) | 3;
+		w[1] = 1 << 26;
+		w[2] = 1;
+		records.clear();
+		qt_flush();
+		check(joined() == "ChromaBounds(7,2,1056816,4214880) ChromaTest(1)", "QT_W3D_CHROMA: " + joined());
 	}
 
 	// W3D_ReadZSpan: the stub leaves the depths 0, which come back as z = -1.

@@ -28,7 +28,7 @@ ULONG W3D_CheckIdle(__REGA0(W3D_Context *context)) {
 ULONG W3D_Query(__REGA0(W3D_Context *context), __REGD0(ULONG query), __REGD1(ULONG destfmt)) {
 	LOG;
 	if (query == W3D_Q_MAXTEXWIDTH || query == W3D_Q_MAXTEXHEIGHT) return 2048;
-	return W3D_FULLY_SUPPORTED; /* the stencil buffer too, since phase 6 */
+	return W3D_FULLY_SUPPORTED; /* the stencil buffer and chroma test too, since phase 6 */
 }
 ULONG W3D_GetTexFmtInfo(__REGA0(W3D_Context *context), __REGD0(ULONG texfmt), __REGD1(ULONG destfmt)) {
 	LOG;

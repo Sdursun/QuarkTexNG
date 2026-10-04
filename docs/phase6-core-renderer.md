@@ -2,7 +2,7 @@
 
 Status: in progress (2026-10-05). Warp3D draws on an OpenGL 3.3 core
 profile context, pixel for pixel as the fixed-function renderer of phase 5;
-the stencil buffer works.
+the stencil buffer and the chroma test work.
 
 ## Contexts
 
@@ -92,6 +92,24 @@ always had 8 stencil bits, so Warp3D now uses them:
 Test: t15_stencil (new); against the snapshot before (`stencil0`) only it
 changed, and it reads back 1; 1 1 2 2; 0 as drawn.
 
+## Chroma test (roadmap item 5)
+
+0.53 did not support it (`W3D_SetChromaTestBounds` returned
+`W3D_UNSUPPORTED`, `W3D_SetState(W3D_CHROMATEST)` `W3D_UNSUPPORTEDSTATE`).
+OpenGL never had one; the shader does it now:
+
+- `W3D_SetChromaTestBounds` sends the texture's bounds and mode (`CHROMA`);
+  `ffp::ChromaBounds` keeps them per texture, `W3D_CHROMATEST` switches the
+  test for all textures (`ffp::ChromaTest`).
+- The bounds are ARGB like the other Warp3D colours; red, green and blue are
+  compared, alpha is ignored, both bounds included. The filtered texel is
+  compared in 8 bits per channel, before the texture environment.
+  `W3D_CHROMATEST_INCLUSIVE` keeps texels within the bounds,
+  `W3D_CHROMATEST_EXCLUSIVE` rejects them, `W3D_CHROMATEST_NONE` keeps all.
+
+Test: t16_chroma (new); against the snapshot before (`chroma0`) only it
+changed.
+
 ## Results
 
 All reference tests against the phase 5 snapshot (`run.ps1 -Against fix8`,
@@ -118,5 +136,5 @@ triangles/s.
   (CLUT, R5G6B5, ...). Today CHUNKY textures are converted to RGBA on the
   CPU and the 16-bit formats are uploaded with packed types; both work, so
   this is an optimisation, not a fix.
-- Roadmap item 5, still open: chroma key, several contexts at once (the
+- Roadmap item 5, still open: several contexts at once (the
   host has one context and the emulation one state), leaks.

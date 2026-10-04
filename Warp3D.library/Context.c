@@ -159,7 +159,6 @@ ULONG W3D_SetState(W3D_Context *context __asm("a0"), ULONG state __asm("d0"), UL
 	LOG;
 	if (action == W3D_ENABLE) context->state |= state;
 	else context->state &= ~state;
-	if (state == W3D_CHROMATEST) return W3D_UNSUPPORTEDSTATE;
 	w = w3d_command(QT_W3D_SET_STATE, 2);
 	w[0] = state;
 	w[1] = action == W3D_ENABLE ? W3D_ENABLE : W3D_DISABLE;

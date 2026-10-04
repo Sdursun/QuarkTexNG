@@ -39,7 +39,7 @@ namespace {
 		W3D_TEXMAPPING = 1 << 8, W3D_PERSPECTIVE = 1 << 9, W3D_GOURAUD = 1 << 10,
 		W3D_ZBUFFER = 1 << 11, W3D_ZBUFFERUPDATE = 1 << 12, W3D_BLENDING = 1 << 13,
 		W3D_FOGGING = 1 << 14, W3D_LOGICOP = 1 << 20, W3D_STENCILBUFFER = 1 << 21, W3D_ALPHATEST = 1 << 22,
-		W3D_SCISSOR = 1 << 25,
+		W3D_SCISSOR = 1 << 25, W3D_CHROMATEST = 1 << 26,
 		W3D_ENABLE = 1
 	};
 
@@ -283,6 +283,7 @@ namespace {
 			case W3D_ALPHATEST: QT_GL(Enable)(GL_ALPHA_TEST); break;
 			case W3D_SCISSOR: QT_GL(Enable)(GL_SCISSOR_TEST); break;
 			case W3D_STENCILBUFFER: QT_GL(Enable)(GL_STENCIL_TEST); break;
+			case W3D_CHROMATEST: QT_GL(ChromaTest)(GL_TRUE); break;
 			}
 		}
 		else {
@@ -296,6 +297,7 @@ namespace {
 			case W3D_ALPHATEST: QT_GL(Disable)(GL_ALPHA_TEST); break;
 			case W3D_SCISSOR: QT_GL(Disable)(GL_SCISSOR_TEST); break;
 			case W3D_STENCILBUFFER: QT_GL(Disable)(GL_STENCIL_TEST); break;
+			case W3D_CHROMATEST: QT_GL(ChromaTest)(GL_FALSE); break;
 			}
 		}
 	}
@@ -593,6 +595,14 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		if (lookup(w3dstencilop, c.u(1), sfail) && lookup(w3dstencilop, c.u(2), dpfail) && lookup(w3dstencilop, c.u(3), dppass)) {
 			QT_GL(StencilOp)(sfail, dpfail, dppass);
 		}
+		return true;
+	}
+
+	case QT_W3D_CHROMA: {
+		// Warp3D modes: W3D_CHROMATEST_NONE 1, _INCLUSIVE 2, _EXCLUSIVE 3.
+		uint32_t mode = c.u(4);
+		if (c.words != 5) return false;
+		if (mode >= 1 && mode <= 3) QT_GL(ChromaBounds)(c.u(1), static_cast<GLint>(mode - 1), c.u(2), c.u(3));
 		return true;
 	}
 

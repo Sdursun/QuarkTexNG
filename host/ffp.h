@@ -47,6 +47,13 @@ namespace ffp {
 	void TexEnvi(GLenum target, GLenum pname, GLint param);
 	void TexEnvfv(GLenum target, GLenum pname, const GLfloat* params);
 
+	// Warp3D's chroma test, which OpenGL never had: switched for all
+	// textures; mode, bounds per texture. mode 0 none, 1 texels within the
+	// bounds pass, 2 they are rejected. The bounds are 0xRRGGBB (alpha
+	// ignored), inclusive, compared with the filtered texel in 8 bits.
+	void ChromaTest(GLboolean enable);
+	void ChromaBounds(GLuint texture, GLint mode, GLuint lower, GLuint upper);
+
 	// Textures: the OpenGL 1.1 pixel formats (GL_ALPHA, GL_LUMINANCE, ...)
 	// become red/green textures with a swizzle; GL_CLAMP is emulated (see
 	// TextureInfo in ffp.cpp).

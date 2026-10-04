@@ -127,4 +127,8 @@
 #define QT_W3D_WRITE_STENCIL 0x8020
 #define QT_W3D_MAX_STENCIL_PIXELS 4194304
 
+/* W3D_SetChromaTestBounds: texture name, lower and upper bound (0xAARRGGBB,
+ * alpha ignored), mode (W3D_CHROMATEST_NONE...). */
+#define QT_W3D_CHROMA 0x8021
+
 #endif

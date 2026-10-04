@@ -84,6 +84,8 @@ extern struct Library *Warp3DBase;
 	LP3(510, ULONG, W3D_BindTexture, W3D_Context *, context, a0, ULONG, tmu, d0, W3D_Texture *, texture, a1, , Warp3DBase)
 #define W3D_DrawArray(context, primitive, base, count) \
 	LP4(516, ULONG, W3D_DrawArray, W3D_Context *, context, a0, ULONG, primitive, d0, ULONG, base, d1, ULONG, count, d2, , Warp3DBase)
+#define W3D_SetChromaTestBounds(context, texture, lower, upper, mode) \
+	LP5(444, ULONG, W3D_SetChromaTestBounds, W3D_Context *, context, a0, W3D_Texture *, texture, a1, ULONG, lower, d0, ULONG, upper, d1, ULONG, mode, d2, , Warp3DBase)
 #define W3D_Query(context, query, destfmt) \
 	LP3(84, ULONG, W3D_Query, W3D_Context *, context, a0, ULONG, query, d0, ULONG, destfmt, d1, , Warp3DBase)
 #define W3D_SetColorMask(context, red, green, blue, alpha) \

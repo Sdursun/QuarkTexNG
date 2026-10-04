@@ -229,9 +229,18 @@ ULONG W3D_FreeAllTexObj(__REGA0(W3D_Context *context)) {
 	return W3D_SUCCESS;
 }
 
+/* The bounds are ARGB like the other Warp3D colours; the host compares red,
+ * green and blue (0.53 did not support the chroma test). */
 ULONG W3D_SetChromaTestBounds(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture), __REGD0(ULONG rgba_lower), __REGD1(ULONG rgba_upper), __REGD2(ULONG mode)) {
+	ULONG *w;
 	LOG;
-	return W3D_UNSUPPORTED;
+	if (!texture || mode < W3D_CHROMATEST_NONE || mode > W3D_CHROMATEST_EXCLUSIVE) return W3D_ILLEGALINPUT;
+	w = w3d_command(QT_W3D_CHROMA, 4);
+	w[0] = ((Texture*) texture->driver)->glID;
+	w[1] = rgba_lower;
+	w[2] = rgba_upper;
+	w[3] = mode;
+	return W3D_SUCCESS;
 }
 
 /*

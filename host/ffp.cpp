@@ -50,6 +50,9 @@ namespace {
 		"uniform int envMode;\n"
 		"uniform vec4 envColor;\n"
 		"uniform vec4 clampRange; // s, t low; s, t high\n"
+		"uniform int chromaMode; // 0 off, 1 texels in the bounds pass, 2 they are rejected\n"
+		"uniform vec3 chromaLower;\n"
+		"uniform vec3 chromaUpper;\n"
 		"uniform bool fogging;\n"
 		"uniform int fogMode;\n"
 		"uniform vec3 fogParams;\n"
@@ -62,6 +65,11 @@ namespace {
 		"	vec4 c = smoothShading ? smoothColor : flatColor;\n"
 		"	if (texturing) {\n"
 		"		vec4 t = texture(image, clamp(coord.xy / coord.w, clampRange.xy, clampRange.zw));\n"
+		"		if (chromaMode != 0) {\n"
+		"			vec3 v = floor(t.rgb * 255.0 + 0.5);\n"
+		"			bool inside = all(greaterThanEqual(v, chromaLower)) && all(lessThanEqual(v, chromaUpper));\n"
+		"			if (inside == (chromaMode == 2)) discard;\n"
+		"		}\n"
 		"		if (envMode == 0) c = t;\n"
 		"		else if (envMode == 1) c *= t;\n"
 		"		else if (envMode == 2) c.rgb = mix(c.rgb, t.rgb, t.a);\n"
@@ -110,7 +118,7 @@ namespace {
 
 	struct Uniforms {
 		GLint modelView, smoothShading, texturing, envMode, envColor, fogging, fogMode, fogParams, fogColor,
-			alphaTesting, alphaFunction, alphaReference, clampRange;
+			alphaTesting, alphaFunction, alphaReference, clampRange, chromaMode, chromaLower, chromaUpper;
 	};
 
 	// GL_CLAMP, which OpenGL 3.3 does not have: the coordinate is clamped to
@@ -124,6 +132,8 @@ namespace {
 		bool clampS, clampT;
 		bool magLinear;
 		GLsizei width, height;
+		int chromaMode; // 0 none, 1 texels in the bounds pass, 2 they are rejected
+		int chromaLower[3], chromaUpper[3]; // r, g, b, 0..255
 	};
 
 	struct State {
@@ -134,6 +144,7 @@ namespace {
 		GLfloat fogStart, fogEnd, fogDensity, fogColor[4];
 		GLenum envMode;
 		GLfloat envColor[4];
+		bool chromaTest; // Warp3D's, see ChromaTest in ffp.h
 	};
 
 	GLuint program, depthProgram, vertexArray, vertexBuffer;
@@ -143,7 +154,7 @@ namespace {
 	State state;
 	bool dirty; // state differs from the uniforms
 	bool texturingSent;
-	GLfloat clampSent[4];
+	GLfloat textureSent[11];
 	GLfloat currentColor[4];
 	GLfloat currentTexCoord[4];
 	bool inside;
@@ -212,14 +223,26 @@ namespace {
 	void sendState() {
 		const TextureInfo* info = texturing();
 		bool texture = info != 0;
-		GLfloat range[4] = {-1e30f, -1e30f, 1e30f, 1e30f};
+		// The uniforms that depend on the bound texture: clamp range, chroma
+		// test mode and bounds.
+		GLfloat values[11] = {-1e30f, -1e30f, 1e30f, 1e30f, 0, 0, 0, 0, 0, 0, 0};
 		if (info) {
-			clampRange(info->clampS, info->magLinear, info->width, range[0], range[2]);
-			clampRange(info->clampT, info->magLinear, info->height, range[1], range[3]);
+			clampRange(info->clampS, info->magLinear, info->width, values[0], values[2]);
+			clampRange(info->clampT, info->magLinear, info->height, values[1], values[3]);
+			if (state.chromaTest && info->chromaMode) {
+				values[4] = static_cast<GLfloat>(info->chromaMode);
+				for (int i = 0; i < 3; ++i) {
+					values[5 + i] = static_cast<GLfloat>(info->chromaLower[i]);
+					values[8 + i] = static_cast<GLfloat>(info->chromaUpper[i]);
+				}
+			}
 		}
-		if (memcmp(range, clampSent, sizeof(range)) != 0) {
-			gl3::Uniform4f(uniforms.clampRange, range[0], range[1], range[2], range[3]);
-			memcpy(clampSent, range, sizeof(range));
+		if (memcmp(values, textureSent, sizeof(values)) != 0) {
+			gl3::Uniform4f(uniforms.clampRange, values[0], values[1], values[2], values[3]);
+			gl3::Uniform1i(uniforms.chromaMode, static_cast<GLint>(values[4]));
+			gl3::Uniform3f(uniforms.chromaLower, values[5], values[6], values[7]);
+			gl3::Uniform3f(uniforms.chromaUpper, values[8], values[9], values[10]);
+			memcpy(textureSent, values, sizeof(values));
 		}
 		if (!dirty && texture == texturingSent) return;
 		gl3::Uniform1i(uniforms.smoothShading, state.smooth);
@@ -315,6 +338,7 @@ namespace ffp {
 		QT_UNIFORM(modelView) QT_UNIFORM(smoothShading) QT_UNIFORM(texturing) QT_UNIFORM(envMode) QT_UNIFORM(envColor)
 		QT_UNIFORM(fogging) QT_UNIFORM(fogMode) QT_UNIFORM(fogParams) QT_UNIFORM(fogColor) QT_UNIFORM(alphaTesting)
 		QT_UNIFORM(alphaFunction) QT_UNIFORM(alphaReference) QT_UNIFORM(clampRange)
+		QT_UNIFORM(chromaMode) QT_UNIFORM(chromaLower) QT_UNIFORM(chromaUpper)
 #undef QT_UNIFORM
 
 		// The model view matrix of QuarkTex 0.53, built as glScalef and
@@ -340,11 +364,11 @@ namespace ffp {
 		gl3::EnableVertexAttribArray(2);
 
 		State initial = {false, false, false, true, GL_ALWAYS, 0.0f, GL_EXP, 0.0f, 1.0f, 1.0f, {0, 0, 0, 0},
-			GL_MODULATE, {0, 0, 0, 0}};
+			GL_MODULATE, {0, 0, 0, 0}, false};
 		state = initial;
 		dirty = true;
 		texturingSent = false;
-		memset(clampSent, 0, sizeof(clampSent)); // not a range sendState sends
+		memset(textureSent, 0, sizeof(textureSent)); // not a set sendState sends
 		const GLfloat white[4] = {1, 1, 1, 1}, origin[4] = {0, 0, 0, 1};
 		memcpy(currentColor, white, sizeof(currentColor));
 		memcpy(currentTexCoord, origin, sizeof(currentTexCoord));
@@ -505,6 +529,22 @@ namespace ffp {
 		if (pname != GL_TEXTURE_ENV_COLOR) return;
 		for (int i = 0; i < 4; ++i) state.envColor[i] = clamp01(params[i]);
 		dirty = true;
+	}
+
+	void ChromaTest(GLboolean enable) {
+		flushBatch();
+		state.chromaTest = enable != GL_FALSE;
+	}
+
+	void ChromaBounds(GLuint texture, GLint mode, GLuint lower, GLuint upper) {
+		flushBatch();
+		std::map<GLuint, TextureInfo>::iterator info = textures.find(texture);
+		if (info == textures.end()) return;
+		info->second.chromaMode = mode;
+		for (int i = 0; i < 3; ++i) {
+			info->second.chromaLower[i] = static_cast<int>((lower >> (16 - 8 * i)) & 0xFF);
+			info->second.chromaUpper[i] = static_cast<int>((upper >> (16 - 8 * i)) & 0xFF);
+		}
 	}
 
 	void GenTextures(GLsizei n, GLuint* names) {
