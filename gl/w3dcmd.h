@@ -91,4 +91,9 @@
 #define QT_W3D_DRAW_ARRAY 0x8016
 #define QT_W3D_NO_INDEX 0xFFFFFFFF
 
+/* Sent before W3D_DrawPoint and before W3D_DrawLine/LineStrip/LineLoop:
+ * W3D_Point.pointsize, W3D_Line(s).linewidth (float, pixels). */
+#define QT_W3D_POINT_SIZE 0x8017
+#define QT_W3D_LINE_WIDTH 0x8018
+
 #endif

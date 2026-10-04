@@ -72,7 +72,6 @@ does, which the `inline/macros.h` LP macros cannot.
 `docs/phase5-fixes.md`)
 
 Shown by the tests:
-- Warp3D: `W3D_Point.pointsize` is ignored (t02_primitives).
 - Warp3D: CHUNKY textures ignore the palette (t03_textures, first quad).
 - agl: `glDrawArrays` with stride 0 repeats the first vertex, so the strip in
   a05_agl_queries is not drawn.

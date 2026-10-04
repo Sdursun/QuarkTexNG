@@ -12,7 +12,10 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 2. The frames of the build before the fix are kept as a snapshot:
    `pwsh tests/run.ps1 -Save <name>`.
 3. After the fix, `pwsh tests/run.ps1 -Variants new -Against <name>` must show
-   exactly the expected test as changed, and all others unchanged.
+   exactly the expected test as changed, and all others unchanged. This
+   comparison is strict: a single changed pixel counts (`compare.py --strict`).
+   The 0.53 comparison allows 0.1 % of the pixels to differ, which hid the
+   point sizes of fix 5.
 4. The new frame is checked by eye. The test then goes into
    `tests/known-differences.txt` as a difference from 0.53.
 
@@ -24,7 +27,7 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 | 2 | Without the z-buffer no depth reaches OpenGL, so fog does nothing. Now the depth is sent when the z-buffer or fog is on | t06_fog, first row | fixed |
 | 3 | `SetTexEnv` and `SetWrapMode` passed their colours as r, b, g, a | t11_texcolors (new) | fixed |
 | 4 | `UpdateTexSubImage` uploaded `texsource` instead of its image and ignored `srcbpr`; `FreeAllTexObj` freed the wrong list nodes (and NULL) | t12_texupdate (new) | fixed |
-| 5 | `W3D_Point.pointsize` and line widths are ignored | t02_primitives | open |
+| 5 | `W3D_Point.pointsize` and line widths were ignored | t02_primitives (0.065 % of its pixels, below the 0.1 % threshold of the 0.53 comparison) | fixed |
 | 6 | CHUNKY textures ignore the palette | t03_textures, first quad | open |
 | 7 | Depth buffer reads and writes use the wrong sizes and addresses | new test | open |
 | 8 | agl: 16/32-bit texture, pixel and display list data is byte-swapped one byte at a time (`void *` steps) | new test | open |
@@ -32,7 +35,9 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 
 ## Test infrastructure changes
 
-- `run.ps1 -Save`/`-Against` (snapshots) and `compare.py --no-known`.
+- `run.ps1 -Save`/`-Against` (snapshots) and `compare.py --no-known`
+  and `--strict`. All fixes were checked again strictly between the saved
+  snapshots; each changed only its own test.
 - The tests write their capture label, read it back, and retry. Once a test's
   label write failed (the run before fix 1), and its frames went out under the
   previous test's name. The project folder is in OneDrive, which may lock the

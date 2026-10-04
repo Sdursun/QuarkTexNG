@@ -443,6 +443,21 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		if (c.words != 22) return false;
 		return drawArray(c);
 
+	case QT_W3D_POINT_SIZE: {
+		// 0.53 ignored the size; sizes below one pixel draw as one pixel.
+		float size = c.f(1);
+		if (c.words != 2) return false;
+		QT_GL(PointSize)(size >= 1.0f ? size : 1.0f);
+		return true;
+	}
+
+	case QT_W3D_LINE_WIDTH: {
+		float width = c.f(1);
+		if (c.words != 2) return false;
+		QT_GL(LineWidth)(width >= 1.0f ? width : 1.0f);
+		return true;
+	}
+
 	case QT_W3D_TEX_UPDATE: {
 		GLenum glFormat = 0, glType = 0;
 		GLint pixelSize = 0;

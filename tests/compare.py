@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Compare the frames captured by two test runs and write an HTML report.
 
-usage: compare.py <reference capture dir> <candidate capture dir> <report dir> [--no-known]
+usage: compare.py <reference capture dir> <candidate capture dir> <report dir> [--no-known] [--strict]
 
 For every test the last captured frame (<test>_<n>.bmp with the highest n) is
 compared pixel by pixel. A pixel differs when one of its channels differs by
 more than TOLERANCE; a test passes when at most MAX_DIFF_RATIO of its pixels
 differ. Tests listed in tests/known-differences.txt are reported as KNOWN
 instead of FAIL when they differ, unless --no-known is given (for comparisons
-with a snapshot of an earlier build). Exit code 0 when no test fails, 1 otherwise.
+with a snapshot of an earlier build). --strict fails a test on a
+single differing pixel. Exit code 0 when no test fails, 1 otherwise.
 """
 import html
 import os
@@ -103,7 +104,8 @@ def read_known_differences():
 
 
 def main():
-    args = [a for a in sys.argv[1:] if a != "--no-known"]
+    args = [a for a in sys.argv[1:] if a not in ("--no-known", "--strict")]
+    max_ratio = 0.0 if "--strict" in sys.argv else MAX_DIFF_RATIO
     if len(args) != 3:
         sys.exit(__doc__)
     ref_dir, new_dir, report_dir = args
@@ -130,7 +132,7 @@ def main():
                 status, detail = "FAIL", detail
                 del images["diff"]
             else:
-                status = "PASS" if ratio <= MAX_DIFF_RATIO else "FAIL"
+                status = "PASS" if ratio <= max_ratio else "FAIL"
                 detail = "%.3f%% of pixels differ (%s)" % (ratio * 100, detail)
                 if status == "FAIL" and test in known:
                     status = "KNOWN"
@@ -169,7 +171,7 @@ pre{background:#fff;border:1px solid #ddd;padding:8px;overflow:auto}
 %s
 <h2>Amiga output (reference)</h2><pre>%s</pre>
 <h2>Amiga output (new build)</h2><pre>%s</pre>
-""" % (len(rows), failures, TOLERANCE, MAX_DIFF_RATIO * 100, "\n".join(cells),
+""" % (len(rows), failures, TOLERANCE, max_ratio * 100, "\n".join(cells),
        html.escape(read_log(ref_dir)), html.escape(read_log(new_dir)))
     with open(os.path.join(report_dir, "index.html"), "w", encoding="utf-8") as f:
         f.write(page)

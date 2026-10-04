@@ -145,7 +145,7 @@ if ($Against) {
 	if (-not (Test-Path (Join-Path $work "snapshots\$Against"))) { throw "No snapshot '$Against' in $work\snapshots" }
 	Write-Host "== comparing with snapshot '$Against'"
 	docker run --rm -v "${root}:/w" -w /w quarktex-host python3 tests/compare.py `
-		"build/tests/snapshots/$Against" build/tests/new/qttest/capture "build/tests/report-$Against" --no-known
+		"build/tests/snapshots/$Against" build/tests/new/qttest/capture "build/tests/report-$Against" --no-known --strict
 	$result = $LASTEXITCODE
 	Write-Host "Report: $(Join-Path $work "report-$Against\index.html")"
 	exit $result

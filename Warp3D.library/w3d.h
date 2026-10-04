@@ -17,6 +17,13 @@ static inline ULONG *w3d_command(ULONG opcode, ULONG words) {
 	return w + 1;
 }
 
+/* A float as its bit pattern, for a command word. */
+static inline ULONG w3d_float(float f) {
+	union { float f; ULONG l; } u;
+	u.f = f;
+	return u.l;
+}
+
 typedef struct {
 	GLuint glID;
 	ULONG envparam;
