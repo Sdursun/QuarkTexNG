@@ -21,7 +21,6 @@ int fullscreen = 0;
 int width = 0;
 int height = 0;
 
-static long envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
 
 void INIT_0_Warp3D(void) {
 	glInit();
@@ -45,43 +44,6 @@ void EXIT_0_Warp3D(void) {
 	if (P96Base) CloseLibrary(P96Base);
 }
 
-//W3D_Texture* lasttex;
-
-static float color[] = {0.0, 0.0, 0.0, 0.0};
-
-void bindTexture(W3D_Texture* tex) {
-	//if (tex == lasttex || !tex) return;
-	if (!tex) return;
-	_glBindTexture(GL_TEXTURE_2D, ((Texture*) tex->driver)->glID);
-	/*if (((Texture*) tex->driver)->envparam) _glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, envs[((Texture*) tex->driver)->envparam]);
-	if (((Texture*) tex->driver)->envparam == W3D_BLEND) {
-		color[0] = ((Texture*) tex->driver)->envcolor.r; color[1] = ((Texture*) tex->driver)->envcolor.b;
-		color[2] = ((Texture*) tex->driver)->envcolor.g; color[3] = ((Texture*) tex->driver)->envcolor.a;
-		SWAP32(color, 4)
-		_glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, (GLfloat*) (memoffset + (long) color));
-	}
-	if (((Texture*) tex->driver)->MinFilter) _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (long) ((Texture*) tex->driver)->MinFilter);
-	if (((Texture*) tex->driver)->MagFilter) _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (long) ((Texture*) tex->driver)->MagFilter);
-	if (((Texture*) tex->driver)->s_mode) _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (long) ((Texture*) tex->driver)->s_mode);
-	if (((Texture*) tex->driver)->t_mode) _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (long) ((Texture*) tex->driver)->t_mode);
-	color[0] = ((Texture*) tex->driver)->bordercolor.r; color[1] = ((Texture*) tex->driver)->bordercolor.b;
-	color[2] = ((Texture*) tex->driver)->bordercolor.g; color[3] = ((Texture*) tex->driver)->bordercolor.a;
-	SWAP32(color, 4)
-	_glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, (GLfloat*) (memoffset + (long) color));*/
-	//lasttex = tex;
-}
-
-void drawVertex(W3D_Context* context, W3D_Vertex* v, W3D_Texture* tex) {
-	if (context->state & W3D_TEXMAPPING && tex) {
-		if (context->state & W3D_PERSPECTIVE) _glTexCoord4f(v->u * v->w / tex->texwidth, v->v * v->w / tex->texheight, 0.0f, v->w);
-		else _glTexCoord2f((float) ((double) v->u / (double) tex->texwidth), (float) ((double) v->v / (double) tex->texheight));
-	//	if (context->state & W3D_PERSPECTIVE) qlTexCoord4i((long) (v->u * v->w), (long) (v->v * v->w), 0, (long) v->w);
-	//	else qlTexCoord2i((long) v->u, (long) v->v);
-	}
-	if (context->state & W3D_GOURAUD) _glColor4f(v->color.r, v->color.g, v->color.b, v->color.a);
-	if (context->state & W3D_ZBUFFER) _glVertex3f(v->x, v->y, v->z);
-	else _glVertex2f(v->x, v->y);
-}
 /*
  * Drawing on the host (gl/w3dcmd.h): one DRAW command for up to
  * QT_W3D_MAX_VERTICES vertices, DRAW_BEGIN/VERTICES/DRAW_END beyond that.

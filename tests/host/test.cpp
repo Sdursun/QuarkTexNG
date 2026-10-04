@@ -327,6 +327,40 @@ int main() {
 	qt_flush();
 	check(joined() == "BindTexture(3553,5) TexEnvi(8960,8704,3042) TexEnvfv(8960,8705,{0.25,0.75,0.5,1})", "QT_W3D_TEX_ENV: " + joined());
 
+	// W3D_DrawElements: big-endian arrays in Amiga memory (the arena), three
+	// F_F_F vertices, RGBA float colours, UWORD indices 2, 0, 1.
+	{
+		auto put32 = [](uint32_t address, uint32_t value) {
+			uint32_t big = qt_swap32(value);
+			memcpy(arena + address, &big, 4);
+		};
+		for (int v = 0; v < 3; ++v) {
+			for (int k = 0; k < 3; ++k) put32(0x15000 + 12 * v + 4 * k, qt_f2l(static_cast<float>(10 * v + k)));
+			for (int k = 0; k < 4; ++k) put32(0x15100 + 16 * v + 4 * k, qt_f2l(0.25f * (k + 1)));
+		}
+		const uint8_t indices[] = {0, 2, 0, 0, 0, 1};
+		memcpy(arena + 0x15200, indices, sizeof(indices));
+
+		ULONG* w = qt_reserve(22);
+		memset(w, 0, 22 * 4);
+		w[0] = (static_cast<ULONG>(QT_W3D_DRAW_ARRAY) << 16) | 22;
+		w[1] = 0;               // W3D_PRIMITIVE_TRIANGLES
+		w[2] = 1 << 10;         // W3D_GOURAUD
+		w[7] = 0x15000;         // vertices, stride 12, W3D_VERTEX_F_F_F
+		w[8] = 12;
+		w[9] = 0;
+		w[10] = 0x15100;        // colours, stride 16, W3D_COLOR_FLOAT | W3D_CMODE_RGBA
+		w[11] = 16;
+		w[12] = (1u << 30) | 0x04;
+		w[18] = 1;              // W3D_INDEX_UWORD
+		w[19] = 0x15200;
+		w[21] = 3;
+		records.clear();
+		qt_flush();
+		check(joined() == "Begin(4) Color4f(0.25,0.5,0.75,1) Vertex3f(20,21,22) Color4f(0.25,0.5,0.75,1) Vertex3f(0,1,2) "
+			"Color4f(0.25,0.5,0.75,1) Vertex3f(10,11,12) End()", "QT_W3D_DRAW_ARRAY: " + joined());
+	}
+
 	check(reports == 0, std::to_string(reports) + " bad commands reported");
 
 	// An unknown Warp3D opcode is reported, not executed.

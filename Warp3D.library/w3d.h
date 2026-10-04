@@ -26,8 +26,6 @@ typedef struct {
 	W3D_Color bordercolor;
 } Texture;
 
-void drawVertex(W3D_Context* context, W3D_Vertex* v, W3D_Texture* tex);
-void bindTexture(W3D_Texture* tex);
 
 /* Drawing on the host (w3d.c): count vertices stored one after the other,
  * or given by an array of pointers. */

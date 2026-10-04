@@ -79,4 +79,15 @@
  * x, y, width, height, image. */
 #define QT_W3D_TEX_UPDATE 0x8015
 
+/*
+ * W3D_DrawArray/W3D_DrawElements, synchronous because the host reads the
+ * application's arrays: primitive (W3D_PRIMITIVE_*), context->state,
+ * texture used (0/1), its OpenGL name, width, height; vertex pointer,
+ * stride, mode; colour pointer, stride, mode | format; texture coordinate
+ * pointer, stride, v offset, w offset, flags; index type (W3D_INDEX_* or
+ * QT_W3D_NO_INDEX), index pointer, first vertex, count.
+ */
+#define QT_W3D_DRAW_ARRAY 0x8016
+#define QT_W3D_NO_INDEX 0xFFFFFFFF
+
 #endif

@@ -100,6 +100,125 @@ namespace {
 		QT_GL(Begin)(c.u(1));
 	}
 
+	// Big-endian values in Amiga memory; address 0 reads as 0.
+	uint32_t readU32(const Command& c, uint32_t address) {
+		const uint8_t* p = address ? static_cast<const uint8_t*>(c.resolve(address)) : 0;
+		return p ? (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3] : 0;
+	}
+	uint32_t readU16(const Command& c, uint32_t address) {
+		const uint8_t* p = address ? static_cast<const uint8_t*>(c.resolve(address)) : 0;
+		return p ? (uint32_t(p[0]) << 8) | p[1] : 0;
+	}
+	uint32_t readU8(const Command& c, uint32_t address) {
+		const uint8_t* p = address ? static_cast<const uint8_t*>(c.resolve(address)) : 0;
+		return p ? p[0] : 0;
+	}
+	float readFloat(const Command& c, uint32_t address) {
+		uint32_t bits = readU32(c, address);
+		float value;
+		memcpy(&value, &bits, 4);
+		return value;
+	}
+	double readDouble(const Command& c, uint32_t address) {
+		uint64_t bits = (uint64_t(readU32(c, address)) << 32) | readU32(c, address + 4);
+		double value;
+		memcpy(&value, &bits, 8);
+		return value;
+	}
+
+	// The arrays of a DRAW_ARRAY command (words 7-17), V4Array.c in 0.53.
+	struct Arrays {
+		uint32_t vertex, vertexStride, vertexMode;
+		uint32_t color, colorStride, colorMode;
+		uint32_t texCoord, texStride, texV, texW, texFlags;
+	};
+
+	enum {
+		W3D_VERTEX_F_F_F = 0, W3D_VERTEX_F_F_D = 1, W3D_VERTEX_D_D_D = 2,
+		W3D_COLOR_FLOAT = 1u << 30, W3D_COLOR_UBYTE = 2u << 30,
+		W3D_CMODE_RGB = 0x01, W3D_CMODE_BGR = 0x02, W3D_CMODE_RGBA = 0x04, W3D_CMODE_ARGB = 0x08, W3D_CMODE_BGRA = 0x10,
+		W3D_TEXCOORD_NORMALIZED = 1,
+		W3D_INDEX_UBYTE = 0, W3D_INDEX_UWORD = 1, W3D_INDEX_ULONG = 2
+	};
+
+	const GLenum primitives[] = {GL_TRIANGLES, GL_TRIANGLE_FAN, GL_TRIANGLE_STRIP, GL_POINTS, GL_LINES, GL_LINE_LOOP, GL_LINE_STRIP};
+
+	void arrayColor(const Command& c, const Arrays& a, uint32_t i) {
+		if (!a.color || !(draw.state & W3D_GOURAUD)) return;
+		uint32_t p = a.color + i * a.colorStride;
+		if (a.colorMode & W3D_COLOR_FLOAT) {
+			float f[4];
+			for (int k = 0; k < 4; ++k) f[k] = readFloat(c, p + 4 * k);
+			if (a.colorMode & W3D_CMODE_RGB) QT_GL(Color3f)(f[0], f[1], f[2]);
+			else if (a.colorMode & W3D_CMODE_BGR) QT_GL(Color3f)(f[2], f[1], f[0]);
+			else if (a.colorMode & W3D_CMODE_RGBA) QT_GL(Color4f)(f[0], f[1], f[2], f[3]);
+			else if (a.colorMode & W3D_CMODE_ARGB) QT_GL(Color4f)(f[1], f[2], f[3], f[0]);
+			else if (a.colorMode & W3D_CMODE_BGRA) QT_GL(Color4f)(f[2], f[1], f[0], f[3]);
+		}
+		else if (a.colorMode & W3D_COLOR_UBYTE) {
+			GLubyte b[4];
+			for (int k = 0; k < 4; ++k) b[k] = static_cast<GLubyte>(readU8(c, p + k));
+			if (a.colorMode & W3D_CMODE_RGB) QT_GL(Color3ub)(b[0], b[1], b[2]);
+			else if (a.colorMode & W3D_CMODE_BGR) QT_GL(Color3ub)(b[2], b[1], b[0]);
+			else if (a.colorMode & W3D_CMODE_RGBA) QT_GL(Color4ub)(b[0], b[1], b[2], b[3]);
+			else if (a.colorMode & W3D_CMODE_ARGB) QT_GL(Color4ub)(b[1], b[2], b[3], b[0]);
+			else if (a.colorMode & W3D_CMODE_BGRA) QT_GL(Color4ub)(b[2], b[1], b[0], b[3]);
+		}
+	}
+
+	void arrayTexCoord(const Command& c, const Arrays& a, uint32_t i) {
+		if (!(draw.state & W3D_TEXMAPPING) || !a.texCoord) return;
+		uint32_t p = a.texCoord + i * a.texStride;
+		float u = readFloat(c, p), v = readFloat(c, p + a.texV), w = readFloat(c, p + a.texW);
+		if (a.texFlags & W3D_TEXCOORD_NORMALIZED) QT_GL(TexCoord4f)(u * w, v * w, 0.0f, w);
+		else QT_GL(TexCoord4f)(u * w / draw.width, v * w / draw.height, 0.0f, w);
+	}
+
+	void arrayVertex(const Command& c, const Arrays& a, uint32_t i) {
+		if (!a.vertex) return;
+		uint32_t p = a.vertex + i * a.vertexStride;
+		switch (a.vertexMode) {
+		case W3D_VERTEX_F_F_F:
+			QT_GL(Vertex3f)(readFloat(c, p), readFloat(c, p + 4), readFloat(c, p + 8));
+			break;
+		case W3D_VERTEX_F_F_D: // x and y as floats, z as the double at offset 8
+			QT_GL(Vertex3f)(readFloat(c, p), readFloat(c, p + 4), static_cast<float>(readDouble(c, p + 8)));
+			break;
+		case W3D_VERTEX_D_D_D:
+			QT_GL(Vertex3f)(static_cast<float>(readDouble(c, p)), static_cast<float>(readDouble(c, p + 8)),
+				static_cast<float>(readDouble(c, p + 16)));
+			break;
+		}
+	}
+
+	bool drawArray(const Command& c) {
+		Arrays a = {c.u(7), c.u(8), c.u(9), c.u(10), c.u(11), c.u(12), c.u(13), c.u(14), c.u(15), c.u(16), c.u(17)};
+		uint32_t indexType = c.u(18), indices = c.u(19), first = c.u(20), count = c.u(21);
+		GLenum primitive;
+		if (!lookup(primitives, c.u(1), primitive)) return true; // 0.53 read past its table
+		draw.state = c.u(2);
+		draw.textured = c.u(3) != 0;
+		draw.width = static_cast<float>(static_cast<int32_t>(c.u(5)));
+		draw.height = static_cast<float>(static_cast<int32_t>(c.u(6)));
+		if ((draw.state & W3D_TEXMAPPING) && draw.textured) QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(4));
+		if (indexType != QT_W3D_NO_INDEX && indexType > W3D_INDEX_ULONG) return true; // 0.53 drew nothing
+		QT_GL(Begin)(primitive);
+		for (uint32_t n = 0; n < count; ++n) {
+			uint32_t i;
+			switch (indexType) {
+			case W3D_INDEX_UBYTE: i = readU8(c, indices + n); break;
+			case W3D_INDEX_UWORD: i = readU16(c, indices + 2 * n); break;
+			case W3D_INDEX_ULONG: i = readU32(c, indices + 4 * n); break;
+			default: i = first + n; break;
+			}
+			arrayColor(c, a, i);
+			arrayTexCoord(c, a, i);
+			arrayVertex(c, a, i);
+		}
+		QT_GL(End)();
+		return true;
+	}
+
 	// Context.c W3D_SetState in 0.53. The missing break after
 	// W3D_ZBUFFERUPDATE is kept: it switches blending as well.
 	void setState(uint32_t state, bool enable) {
@@ -314,6 +433,10 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		QT_GL(TexParameterfv)(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, color);
 		return true;
 	}
+
+	case QT_W3D_DRAW_ARRAY:
+		if (c.words != 22) return false;
+		return drawArray(c);
 
 	case QT_W3D_TEX_UPDATE: {
 		GLenum glFormat = 0, glType = 0;
