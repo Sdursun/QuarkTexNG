@@ -1,8 +1,28 @@
 #include "../gl/gl.h"	
 
 void glPixelZoom(GLfloat xfactor __asm("fp0"), GLfloat yfactor __asm("fp1")) { LOG; _glPixelZoom(xfactor, yfactor); }
-void glPixelStoref(GLenum pname __asm("d0"), GLfloat param __asm("fp0")) { LOG; _glPixelStoref(pname, param); }
-void glPixelStorei(GLenum pname __asm("d0"), GLint param __asm("d1")) { LOG; _glPixelStorei(pname, param); }
+/*
+ * Pixel data (glDrawPixels, glReadPixels, glTexImage, glGetTexImage...) goes
+ * to the host as it is in Amiga memory. The host's GL_UNPACK_SWAP_BYTES and
+ * GL_PACK_SWAP_BYTES are the inverse of the application's, so it turns the
+ * big-endian components around itself, row padding and all (see
+ * AmigaMesaCreateContext; glGet* invert them back). (0.53 swapped the data in
+ * place, one element per pixel, stepping one byte at a time and ignoring
+ * padding.)
+ */
+static int isSwapBytes(GLenum pname) {
+	return pname == GL_UNPACK_SWAP_BYTES || pname == GL_PACK_SWAP_BYTES;
+}
+void glPixelStoref(GLenum pname __asm("d0"), GLfloat param __asm("fp0")) {
+	LOG;
+	if (isSwapBytes(pname)) _glPixelStorei(pname, param == 0.0f);
+	else _glPixelStoref(pname, param);
+}
+void glPixelStorei(GLenum pname __asm("d0"), GLint param __asm("d1")) {
+	LOG;
+	if (isSwapBytes(pname)) _glPixelStorei(pname, param == 0);
+	else _glPixelStorei(pname, param);
+}
 void glPixelTransferf(GLenum pname __asm("d0"), GLfloat param __asm("fp0")) { LOG; _glPixelTransferf(pname, param); }
 void glPixelTransferi(GLenum pname __asm("d0"), GLint param __asm("d1")) { LOG; _glPixelTransferi(pname, param); }
 void glPixelMapfv(GLenum map __asm("d0"), GLint mapsize __asm("d1"), GLfloat *values __asm("a0")) {
@@ -141,42 +161,9 @@ void glBitmap(GLsizei width __asm("d0"), GLsizei height __asm("d1"), GLfloat xor
 void glReadPixels(GLint x __asm("d0"), GLint y __asm("d1"), GLsizei width __asm("d2"), GLsizei height __asm("d3"), GLenum format __asm("d4"), GLenum type __asm("d5"), GLvoid *pixels __asm("a0")) {
 	LOG;
 	_glReadPixels(x, y, width, height, format, type, memoffset + (long) pixels);
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width * height);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width * height);
-		break;
-	}
 }
 void glDrawPixels(GLsizei width __asm("d0"), GLsizei height __asm("d1"), GLenum format __asm("d2"), GLenum type __asm("d3"), GLvoid *pixels __asm("a0")) {
 	LOG;
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width * height);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width * height);
-		break;
-	}
 	_glDrawPixels(width, height, format, type, memoffset + (long) pixels);
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width * height);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width * height);
-		break;
-	}
 }
 void glCopyPixels(GLint x __asm("d0"), GLint y __asm("d1"), GLsizei width __asm("d2"), GLsizei height __asm("d3"), GLenum type __asm("d4")) { LOG; _glCopyPixels(x, y, width, height, type); }

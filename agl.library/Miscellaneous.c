@@ -38,7 +38,17 @@ void glDisable(GLenum cap __asm("d0")) { LOG; _glDisable(cap); }
 GLboolean glIsEnabled(GLenum cap __asm("d0")) { LOG; return _glIsEnabled(cap); }
 void glEnableClientState(GLenum cap __asm("d0")) { LOG; _glEnableClientState(cap); }
 void glDisableClientState(GLenum cap __asm("d0")) { LOG; _glDisableClientState(cap); }
-void glGetBooleanv(GLenum pname __asm("d0"), GLboolean *params __asm("a0")) { LOG; _glGetBooleanv(pname, memoffset + (long) params); }
+/* The host holds the inverse of the application's swap bytes settings (see
+ * glPixelStorei). */
+#define INVERT_SWAP_BYTES							\
+	if (pname == GL_UNPACK_SWAP_BYTES || pname == GL_PACK_SWAP_BYTES)	\
+		params[0] = !params[0];
+
+void glGetBooleanv(GLenum pname __asm("d0"), GLboolean *params __asm("a0")) {
+	LOG;
+	_glGetBooleanv(pname, memoffset + (long) params);
+	INVERT_SWAP_BYTES
+}
 void glGetDoublev(GLenum pname __asm("d0"), GLdouble *params __asm("a0")) {
 	LOG;
 	_glGetDoublev(pname, memoffset + (long) params);
@@ -80,6 +90,7 @@ void glGetDoublev(GLenum pname __asm("d0"), GLdouble *params __asm("a0")) {
 		SWAP64(params, 1);
 		break;
 	}
+	INVERT_SWAP_BYTES
 }
 void glGetFloatv(GLenum pname __asm("d0"), GLfloat *params __asm("a0")) {
 	LOG;
@@ -122,6 +133,7 @@ void glGetFloatv(GLenum pname __asm("d0"), GLfloat *params __asm("a0")) {
 		SWAP32(params, 1);
 		break;
 	}
+	INVERT_SWAP_BYTES
 }
 void glGetIntegerv(GLenum pname __asm("d0"), GLint *params __asm("a0")) {
 	LOG;
@@ -164,6 +176,7 @@ void glGetIntegerv(GLenum pname __asm("d0"), GLint *params __asm("a0")) {
 		SWAP32(params, 1);
 		break;
 	}
+	INVERT_SWAP_BYTES
 }
 void glPushAttrib(GLbitfield mask __asm("d0")) { LOG; _glPushAttrib(mask); }
 void glPopAttrib(void) { LOG; _glPopAttrib(); }

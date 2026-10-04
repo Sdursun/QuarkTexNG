@@ -45,9 +45,12 @@ extern int i;
 	logString((char*) (memoffset + (int)(__FUNC__)));	\
 	logString((char*) (memoffset + (int)("\n")))*/
 
+/* Byte order of count 16-, 32- or 64-bit elements, in place. The element size
+ * comes from the macro, not from the pointer type, so void pointers work too
+ * (0.53 stepped through those one byte at a time). */
 #define SWAP16(array, count)		\
 	for (i = 0; i < (count); ++i) {	\
-		bp = (char*) &array[i];		\
+		bp = (char*) (array) + 2 * i;	\
 		b = bp[0];					\
 		bp[0] = bp[1];				\
 		bp[1] = b;					\
@@ -55,7 +58,7 @@ extern int i;
 
 #define SWAP32(array, count)		\
 	for (i = 0; i < (count); ++i) {	\
-		bp = (char*) &array[i];		\
+		bp = (char*) (array) + 4 * i;	\
 		b = bp[0];					\
 		bp[0] = bp[3];				\
 		bp[3] = b;					\
@@ -66,7 +69,7 @@ extern int i;
 
 #define SWAP64(array, count)		\
 	for (i = 0; i < (count); ++i) {	\
-		bp = (char*) &array[i];		\
+		bp = (char*) (array) + 8 * i;	\
 		b = bp[0];					\
 		bp[0] = bp[7];				\
 		bp[7] = b;					\

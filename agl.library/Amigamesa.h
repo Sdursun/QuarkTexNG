@@ -119,7 +119,7 @@ extern "C" {
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
 #include <utility/tagitem.h>
-#include "../GL/gl.h"
+#include "../gl/gl.h"
 
 
 

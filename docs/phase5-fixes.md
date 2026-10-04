@@ -30,7 +30,7 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 | 5 | `W3D_Point.pointsize` and line widths were ignored | t02_primitives (0.065 % of its pixels, below the 0.1 % threshold of the 0.53 comparison) | fixed |
 | 6 | CHUNKY textures ignored the palette (`W3D_ATO_PALETTE`, and the palette argument of the updates); the host now converts them to RGBA | t03_textures, first quad | fixed |
 | 7 | Depth buffer reads and writes used the wrong sizes, addresses, y direction and type; they also have to convert between Warp3D z and the (z + 1) / 2 in the depth buffer, and mask colour writes | t14_zbuffer_io (new) | fixed |
-| 8 | agl: 16/32-bit texture, pixel and display list data is byte-swapped one byte at a time (`void *` steps) | new test | open |
+| 8 | agl: 16/32-bit texture, pixel and display list data was byte-swapped in place one byte at a time (`void *` steps), one element per pixel and without row padding. Pixel data now goes to the host unchanged and the host's `PACK`/`UNPACK_SWAP_BYTES` (the inverse of the application's) turn it around; `SWAPn` steps by its element size | a06_agl_pixels (new) | fixed |
 | 9 | agl: `glDrawArrays` with stride 0 repeated the first vertex; the pointer functions now use the packed element size | a05_agl_queries | fixed |
 | 10 | `UpdateTexImage`/`UpdateTexSubImage` left `UNPACK_SWAP_BYTES` as the last allocation set it, so 16-bit textures were updated with the wrong byte order after an 8-bit one was allocated | t13_texswap (new) | fixed |
 

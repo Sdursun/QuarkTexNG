@@ -68,11 +68,8 @@ An agl test is `tests/aNN_name.c` with the same four parts (see
 `agl.library/agl_lib.fd`. It passes floats and doubles in fp0-fp7 as StormMESA
 does, which the `inline/macros.h` LP macros cannot.
 
-## Known bugs (in 0.53 and the current build; phase 5 fixes them, see
-`docs/phase5-fixes.md`)
+## Known bugs
 
-Shown by the tests:
-
-Found in the code (kept as they are so that the frames still match 0.53):
-- agl: the byte swapping of 16/32-bit texture, pixel and display list data
-  steps through `void *` byte by byte, so those formats arrive scrambled.
+The bugs of 0.53 known so far are fixed (phase 5, see
+`docs/phase5-fixes.md`); the tests that show them are listed in
+`known-differences.txt`.

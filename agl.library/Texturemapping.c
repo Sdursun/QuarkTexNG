@@ -117,68 +117,15 @@ void glGetTexLevelParameteriv(GLenum target __asm("d0"), GLint level __asm("d1")
 }
 void glTexImage1D(GLenum target __asm("d0"), GLint level __asm("d1"), GLint components __asm("d2"), GLsizei width __asm("d3"), GLint border __asm("d4"), GLenum format __asm("d5"), GLenum type __asm("d6"), GLvoid *pixels __asm("a0")) {
 	LOG;
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width);
-		break;
-	}
 	_glTexImage1D(target, level, components, width, border, format, type, memoffset + (long) pixels);
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width);
-		break;
-	}
 }
 void glTexImage2D(GLenum target __asm("d0"), GLint level __asm("d1"), GLint components __asm("d2"), GLsizei width __asm("d3"), GLsizei height __asm("d4"), GLint border __asm("d5"), GLenum format __asm("d6"), GLenum type __asm("d7"), GLvoid *pixels __asm("a0")) {
+	/* volatile: m68k gcc 6.5 fails (internal compiler error) without it */
+	GLvoid *volatile hostPixels = (GLvoid*) (memoffset + (long) pixels);
 	LOG;
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width * height);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width * height);
-		break;
-	}
-	_glTexImage2D(target, level, components, width, height, border, format, type, memoffset + (long) pixels);
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		SWAP16(pixels, width * height);
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		SWAP32(pixels, width * height);
-		break;
-	}
+	_glTexImage2D(target, level, components, width, height, border, format, type, hostPixels);
 }
 void glGetTexImage(GLenum target __asm("d0"), GLint level __asm("d1"), GLenum format __asm("d2"), GLenum type __asm("d3"), GLvoid *pixels __asm("a0")) {
 	LOG;
 	_glGetTexImage(target, level, format, type, memoffset + (long) pixels);
-	switch (type) {
-	case GL_UNSIGNED_SHORT:
-	case GL_SHORT:
-		/*SWAP16(pixels, width * height);*/
-		break;
-	case GL_UNSIGNED_INT:
-	case GL_INT:
-	case GL_FLOAT:
-		/*SWAP32(pixels, width * height);*/
-		break;
-	}
 }
