@@ -78,8 +78,6 @@ Shown by the tests:
   a05_agl_queries is not drawn.
 
 Found in the code (kept as they are so that the frames still match 0.53):
-- Warp3D: `UpdateTexSubImage` uploads `texsource` instead of its image.
-- Warp3D: `FreeAllTexObj` frees the wrong list nodes.
 - Warp3D: the depth buffer reads and writes use the wrong sizes and addresses.
 - agl: the byte swapping of 16/32-bit texture, pixel and display list data
   steps through `void *` byte by byte, so those formats arrive scrambled.

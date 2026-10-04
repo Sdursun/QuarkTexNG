@@ -329,6 +329,25 @@ int main() {
 		"TexParameteri(3553,10241,9729) TexImage2D(3553,0,6408,32,16,0,6407,33635,@14000)",
 		"QT_W3D_TEX_ALLOC: " + joined());
 
+	// W3D_UpdateTexSubImage of an R8G8B8 rectangle in an image 96 bytes wide:
+	// the row length is set for the upload and reset after it.
+	records.clear();
+	{
+		ULONG* w = qt_reserve(9);
+		w[0] = (static_cast<ULONG>(QT_W3D_TEX_UPDATE) << 16) | 9;
+		w[1] = 7;       // texture name
+		w[2] = 4;       // W3D_R8G8B8
+		w[3] = 18;
+		w[4] = 20;
+		w[5] = 12;
+		w[6] = 8;
+		w[7] = 0x16000; // image
+		w[8] = 96;      // bytes per row
+	}
+	qt_flush();
+	check(joined() == "BindTexture(3553,7) PixelStorei(3314,32) TexSubImage2D(3553,0,18,20,12,8,6407,5121,@16000) "
+		"PixelStorei(3314,0)", "QT_W3D_TEX_UPDATE: " + joined());
+
 	// W3D_SetTexEnv(W3D_BLEND): the colour goes to OpenGL as r, g, b, a (0.53: r, b, g, a).
 	records.clear();
 	{

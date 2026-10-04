@@ -60,6 +60,7 @@ namespace {
 	const GLenum types[] = {0, GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT_1_5_5_5_REV, GL_UNSIGNED_SHORT_5_6_5, GL_UNSIGNED_BYTE,
 		GL_UNSIGNED_SHORT_4_4_4_4_REV, GL_UNSIGNED_INT_8_8_8_8_REV, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE,
 		GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE};
+	const GLint bytesPerPixel[] = {0, 1, 2, 2, 3, 2, 4, 1, 1, 2, 1, 4};
 	const GLint envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
 	const uint32_t W3D_BLEND = 4;
 
@@ -444,12 +445,18 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 
 	case QT_W3D_TEX_UPDATE: {
 		GLenum glFormat = 0, glType = 0;
-		if (c.words != 8) return false;
+		GLint pixelSize = 0;
+		uint32_t bytesPerRow = c.u(8);
+		if (c.words != 9) return false;
 		lookup(formats, c.u(2), glFormat);
 		lookup(types, c.u(2), glType);
+		lookup(bytesPerPixel, c.u(2), pixelSize);
 		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
+		bool rows = bytesPerRow && pixelSize && bytesPerRow % pixelSize == 0;
+		if (rows) QT_GL(PixelStorei)(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(bytesPerRow / pixelSize));
 		QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4),
 			(GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), glFormat, glType, static_cast<GLvoid*>(c.p(7)));
+		if (rows) QT_GL(PixelStorei)(GL_UNPACK_ROW_LENGTH, 0);
 		return true;
 	}
 	}

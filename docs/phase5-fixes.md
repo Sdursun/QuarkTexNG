@@ -23,7 +23,7 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 | 1 | `W3D_SetState(W3D_ZBUFFERUPDATE)` switched blending (missing `break`); depth writes could not be turned off | t10_zupdate (new) | fixed |
 | 2 | Without the z-buffer no depth reaches OpenGL, so fog does nothing. Now the depth is sent when the z-buffer or fog is on | t06_fog, first row | fixed |
 | 3 | `SetTexEnv` and `SetWrapMode` passed their colours as r, b, g, a | t11_texcolors (new) | fixed |
-| 4 | `UpdateTexSubImage` uploads `texsource` instead of its image; `FreeAllTexObj` frees the wrong list nodes | new test | open |
+| 4 | `UpdateTexSubImage` uploaded `texsource` instead of its image and ignored `srcbpr`; `FreeAllTexObj` freed the wrong list nodes (and NULL) | t12_texupdate (new) | fixed |
 | 5 | `W3D_Point.pointsize` and line widths are ignored | t02_primitives | open |
 | 6 | CHUNKY textures ignore the palette | t03_textures, first quad | open |
 | 7 | Depth buffer reads and writes use the wrong sizes and addresses | new test | open |

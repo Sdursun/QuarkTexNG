@@ -76,7 +76,8 @@
  * colour r, g, b, a. */
 #define QT_W3D_TEX_WRAP 0x8014
 /* W3D_UpdateTexImage/UpdateTexSubImage, synchronous: name, format (W3D_*),
- * x, y, width, height, image. */
+ * x, y, width, height, image of the rectangle, bytes per row of that image
+ * (0: packed rows). */
 #define QT_W3D_TEX_UPDATE 0x8015
 
 /*

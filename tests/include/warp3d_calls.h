@@ -30,6 +30,12 @@ extern struct Library *Warp3DBase;
 	LP4(126, ULONG, W3D_SetTexEnv, W3D_Context *, context, a0, W3D_Texture *, texture, a1, ULONG, envparam, d1, W3D_Color *, envcolor, a2, , Warp3DBase)
 #define W3D_SetWrapMode(context, texture, s_mode, t_mode, bordercolor) \
 	LP5(132, ULONG, W3D_SetWrapMode, W3D_Context *, context, a0, W3D_Texture *, texture, a1, ULONG, s_mode, d0, ULONG, t_mode, d1, W3D_Color *, bordercolor, a2, , Warp3DBase)
+#define W3D_UpdateTexImage(context, texture, teximage, level, palette) \
+	LP5(138, ULONG, W3D_UpdateTexImage, W3D_Context *, context, a0, W3D_Texture *, texture, a1, void *, teximage, a2, int, level, d1, ULONG *, palette, a3, , Warp3DBase)
+#define W3D_UpdateTexSubImage(context, texture, teximage, level, palette, scissor, srcbpr) \
+	LP7(372, ULONG, W3D_UpdateTexSubImage, W3D_Context *, context, a0, W3D_Texture *, texture, a1, void *, teximage, a2, ULONG, level, d1, ULONG *, palette, a3, W3D_Scissor *, scissor, a4, ULONG, srcbpr, d0, , Warp3DBase)
+#define W3D_FreeAllTexObj(context) \
+	LP1(378, ULONG, W3D_FreeAllTexObj, W3D_Context *, context, a0, , Warp3DBase)
 #define W3D_DrawLine(context, line) \
 	LP2(150, ULONG, W3D_DrawLine, W3D_Context *, context, a0, W3D_Line *, line, a1, , Warp3DBase)
 #define W3D_DrawPoint(context, point) \

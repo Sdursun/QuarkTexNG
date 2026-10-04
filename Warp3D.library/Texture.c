@@ -172,30 +172,33 @@ ULONG W3D_SetWrapMode(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *textur
 	return W3D_SUCCESS;
 }
 
-/* The host reads the image right away (synchronous command). */
-static void updateTexture(W3D_Texture *texture, ULONG x, ULONG y, ULONG width, ULONG height) {
-	ULONG *w = w3d_command(QT_W3D_TEX_UPDATE, 7);
+/* The host reads the image right away (synchronous command). bytesPerRow 0
+ * means rows of width pixels without gaps. */
+static void updateTexture(W3D_Texture *texture, void *image, ULONG x, ULONG y, ULONG width, ULONG height, ULONG bytesPerRow) {
+	ULONG *w = w3d_command(QT_W3D_TEX_UPDATE, 8);
 	w[0] = ((Texture*) texture->driver)->glID;
 	w[1] = texture->texfmtsrc;
 	w[2] = x;
 	w[3] = y;
 	w[4] = width;
 	w[5] = height;
-	w[6] = (ULONG) texture->texsource;
+	w[6] = (ULONG) image;
+	w[7] = bytesPerRow;
 	qt_flush();
 }
 
 ULONG W3D_UpdateTexImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture), __REGA2(void *teximage), __REGD1(int level), __REGA3(ULONG *palette)) {
 	LOG;
 	texture->texsource = teximage;
-	updateTexture(texture, 0, 0, texture->texwidth, texture->texheight);
+	updateTexture(texture, teximage, 0, 0, texture->texwidth, texture->texheight, 0);
 	return W3D_SUCCESS;
 }
 
-/* As in 0.53 this uploads from texsource, not from teximage. */
+/* teximage holds the rectangle only, srcbpr bytes per row (0: packed). 0.53
+ * uploaded texsource instead and ignored calls with srcbpr != 0. */
 ULONG W3D_UpdateTexSubImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture), __REGA2(void *teximage), __REGD1(ULONG level), __REGA3(ULONG *palette), __REGA4(W3D_Scissor* scissor), __REGD0(ULONG srcbpr)) {
 	LOG;
-	if (srcbpr == 0) updateTexture(texture, scissor->left, scissor->top, scissor->width, scissor->height);
+	updateTexture(texture, teximage, scissor->left, scissor->top, scissor->width, scissor->height, srcbpr);
 	return W3D_SUCCESS;
 }
 
@@ -204,12 +207,14 @@ ULONG W3D_UploadTexture(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *text
 	return W3D_SUCCESS;
 }
 
+/* 0.53 stepped to the next node before freeing, so it freed every node but
+ * the first, and finally the driver data of NULL. */
 ULONG W3D_FreeAllTexObj(__REGA0(W3D_Context *context)) {
-	W3D_Texture *n;
+	W3D_Texture *n, *next;
 	LOG;
-	for (n = (W3D_Texture*) firstTex; n != NULL;) {
+	for (n = (W3D_Texture*) firstTex; n != NULL; n = next) {
+		next = (W3D_Texture*) n->link.ln_Succ;
 		freeTexture(n);
-		n = (W3D_Texture*) n->link.ln_Succ;
 		free(n->driver);
 		free(n);
 	}
