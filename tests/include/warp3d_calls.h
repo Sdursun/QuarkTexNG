@@ -84,5 +84,31 @@ extern struct Library *Warp3DBase;
 	LP3(510, ULONG, W3D_BindTexture, W3D_Context *, context, a0, ULONG, tmu, d0, W3D_Texture *, texture, a1, , Warp3DBase)
 #define W3D_DrawArray(context, primitive, base, count) \
 	LP4(516, ULONG, W3D_DrawArray, W3D_Context *, context, a0, ULONG, primitive, d0, ULONG, base, d1, ULONG, count, d2, , Warp3DBase)
+#define W3D_Query(context, query, destfmt) \
+	LP3(84, ULONG, W3D_Query, W3D_Context *, context, a0, ULONG, query, d0, ULONG, destfmt, d1, , Warp3DBase)
+#define W3D_SetColorMask(context, red, green, blue, alpha) \
+	LP5(204, ULONG, W3D_SetColorMask, W3D_Context *, context, a0, W3D_Bool, red, d0, W3D_Bool, green, d1, W3D_Bool, blue, d2, W3D_Bool, alpha, d3, , Warp3DBase)
+#define W3D_SetStencilFunc(context, func, refvalue, mask) \
+	LP4(210, ULONG, W3D_SetStencilFunc, W3D_Context *, context, a0, ULONG, func, d0, ULONG, refvalue, d1, ULONG, mask, d2, , Warp3DBase)
+#define W3D_AllocStencilBuffer(context) \
+	LP1(252, ULONG, W3D_AllocStencilBuffer, W3D_Context *, context, a0, , Warp3DBase)
+#define W3D_ClearStencilBuffer(context, clearval) \
+	LP2(258, ULONG, W3D_ClearStencilBuffer, W3D_Context *, context, a0, ULONG *, clearval, a1, , Warp3DBase)
+#define W3D_FillStencilBuffer(context, x, y, width, height, depth, data) \
+	LP7(264, ULONG, W3D_FillStencilBuffer, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG, width, d2, ULONG, height, d3, ULONG, depth, d4, void *, data, a1, , Warp3DBase)
+#define W3D_FreeStencilBuffer(context) \
+	LP1(270, ULONG, W3D_FreeStencilBuffer, W3D_Context *, context, a0, , Warp3DBase)
+#define W3D_ReadStencilPixel(context, x, y, st) \
+	LP4(276, ULONG, W3D_ReadStencilPixel, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG *, st, a1, , Warp3DBase)
+#define W3D_ReadStencilSpan(context, x, y, n, st) \
+	LP5(282, ULONG, W3D_ReadStencilSpan, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG, n, d2, ULONG *, st, a1, , Warp3DBase)
+#define W3D_SetStencilOp(context, sfail, dpfail, dppass) \
+	LP4(324, ULONG, W3D_SetStencilOp, W3D_Context *, context, a0, ULONG, sfail, d0, ULONG, dpfail, d1, ULONG, dppass, d2, , Warp3DBase)
+#define W3D_SetWriteMask(context, mask) \
+	LP2(330, ULONG, W3D_SetWriteMask, W3D_Context *, context, a0, ULONG, mask, d1, , Warp3DBase)
+#define W3D_WriteStencilPixel(context, x, y, st) \
+	LP4(336, ULONG, W3D_WriteStencilPixel, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG, st, d2, , Warp3DBase)
+#define W3D_WriteStencilSpan(context, x, y, n, st, mask) \
+	LP6(342, ULONG, W3D_WriteStencilSpan, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG, n, d2, ULONG *, st, a1, UBYTE *, mask, a2, , Warp3DBase)
 
 #endif

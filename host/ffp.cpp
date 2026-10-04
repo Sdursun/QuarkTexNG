@@ -613,4 +613,51 @@ namespace ffp {
 		if (!depthTest) glDisable(GL_DEPTH_TEST);
 		glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
 	}
+
+	// Points with the stencil test passing always and replacing with the
+	// reference value; one draw call per run of equal values. The depth test
+	// is off, so nothing else decides about the write (and no depth is
+	// written).
+	void StencilPoints(GLsizei count, const GLfloat* xy, const GLuint* values) {
+		flushBatch();
+		if (count <= 0 || !program) return;
+		GLboolean colorMask[4];
+		GLint function, reference, valueMask, sfail, dpfail, dppass;
+		GLfloat pointSize;
+		GLboolean depthTest = glIsEnabled(GL_DEPTH_TEST), stencilTest = glIsEnabled(GL_STENCIL_TEST);
+		glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+		glGetIntegerv(GL_STENCIL_FUNC, &function);
+		glGetIntegerv(GL_STENCIL_REF, &reference);
+		glGetIntegerv(GL_STENCIL_VALUE_MASK, &valueMask);
+		glGetIntegerv(GL_STENCIL_FAIL, &sfail);
+		glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &dpfail);
+		glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &dppass);
+		glGetFloatv(GL_POINT_SIZE, &pointSize);
+
+		std::vector<Vertex> points(static_cast<size_t>(count));
+		for (GLsizei i = 0; i < count; ++i) {
+			Vertex v = {{xy[2 * i], xy[2 * i + 1], 0.0f, 1.0f}, {0, 0, 0, 0}, {0, 0, 0, 1}};
+			points[i] = v;
+		}
+		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_STENCIL_TEST);
+		glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
+		glPointSize(1.0f);
+		gl3::UseProgram(depthProgram);
+		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)), &points[0], GL_STREAM_DRAW);
+		for (GLsizei first = 0, end; first < count; first = end) {
+			for (end = first + 1; end < count && values[end] == values[first]; ++end) {}
+			glStencilFunc(GL_ALWAYS, static_cast<GLint>(values[first]), ~0u);
+			glDrawArrays(GL_POINTS, first, end - first);
+		}
+		gl3::UseProgram(program);
+
+		glPointSize(pointSize);
+		glStencilOp(static_cast<GLenum>(sfail), static_cast<GLenum>(dpfail), static_cast<GLenum>(dppass));
+		glStencilFunc(static_cast<GLenum>(function), reference, static_cast<GLuint>(valueMask));
+		if (!stencilTest) glDisable(GL_STENCIL_TEST);
+		if (depthTest) glEnable(GL_DEPTH_TEST);
+		glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
+	}
 }

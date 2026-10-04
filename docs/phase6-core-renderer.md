@@ -1,7 +1,8 @@
 # Phase 6: Warp3D on OpenGL 3.3 core
 
-Status: first step done (2026-10-05): Warp3D draws on an OpenGL 3.3 core
-profile context, pixel for pixel as the fixed-function renderer of phase 5.
+Status: in progress (2026-10-05). Warp3D draws on an OpenGL 3.3 core
+profile context, pixel for pixel as the fixed-function renderer of phase 5;
+the stencil buffer works.
 
 ## Contexts
 
@@ -67,6 +68,30 @@ core profile does not have. Two Warp3D commands replace them (gl/w3dcmd.h):
 
 Both are synchronous. Warp3D.library no longer converts or allocates.
 
+## Stencil buffer (roadmap item 5)
+
+0.53 had no stencil buffer: `W3D_AllocStencilBuffer` and every other stencil
+call returned an error, `W3D_Query` said "not supported". The host's context
+always had 8 stencil bits, so Warp3D now uses them:
+
+- `W3D_AllocStencilBuffer`/`FreeStencilBuffer` only mark the buffer as used;
+  the other calls return `W3D_NOSTENCILBUFFER` without it, as in Warp3D.
+- `W3D_SetState(W3D_STENCILBUFFER)` switches the stencil test,
+  `W3D_SetStencilFunc`/`SetStencilOp`/`SetWriteMask` and
+  `W3D_ClearStencilBuffer` become the commands `STENCIL_FUNC`, `STENCIL_OP`,
+  `STENCIL_MASK`, `STENCIL_CLEAR`; the host maps the Warp3D values to
+  OpenGL.
+- `W3D_ReadStencilPixel`/`Span` (`READ_STENCIL`) read with `glReadPixels`.
+  `W3D_WriteStencilPixel`/`Span` and `W3D_FillStencilBuffer` (8, 16 or 32
+  bits per value; `WRITE_STENCIL`) draw one point per pixel with the
+  stencil test passing always and `GL_REPLACE` by the value, colour writes
+  and the depth test off, then restore the state (`ffp::StencilPoints`).
+  Values are taken modulo 256 and the write mask applies, as they would with
+  `glDrawPixels`.
+
+Test: t15_stencil (new); against the snapshot before (`stencil0`) only it
+changed, and it reads back 1; 1 1 2 2; 0 as drawn.
+
 ## Results
 
 All reference tests against the phase 5 snapshot (`run.ps1 -Against fix8`,
@@ -93,5 +118,5 @@ triangles/s.
   (CLUT, R5G6B5, ...). Today CHUNKY textures are converted to RGBA on the
   CPU and the 16-bit formats are uploaded with packed types; both work, so
   this is an optimisation, not a fix.
-- Roadmap item 5: stencil, chroma key, several contexts at once (the host has
-  one context and the emulation one state), leaks.
+- Roadmap item 5, still open: chroma key, several contexts at once (the
+  host has one context and the emulation one state), leaks.

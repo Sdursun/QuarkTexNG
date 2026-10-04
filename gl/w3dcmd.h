@@ -107,4 +107,24 @@
 #define QT_W3D_WRITE_Z 0x801A
 #define QT_W3D_MAX_DEPTH_SPAN 65536
 
+/*
+ * The stencil buffer (8 bits).
+ * STENCIL_FUNC: function (W3D_ST_NEVER...), reference value, mask.
+ * STENCIL_OP: sfail, dpfail, dppass (W3D_ST_KEEP...).
+ * STENCIL_MASK: write mask.
+ * STENCIL_CLEAR: value.
+ * READ_STENCIL, synchronous: x, y (OpenGL, from the bottom), count, address
+ *   of count ULONGs.
+ * WRITE_STENCIL, synchronous: x, y (Warp3D, from the top), width, height,
+ *   bytes per value (1, 2 or 4), address of the values (rows packed), mask
+ *   (width bytes for a single row, nonzero = write; 0 = write all).
+ */
+#define QT_W3D_STENCIL_FUNC 0x801B
+#define QT_W3D_STENCIL_OP 0x801C
+#define QT_W3D_STENCIL_MASK 0x801D
+#define QT_W3D_STENCIL_CLEAR 0x801E
+#define QT_W3D_READ_STENCIL 0x801F
+#define QT_W3D_WRITE_STENCIL 0x8020
+#define QT_W3D_MAX_STENCIL_PIXELS 4194304
+
 #endif

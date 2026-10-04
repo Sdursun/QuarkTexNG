@@ -65,6 +65,11 @@ namespace ffp {
 	// pixel. The depth test, depth function and colour mask are restored.
 	void DepthPoints(GLsizei count, const GLfloat* xyz);
 
+	// Writes count stencil values without touching colours and depths: xy
+	// holds x, y of each pixel as for DepthPoints. The stencil write mask
+	// applies, as for glDrawPixels; the stencil state is restored.
+	void StencilPoints(GLsizei count, const GLfloat* xy, const GLuint* values);
+
 	// Passed on as they are.
 	inline void PixelStorei(GLenum pname, GLint param) { flush(); glPixelStorei(pname, param); }
 	inline void BlendFunc(GLenum source, GLenum destination) { flush(); glBlendFunc(source, destination); }
@@ -77,6 +82,10 @@ namespace ffp {
 	inline void Clear(GLbitfield mask) { flush(); glClear(mask); }
 	inline void PointSize(GLfloat size) { flush(); glPointSize(size); }
 	inline void LineWidth(GLfloat width) { flush(); glLineWidth(width); }
+	inline void StencilFunc(GLenum function, GLint reference, GLuint mask) { flush(); glStencilFunc(function, reference, mask); }
+	inline void StencilOp(GLenum sfail, GLenum dpfail, GLenum dppass) { flush(); glStencilOp(sfail, dpfail, dppass); }
+	inline void StencilMask(GLuint mask) { flush(); glStencilMask(mask); }
+	inline void ClearStencil(GLint value) { flush(); glClearStencil(value); }
 	inline void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid* pixels) {
 		flush();
 		glReadPixels(x, y, width, height, format, type, pixels);

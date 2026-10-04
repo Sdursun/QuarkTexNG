@@ -110,6 +110,13 @@ GLvoid stub_glDepthPoints(GLsizei count, const GLfloat* xyz) {
 	for (GLsizei i = 0; i < 3 * count; ++i) r << xyz[i];
 }
 
+// ffp::StencilPoints: the count, then x, y, value of each pixel.
+GLvoid stub_glStencilPoints(GLsizei count, const GLfloat* xy, const GLuint* values) {
+	Record r("StencilPoints");
+	r << count;
+	for (GLsizei i = 0; i < count; ++i) r << xy[2 * i] << xy[2 * i + 1] << values[i];
+}
+
 // --- Host side ---------------------------------------------------------------
 
 static int reports;
@@ -447,6 +454,31 @@ int main() {
 		records.clear();
 		qt_flush();
 		check(joined() == "DepthPoints(2,10.5,20.5,0,12.5,20.5,1)", "QT_W3D_WRITE_Z: " + joined());
+	}
+
+	// W3D_FillStencilBuffer, 2 x 2 16-bit values at (5, 6); 0x0102 keeps its
+	// low 8 bits. W3D_SetStencilFunc(W3D_ST_EQUAL, 3, 0xFF).
+	{
+		const uint8_t values[8] = {0, 1, 0, 2, 0x01, 0x02, 0, 0xFF};
+		memcpy(arena + 0x15600, values, sizeof(values));
+		ULONG* w = qt_reserve(8);
+		w[0] = (static_cast<ULONG>(QT_W3D_WRITE_STENCIL) << 16) | 8;
+		w[1] = 5;
+		w[2] = 6;
+		w[3] = 2;
+		w[4] = 2;
+		w[5] = 2;
+		w[6] = 0x15600;
+		w[7] = 0;
+		w = qt_reserve(4);
+		w[0] = (static_cast<ULONG>(QT_W3D_STENCIL_FUNC) << 16) | 4;
+		w[1] = 5; // W3D_ST_EQUAL
+		w[2] = 3;
+		w[3] = 0xFF;
+		records.clear();
+		qt_flush();
+		check(joined() == "StencilPoints(4,5.5,6.5,1,6.5,6.5,2,5.5,7.5,2,6.5,7.5,255) StencilFunc(514,3,255)",
+			"QT_W3D_WRITE_STENCIL: " + joined());
 	}
 
 	// W3D_ReadZSpan: the stub leaves the depths 0, which come back as z = -1.

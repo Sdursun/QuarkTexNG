@@ -38,7 +38,7 @@ namespace {
 	enum {
 		W3D_TEXMAPPING = 1 << 8, W3D_PERSPECTIVE = 1 << 9, W3D_GOURAUD = 1 << 10,
 		W3D_ZBUFFER = 1 << 11, W3D_ZBUFFERUPDATE = 1 << 12, W3D_BLENDING = 1 << 13,
-		W3D_FOGGING = 1 << 14, W3D_LOGICOP = 1 << 20, W3D_ALPHATEST = 1 << 22,
+		W3D_FOGGING = 1 << 14, W3D_LOGICOP = 1 << 20, W3D_STENCILBUFFER = 1 << 21, W3D_ALPHATEST = 1 << 22,
 		W3D_SCISSOR = 1 << 25,
 		W3D_ENABLE = 1
 	};
@@ -52,6 +52,8 @@ namespace {
 	const GLenum w3dlogic[] = {0, GL_CLEAR, GL_AND, GL_AND_REVERSE, GL_COPY, GL_AND_INVERTED, GL_NOOP, GL_XOR, GL_OR,
 		GL_NOR, GL_EQUIV, GL_INVERT, GL_OR_REVERSE, GL_COPY_INVERTED, GL_OR_INVERTED, GL_NAND, GL_SET};
 	const GLenum w3dz[] = {0, GL_NEVER, GL_LESS, GL_GEQUAL, GL_LEQUAL, GL_GREATER, GL_NOTEQUAL, GL_EQUAL, GL_ALWAYS};
+	const GLenum w3dstencil[] = {0, GL_NEVER, GL_ALWAYS, GL_LESS, GL_LEQUAL, GL_EQUAL, GL_GEQUAL, GL_GREATER, GL_NOTEQUAL};
+	const GLenum w3dstencilop[] = {0, GL_KEEP, GL_ZERO, GL_REPLACE, GL_INCR, GL_DECR, GL_INVERT};
 
 	// Texture.c: W3D texture format to OpenGL format and type, and whether the
 	// 16/32-bit texels need their bytes swapped.
@@ -128,6 +130,10 @@ namespace {
 		double value;
 		memcpy(&value, &bits, 8);
 		return value;
+	}
+	void writeU32(const Command& c, uint32_t address, uint32_t value) {
+		uint8_t* p = address ? static_cast<uint8_t*>(c.resolve(address)) : 0;
+		if (p) for (int i = 0; i < 4; ++i) p[i] = static_cast<uint8_t>(value >> (24 - 8 * i));
 	}
 	void writeDouble(const Command& c, uint32_t address, double value) {
 		uint8_t* p = address ? static_cast<uint8_t*>(c.resolve(address)) : 0;
@@ -276,6 +282,7 @@ namespace {
 			case W3D_LOGICOP: QT_GL(Enable)(GL_COLOR_LOGIC_OP); break;
 			case W3D_ALPHATEST: QT_GL(Enable)(GL_ALPHA_TEST); break;
 			case W3D_SCISSOR: QT_GL(Enable)(GL_SCISSOR_TEST); break;
+			case W3D_STENCILBUFFER: QT_GL(Enable)(GL_STENCIL_TEST); break;
 			}
 		}
 		else {
@@ -288,6 +295,7 @@ namespace {
 			case W3D_LOGICOP: QT_GL(Disable)(GL_COLOR_LOGIC_OP); break;
 			case W3D_ALPHATEST: QT_GL(Disable)(GL_ALPHA_TEST); break;
 			case W3D_SCISSOR: QT_GL(Disable)(GL_SCISSOR_TEST); break;
+			case W3D_STENCILBUFFER: QT_GL(Disable)(GL_STENCIL_TEST); break;
 			}
 		}
 	}
@@ -569,6 +577,66 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 			points.push_back(static_cast<GLfloat>((readDouble(c, address + 8 * i) + 1.0) / 2.0));
 		}
 		if (!points.empty()) QT_GL(DepthPoints)(static_cast<GLsizei>(points.size() / 3), &points[0]);
+		return true;
+	}
+
+	case QT_W3D_STENCIL_FUNC: {
+		GLenum function;
+		if (c.words != 4) return false;
+		if (lookup(w3dstencil, c.u(1), function)) QT_GL(StencilFunc)(function, (GLint) c.u(2), c.u(3));
+		return true;
+	}
+
+	case QT_W3D_STENCIL_OP: {
+		GLenum sfail, dpfail, dppass;
+		if (c.words != 4) return false;
+		if (lookup(w3dstencilop, c.u(1), sfail) && lookup(w3dstencilop, c.u(2), dpfail) && lookup(w3dstencilop, c.u(3), dppass)) {
+			QT_GL(StencilOp)(sfail, dpfail, dppass);
+		}
+		return true;
+	}
+
+	case QT_W3D_STENCIL_MASK:
+		if (c.words != 2) return false;
+		QT_GL(StencilMask)(c.u(1));
+		return true;
+
+	case QT_W3D_STENCIL_CLEAR:
+		if (c.words != 2) return false;
+		QT_GL(ClearStencil)((GLint) c.u(1));
+		QT_GL(Clear)(GL_STENCIL_BUFFER_BIT);
+		return true;
+
+	case QT_W3D_READ_STENCIL: {
+		uint32_t count = c.u(3), address = c.u(4);
+		if (c.words != 5) return false;
+		if (!count || count > QT_W3D_MAX_DEPTH_SPAN) return true;
+		std::vector<GLuint> values(count);
+		QT_GL(ReadPixels)((GLint) (int32_t) c.u(1), (GLint) (int32_t) c.u(2), (GLsizei) count, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &values[0]);
+		for (uint32_t i = 0; i < count; ++i) writeU32(c, address + 4 * i, values[i]);
+		return true;
+	}
+
+	case QT_W3D_WRITE_STENCIL: {
+		// One point per pixel at its centre. As with glDrawPixels, values are
+		// taken modulo the 8 stencil bits.
+		int32_t x = static_cast<int32_t>(c.u(1)), y = static_cast<int32_t>(c.u(2));
+		uint32_t width = c.u(3), height = c.u(4), bytes = c.u(5), data = c.u(6), mask = c.u(7);
+		if (c.words != 8) return false;
+		if ((bytes != 1 && bytes != 2 && bytes != 4) || static_cast<uint64_t>(width) * height > QT_W3D_MAX_STENCIL_PIXELS) return true;
+		std::vector<GLfloat> points;
+		std::vector<GLuint> values;
+		for (uint32_t row = 0; row < height; ++row) {
+			for (uint32_t column = 0; column < width; ++column) {
+				if (mask && !readU8(c, mask + column)) continue;
+				uint32_t address = data + (row * width + column) * bytes;
+				uint32_t value = bytes == 1 ? readU8(c, address) : bytes == 2 ? readU16(c, address) : readU32(c, address);
+				points.push_back(static_cast<GLfloat>(x + static_cast<int32_t>(column)) + 0.5f);
+				points.push_back(static_cast<GLfloat>(y + static_cast<int32_t>(row)) + 0.5f);
+				values.push_back(value & 0xFF);
+			}
+		}
+		if (!values.empty()) QT_GL(StencilPoints)(static_cast<GLsizei>(values.size()), &points[0], &values[0]);
 		return true;
 	}
 	}
