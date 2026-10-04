@@ -71,4 +71,8 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve);
 // Reports a broken command; provided by the library (log file) or the test.
 void qt_report(const char* message);
 
+// Executes a Warp3D command (opcode QT_W3D_FIRST and up, host/w3d.cpp).
+// Returns false for an unknown opcode or a wrong word count.
+bool qt_w3d_decode(const Command& c, int32_t& result);
+
 #endif

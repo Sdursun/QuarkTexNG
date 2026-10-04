@@ -43,7 +43,7 @@ generate() {
 # Encoder/decoder round trip for every OpenGL function, on the build host.
 unittest() {
 	host_image
-	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++11 -Wall -Wno-int-to-pointer-cast -O1 -o build/unittest tests/host/test.cpp && build/unittest"
+	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++11 -Wall -Wno-int-to-pointer-cast -O1 -Igl -o build/unittest tests/host/test.cpp && build/unittest"
 }
 
 amiga() {

@@ -29,7 +29,7 @@ AGL_DIR    = $(BUILD)/agl
 WARP3D_OBJ = $(WARP3D_DIR)/libheader.o $(patsubst %.c,$(WARP3D_DIR)/%.o,$(notdir $(WARP3D_SRC) $(GL_SRC))) $(WARP3D_DIR)/libc_shim.o
 AGL_OBJ    = $(AGL_DIR)/libheader.o $(patsubst %.c,$(AGL_DIR)/%.o,$(notdir $(AGL_SRC) $(GL_SRC))) $(AGL_DIR)/libc_shim.o
 
-GL_HEADERS = gl/gl.h gl/gldefines.h gl/gldeclarations.auto.h
+GL_HEADERS = gl/gl.h gl/gldefines.h gl/gldeclarations.auto.h gl/w3dcmd.h
 
 all: $(BUILD)/Warp3D.library $(BUILD)/agl.library
 

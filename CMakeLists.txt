@@ -19,7 +19,9 @@ else()
 	set(QT_ARCH x86)
 endif()
 
-add_library(quarktex SHARED host/quarktex.cpp host/gldecode.cpp host/gldecode.h host/uni.h)
+add_library(quarktex SHARED host/quarktex.cpp host/gldecode.cpp host/w3d.cpp
+	host/gldecode.h host/uni.h gl/w3dcmd.h)
+target_include_directories(quarktex PRIVATE gl)
 target_link_libraries(quarktex PRIVATE OpenGL::GL OpenGL::GLU)
 set_target_properties(quarktex PROPERTIES
 	PREFIX ""

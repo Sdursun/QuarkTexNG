@@ -7,6 +7,15 @@
 
 #include "Warp3D.h"
 #include "../gl/gl.h"
+#include "../gl/w3dcmd.h"
+
+/* Starts a Warp3D command with the given number of argument words in the
+ * command buffer and returns where the arguments go. */
+static inline ULONG *w3d_command(ULONG opcode, ULONG words) {
+	ULONG *w = qt_reserve(words + 1);
+	w[0] = (opcode << 16) | (words + 1);
+	return w + 1;
+}
 
 typedef struct {
 	GLuint glID;

@@ -95,6 +95,7 @@ void qt_report(const char* message) {
 }
 
 #include "../../host/gldecode.cpp"
+#include "../../host/w3d.cpp"
 
 // --- 68k side ----------------------------------------------------------------
 
@@ -215,7 +216,21 @@ int main() {
 	_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 	check(joined() == "TexImage2D(3553,0,6408,4,4,0,6408,5121,NULL)", "NULL pointer: " + joined());
 
+	// --- Warp3D commands: the OpenGL calls the 0.53 68k code made ---
+
+	// W3D_CreateContext: texturing on, smooth shading.
+	records.clear();
+	*qt_reserve(1) = (static_cast<ULONG>(QT_W3D_INIT_CONTEXT) << 16) | 1;
+	qt_flush();
+	check(joined() == "Enable(3553) ShadeModel(7425)", "QT_W3D_INIT_CONTEXT: " + joined());
+
 	check(reports == 0, std::to_string(reports) + " bad commands reported");
+
+	// An unknown Warp3D opcode is reported, not executed.
+	*qt_reserve(1) = (static_cast<ULONG>(QT_W3D_FIRST + 0x7fff) << 16) | 1;
+	qt_flush();
+	check(reports == 1, "unknown Warp3D opcode: " + std::to_string(reports) + " reports");
+	reports = 0;
 	printf("%d functions checked, %d failures\n", count, failures);
 	return failures ? 1 : 0;
 }

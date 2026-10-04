@@ -12,6 +12,7 @@
 #endif
 #include <cstdio>
 #include "gldecode.h"
+#include "w3dcmd.h"
 
 namespace {
 	int32_t qt_bad_command(const Command& c) {
@@ -123,7 +124,8 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		switch (header >> 16) {
 #include "gldecode.auto.inc"
 		default:
-			return qt_bad_command(c);
+			if ((header >> 16) < QT_W3D_FIRST || !qt_w3d_decode(c, result)) return qt_bad_command(c);
+			break;
 		}
 		offset += 4 * c.words;
 	}

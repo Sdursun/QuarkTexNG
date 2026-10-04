@@ -27,6 +27,11 @@ void freeContext(void);
 void swapBuffers(void);
 void logString(char* c);
 
+/* Command buffer (gl/gl.c). qt_reserve returns room for words 32-bit words;
+ * qt_flush executes the buffer on the host and returns the last result. */
+ULONG *qt_reserve(ULONG words);
+ULONG qt_flush(void);
+
 #include "gldefines.h"
 #include "gldeclarations.auto.h"
 

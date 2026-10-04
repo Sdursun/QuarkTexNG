@@ -125,8 +125,9 @@ W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCT
 
 	//default states
 	context->state |= W3D_AUTOTEXMANAGEMENT;
-	context->state |= W3D_TEXMAPPING; _glEnable(GL_TEXTURE_2D);
-	context->state |= W3D_GOURAUD; _glShadeModel(GL_SMOOTH);
+	context->state |= W3D_TEXMAPPING;
+	context->state |= W3D_GOURAUD;
+	w3d_command(QT_W3D_INIT_CONTEXT, 0);
 	context->state |= W3D_ZBUFFERUPDATE; //qlDepthMask(GL_FALSE);
 	
 	if (error) *error = W3D_SUCCESS;

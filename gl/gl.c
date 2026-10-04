@@ -18,7 +18,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 2
+#define QT_PROTOCOL_VERSION 3
 
 #define QT_BUFFER_BYTES (256 * 1024)
 
@@ -92,14 +92,14 @@ static ULONG qt_used;
 static ULONG qt_scratch[32]; /* takes the commands while there is no buffer */
 
 /* Executes the buffered commands; returns the result of the last one. */
-static ULONG qt_flush(void) {
+ULONG qt_flush(void) {
 	ULONG bytes = qt_used * 4;
 	qt_used = 0;
 	if (!bytes || !qt_buffer) return 0;
 	return hostCall(qt_execute, bytes, 0, 0, 0, (ULONG) qt_buffer);
 }
 
-static inline ULONG *qt_reserve(ULONG words) {
+ULONG *qt_reserve(ULONG words) {
 	ULONG *w;
 	if (!qt_buffer) return qt_scratch;
 	if (qt_used + words > QT_BUFFER_BYTES / 4) qt_flush();
