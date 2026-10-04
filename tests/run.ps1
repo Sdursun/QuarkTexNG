@@ -75,7 +75,7 @@ if ($Variants -contains 'orig' -and -not (Test-Path (Join-Path $orig 'Warp3D.lib
 }
 
 $tests = Get-ChildItem (Join-Path $root 'build\tests\amiga') -File |
-	Where-Object { $_.Name -match '^t\d\d_[a-z0-9]+$' } | Sort-Object Name
+	Where-Object { $_.Name -match '^[ta]\d\d_[a-z0-9_]+$' } | Sort-Object Name
 $template = Get-Content (Join-Path $PSScriptRoot 'winuae\test.uae.in') -Raw
 
 foreach ($variant in $Variants) {

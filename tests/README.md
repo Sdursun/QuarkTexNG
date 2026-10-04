@@ -1,6 +1,7 @@
 # Reference tests
 
-Small Warp3D programs that each draw one fixed scene. They run in WinUAE twice,
+Small programs that each draw one fixed scene: `tNN_*` through Warp3D.library,
+`aNN_*` through agl.library (the StormMESA OpenGL API). They run in WinUAE twice,
 once with the QuarkTex 0.53 libraries from Aminet (`orig`) and once with the
 current build (`new`). The rendered frames are then compared pixel by pixel.
 
@@ -60,3 +61,18 @@ Create `tests/tNN_name.c` with `test_name`, `test_setup`, `test_draw` and
 `test_cleanup` (see `t01_triangle.c`). If it needs a Warp3D function that
 `include/warp3d_calls.h` does not list yet, add it there; the LVO is in
 `build/amiga/Warp3D/functable.h`.
+
+An agl test is `tests/aNN_name.c` with the same four parts (see
+`a01_agl_basic.c`). Every agl.library function can be called by name:
+`aglcalls.py` generates `build/tests/amiga/agl_calls.h` from
+`agl.library/agl_lib.fd`. It passes floats and doubles in fp0-fp7 as StormMESA
+does, which the `inline/macros.h` LP macros cannot.
+
+## Known bugs the tests show (in 0.53 and the current build)
+
+- Warp3D: without the z-buffer no depth reaches OpenGL, so fog does nothing
+  (t06_fog, first row).
+- Warp3D: `W3D_Point.pointsize` is ignored (t02_primitives).
+- Warp3D: CHUNKY textures ignore the palette (t03_textures, first quad).
+- agl: `glDrawArrays` with stride 0 repeats the first vertex, so the strip in
+  a05_agl_queries is not drawn.

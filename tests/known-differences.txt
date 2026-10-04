@@ -3,3 +3,4 @@
 # <test name> <reason>
 
 t06_fog The 0.53 release draws fogged geometry black; the current build applies the fog colour and density as specified.
+a05_agl_queries The 0.53 release returns a host pointer from glGetPointerv (Amiga address plus the memory offset); the current build returns the Amiga address, which the yellow bar shows.

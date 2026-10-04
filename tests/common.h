@@ -11,10 +11,7 @@
 
 #include <exec/types.h>
 #include "warp3d_calls.h"
-
-#define WIDTH 320
-#define HEIGHT 240
-#define FRAMES 3
+#include "window.h"
 
 extern W3D_Context *context;
 

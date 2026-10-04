@@ -35,25 +35,6 @@ void fail(const char *what, ULONG code) {
 	failed = 1;
 }
 
-/* QuarkTex picks up the label when the context is created. */
-static void write_label(void) {
-	BPTR file = Open("QTTEST:capture/label.txt", MODE_NEWFILE);
-	if (!file) return;
-	FPuts(file, test_name);
-	FPuts(file, "\n");
-	Close(file);
-}
-
-/* QuarkTex attaches the context to IntuitionBase->ActiveWindow. */
-static int wait_active(void) {
-	int i;
-	for (i = 0; i < 100; ++i) {
-		if (IntuitionBase->ActiveWindow == window) return 1;
-		Delay(2);
-	}
-	return 0;
-}
-
 int main(void) {
 	ULONG error = 0;
 	int frame;
@@ -64,28 +45,20 @@ int main(void) {
 		{TAG_DONE, 0}
 	};
 
-	write_label();
+	write_label(test_name);
 	Warp3DBase = OpenLibrary("Warp3D.library", 4);
 	if (!Warp3DBase) {
 		fail("OpenLibrary Warp3D.library 4", 0);
 		return 20;
 	}
-	window = OpenWindowTags(NULL,
-		WA_Title, (ULONG) test_name,
-		WA_InnerWidth, WIDTH,
-		WA_InnerHeight, HEIGHT,
-		WA_Left, 40,
-		WA_Top, 40,
-		WA_DragBar, TRUE,
-		WA_RMBTrap, TRUE,
-		WA_Activate, TRUE,
-		TAG_DONE);
+	window = open_window(test_name);
 	if (!window) {
 		fail("OpenWindow", 0);
 		CloseLibrary(Warp3DBase);
 		return 20;
 	}
-	if (!wait_active()) fail("window did not become active", 0);
+	/* QuarkTex attaches the context to IntuitionBase->ActiveWindow. */
+	if (!wait_active(window)) fail("window did not become active", 0);
 
 	tags[0].ti_Data = (ULONG) window->RPort->BitMap;
 	context = W3D_CreateContext(&error, tags);
