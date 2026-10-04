@@ -271,6 +271,23 @@ int main() {
 			"Color4f(0.5,0.25,0.125,1) Vertex3f(30,60,0.75) End()", "QT_W3D_DRAW: " + joined());
 	}
 
+	// Fog without the z-buffer still gets the depth; with neither, it does not.
+	for (int fog = 0; fog < 2; ++fog) {
+		ULONG* w = qt_reserve(8 + QT_W3D_VERTEX_WORDS);
+		memset(w, 0, (8 + QT_W3D_VERTEX_WORDS) * 4);
+		w[0] = (static_cast<ULONG>(QT_W3D_DRAW) << 16) | (8 + QT_W3D_VERTEX_WORDS);
+		w[1] = GL_POINTS;
+		w[2] = fog ? (1 << 14) : 0; // W3D_FOGGING
+		w[7] = 1;
+		w[8] = qt_f2l(5.0f);
+		w[9] = qt_f2l(6.0f);
+		w[10] = qt_dhi(0.5);
+		w[11] = qt_dlo(0.5);
+		records.clear();
+		qt_flush();
+		check(joined() == (fog ? "Begin(0) Vertex3f(5,6,0.5) End()" : "Begin(0) Vertex2f(5,6) End()"), "QT_W3D_DRAW fog: " + joined());
+	}
+
 	// W3D_SetState(W3D_ZBUFFERUPDATE, W3D_ENABLE) switches depth writes, nothing
 	// else (0.53 switched blending through a missing break).
 	records.clear();

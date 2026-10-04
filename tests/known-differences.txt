@@ -2,6 +2,6 @@
 # compare.py reports them as KNOWN instead of FAIL. One test per line:
 # <test name> <reason>
 
-t06_fog The 0.53 release draws fogged geometry black; the current build applies the fog colour and density as specified.
+t06_fog The 0.53 release draws fogged geometry black; the current build applies the fog colour and density as specified, and since phase 5 also without the z-buffer (first row).
 a05_agl_queries The 0.53 release returns a host pointer from glGetPointerv (Amiga address plus the memory offset); the current build returns the Amiga address, which the yellow bar shows.
 t10_zupdate Fixed in phase 5: W3D_ZBUFFERUPDATE switches depth writes. 0.53 never turned them off and switched blending instead (missing break), so the red quad hides the blue one and the green one is blended.

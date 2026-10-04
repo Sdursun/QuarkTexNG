@@ -21,7 +21,7 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 | # | Bug | Test | Status |
 | --- | --- | --- | --- |
 | 1 | `W3D_SetState(W3D_ZBUFFERUPDATE)` switched blending (missing `break`); depth writes could not be turned off | t10_zupdate (new) | fixed |
-| 2 | Without the z-buffer no depth reaches OpenGL, so fog does nothing | t06_fog, first row | open |
+| 2 | Without the z-buffer no depth reaches OpenGL, so fog does nothing. Now the depth is sent when the z-buffer or fog is on | t06_fog, first row | fixed |
 | 3 | `SetTexEnv` and `SetWrapMode` pass their colours as r, b, g, a | new test | open |
 | 4 | `UpdateTexSubImage` uploads `texsource` instead of its image; `FreeAllTexObj` frees the wrong list nodes | new test | open |
 | 5 | `W3D_Point.pointsize` and line widths are ignored | t02_primitives | open |

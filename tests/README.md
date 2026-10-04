@@ -72,8 +72,6 @@ does, which the `inline/macros.h` LP macros cannot.
 `docs/phase5-fixes.md`)
 
 Shown by the tests:
-- Warp3D: without the z-buffer no depth reaches OpenGL, so fog does nothing
-  (t06_fog, first row).
 - Warp3D: `W3D_Point.pointsize` is ignored (t02_primitives).
 - Warp3D: CHUNKY textures ignore the palette (t03_textures, first quad).
 - agl: `glDrawArrays` with stride 0 repeats the first vertex, so the strip in

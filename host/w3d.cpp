@@ -85,7 +85,9 @@ namespace {
 			else QT_GL(TexCoord2f)(static_cast<float>(static_cast<double>(u) / draw.width), static_cast<float>(static_cast<double>(v) / draw.height));
 		}
 		if (draw.state & W3D_GOURAUD) QT_GL(Color4f)(c.f(i + 8), c.f(i + 9), c.f(i + 10), c.f(i + 11));
-		if (draw.state & W3D_ZBUFFER) QT_GL(Vertex3f)(c.f(i), c.f(i + 1), static_cast<float>(c.d(i + 2)));
+		// Fog needs the depth too (0.53 only sent it with the z-buffer). Without
+		// either, z may be unset and must not clip the vertex away.
+		if (draw.state & (W3D_ZBUFFER | W3D_FOGGING)) QT_GL(Vertex3f)(c.f(i), c.f(i + 1), static_cast<float>(c.d(i + 2)));
 		else QT_GL(Vertex2f)(c.f(i), c.f(i + 1));
 	}
 
