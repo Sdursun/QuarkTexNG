@@ -9,3 +9,4 @@ t11_texcolors Fixed in phase 5: W3D_SetTexEnv and W3D_SetWrapMode pass their col
 t12_texupdate Fixed in phase 5: W3D_UpdateTexSubImage uploads its image with srcbpr bytes per row. 0.53 uploaded the texture's original image instead and ignored calls with srcbpr != 0, so the blue and green rectangles are missing.
 t03_textures Fixed in phase 5: CHUNKY textures go through their palette (first quad). 0.53 sent the indices as GL_COLOR_INDEX and ignored the palette.
 t13_texswap Fixed in phase 5: texture updates set the byte order of their format. 0.53 kept the one of the last allocation, so after an 8-bit allocation the R5G6B5 updates came out with swapped bytes (green/blue and red/white).
+t14_zbuffer_io Fixed in phase 5: W3D_ReadZPixel/ReadZSpan and W3D_WriteZPixel/WriteZSpan read and write Warp3D depth values at the right place. 0.53 returned garbage (no bars) and wrote no rows.

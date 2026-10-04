@@ -36,6 +36,14 @@ extern struct Library *Warp3DBase;
 	LP7(372, ULONG, W3D_UpdateTexSubImage, W3D_Context *, context, a0, W3D_Texture *, texture, a1, void *, teximage, a2, ULONG, level, d1, ULONG *, palette, a3, W3D_Scissor *, scissor, a4, ULONG, srcbpr, d0, , Warp3DBase)
 #define W3D_FreeAllTexObj(context) \
 	LP1(378, ULONG, W3D_FreeAllTexObj, W3D_Context *, context, a0, , Warp3DBase)
+#define W3D_ReadZPixel(context, x, y, z) \
+	LP4(234, ULONG, W3D_ReadZPixel, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, W3D_Double *, z, a1, , Warp3DBase)
+#define W3D_ReadZSpan(context, x, y, n, z) \
+	LP5(240, ULONG, W3D_ReadZSpan, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG, n, d2, W3D_Double *, z, a1, , Warp3DBase)
+#define W3D_WriteZPixel(context, x, y, z) \
+	LP4NR(348, W3D_WriteZPixel, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, W3D_Double *, z, a1, , Warp3DBase)
+#define W3D_WriteZSpan(context, x, y, n, z, mask) \
+	LP6NR(354, W3D_WriteZSpan, W3D_Context *, context, a0, ULONG, x, d0, ULONG, y, d1, ULONG, n, d2, W3D_Double *, z, a1, UBYTE *, mask, a2, , Warp3DBase)
 #define W3D_DrawLine(context, line) \
 	LP2(150, ULONG, W3D_DrawLine, W3D_Context *, context, a0, W3D_Line *, line, a1, , Warp3DBase)
 #define W3D_DrawPoint(context, point) \
