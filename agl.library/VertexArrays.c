@@ -1,5 +1,19 @@
 #include "../gl/gl.h"
 
+/* Stride 0 means tightly packed elements of size components. 0.53 stepped by
+ * 0 then and repeated the first element. */
+static GLsizei packedStride(GLsizei stride, GLint size, GLenum type) {
+	int bytes;
+	if (stride) return stride;
+	switch (type) {
+	case GL_BYTE: case GL_UNSIGNED_BYTE: bytes = 1; break;
+	case GL_SHORT: case GL_UNSIGNED_SHORT: bytes = 2; break;
+	case GL_DOUBLE: bytes = 8; break;
+	default: bytes = 4; break;
+	}
+	return size * bytes;
+}
+
 GLint vertexSize;
 GLenum vertexType;
 GLsizei vertexStride;
@@ -9,7 +23,7 @@ void glVertexPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei st
 	LOG;
 	vertexSize = size;
 	vertexType = type;
-	vertexStride = stride;
+	vertexStride = packedStride(stride, size, type);
 	vertexPtr = ptr;
 	_glVertexPointer(size, type, stride, memoffset + (long) ptr);
 }
@@ -62,7 +76,7 @@ GLvoid *normalPtr = NULL;
 void glNormalPointer(GLenum type __asm("d0"), GLsizei stride __asm("d1"), GLvoid *ptr __asm("a0")) {
 	LOG;
 	normalType = type;
-	normalStride = stride;
+	normalStride = packedStride(stride, 3, type);
 	normalPtr = ptr;
 	_glNormalPointer(type, stride, memoffset + (long) ptr);
 }
@@ -106,7 +120,7 @@ void glColorPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei str
 	LOG;
 	colorSize = size;
 	colorType = type;
-	colorStride = stride;
+	colorStride = packedStride(stride, size, type);
 	colorPtr = ptr;
 	_glColorPointer(size, type, stride, memoffset + (long) ptr);
 }
@@ -188,7 +202,7 @@ GLvoid *indexPtr = NULL;
 void glIndexPointer(GLenum type __asm("d0"), GLsizei stride __asm("d1"), GLvoid *ptr __asm("a0")) {
 	LOG;
 	indexType = type;
-	indexStride = stride;
+	indexStride = packedStride(stride, 1, type);
 	indexPtr = ptr;
 	_glIndexPointer(type, stride, memoffset + (long) ptr);
 }
@@ -232,7 +246,7 @@ void glTexCoordPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei 
 	LOG;
 	texCoordSize = size;
 	texCoordType = type;
-	texCoordStride = stride;
+	texCoordStride = packedStride(stride, size, type);
 	texCoordPtr = ptr;
 	_glTexCoordPointer(size, type, stride, memoffset + (long) ptr);
 }
@@ -286,7 +300,7 @@ GLsizei edgeFlagStride;
 GLboolean *edgeFlagPtr = NULL;
 void glEdgeFlagPointer(GLsizei stride __asm("d0"), GLboolean *ptr __asm("a0")) {
 	LOG;
-	edgeFlagStride = stride;
+	edgeFlagStride = stride ? stride : (GLsizei) sizeof(GLboolean);
 	edgeFlagPtr = ptr;
 	_glEdgeFlagPointer(stride, memoffset + (long) ptr);
 }

@@ -72,8 +72,6 @@ does, which the `inline/macros.h` LP macros cannot.
 `docs/phase5-fixes.md`)
 
 Shown by the tests:
-- agl: `glDrawArrays` with stride 0 repeats the first vertex, so the strip in
-  a05_agl_queries is not drawn.
 
 Found in the code (kept as they are so that the frames still match 0.53):
 - agl: the byte swapping of 16/32-bit texture, pixel and display list data
