@@ -519,6 +519,11 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 				GL_RGBA, GL_UNSIGNED_BYTE, rgba.empty() ? 0 : &rgba[0]);
 			return true;
 		}
+		// The byte order of this format (0.53 left it as the last allocation
+		// had set it).
+		GLint swap = 0;
+		lookup(swapFormat, c.u(2), swap);
+		QT_GL(PixelStorei)(GL_UNPACK_SWAP_BYTES, swap ? GL_TRUE : GL_FALSE);
 		bool rows = bytesPerRow && pixelSize && bytesPerRow % pixelSize == 0;
 		if (rows) QT_GL(PixelStorei)(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(bytesPerRow / pixelSize));
 		QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4),

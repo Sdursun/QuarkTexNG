@@ -366,7 +366,7 @@ int main() {
 		w[9] = 0;       // no palette
 	}
 	qt_flush();
-	check(joined() == "BindTexture(3553,7) PixelStorei(3314,32) TexSubImage2D(3553,0,18,20,12,8,6407,5121,@16000) "
+	check(joined() == "BindTexture(3553,7) PixelStorei(3312,0) PixelStorei(3314,32) TexSubImage2D(3553,0,18,20,12,8,6407,5121,@16000) "
 		"PixelStorei(3314,0)", "QT_W3D_TEX_UPDATE: " + joined());
 
 	// W3D_SetTexEnv(W3D_BLEND): the colour goes to OpenGL as r, g, b, a (0.53: r, b, g, a).

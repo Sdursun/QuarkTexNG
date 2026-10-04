@@ -32,7 +32,7 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 | 7 | Depth buffer reads and writes use the wrong sizes and addresses | new test | open |
 | 8 | agl: 16/32-bit texture, pixel and display list data is byte-swapped one byte at a time (`void *` steps) | new test | open |
 | 9 | agl: `glDrawArrays` with stride 0 repeats the first vertex | a05_agl_queries | open |
-| 10 | `UpdateTexImage`/`UpdateTexSubImage` leave `UNPACK_SWAP_BYTES` as the last allocation set it, so 16-bit textures are updated with the wrong byte order after an 8-bit one was allocated | new test | open |
+| 10 | `UpdateTexImage`/`UpdateTexSubImage` left `UNPACK_SWAP_BYTES` as the last allocation set it, so 16-bit textures were updated with the wrong byte order after an 8-bit one was allocated | t13_texswap (new) | fixed |
 
 ## Test infrastructure changes
 
