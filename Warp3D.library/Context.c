@@ -153,70 +153,16 @@ ULONG W3D_GetState(__REGA0(W3D_Context *context), __REGD1(ULONG state)) {
 	if (context->state & state) return W3D_ENABLED;
 	return W3D_DISABLED;
 }
+/* The host makes the OpenGL calls (host/w3d.cpp). */
 ULONG W3D_SetState(W3D_Context *context __asm("a0"), ULONG state __asm("d0"), ULONG action __asm("d1")) {
+	ULONG *w;
 	LOG;
-	if (action == W3D_ENABLE) {
-		context->state |= state;
-		switch (state) {
-		case W3D_AUTOTEXMANAGEMENT:	break;
-		case W3D_SYNCHRON:			break;
-		case W3D_INDIRECT:			break;
-		case W3D_GLOBALTEXENV:		break;
-		case W3D_DOUBLEHEIGHT:		break;
-		case W3D_FAST:				break;
-		case W3D_TEXMAPPING:		_glEnable(GL_TEXTURE_2D); break;
-		case W3D_PERSPECTIVE:		break;
-		case W3D_GOURAUD:			_glShadeModel(GL_SMOOTH); break;
-		case W3D_ZBUFFER:			_glEnable(GL_DEPTH_TEST); break;
-		case W3D_ZBUFFERUPDATE:		//qlDepthMask(GL_FALSE); break;
-		case W3D_BLENDING:			_glEnable(GL_BLEND); break;
-		case W3D_FOGGING:			_glEnable(GL_FOG); break;
-		case W3D_ANTI_POINT:		break;
-		case W3D_ANTI_LINE:			break;
-		case W3D_ANTI_POLYGON:		break;
-		case W3D_ANTI_FULLSCREEN:	break;
-		case W3D_DITHERING:			break;
-		case W3D_LOGICOP:			_glEnable(GL_COLOR_LOGIC_OP); break;
-		case W3D_STENCILBUFFER:		return W3D_UNSUPPORTEDSTATE;
-		case W3D_ALPHATEST:			_glEnable(GL_ALPHA_TEST); break;
-		case W3D_SPECULAR:			break;
-		case W3D_TEXMAPPING3D:		break;
-		case W3D_SCISSOR:			_glEnable(GL_SCISSOR_TEST); break;
-		case W3D_CHROMATEST:		return W3D_UNSUPPORTEDSTATE;
-		case W3D_CULLFACE:			break;
-		}
-	}
-	else {
-		context->state &= ~state;
-		switch (state) {
-		case W3D_AUTOTEXMANAGEMENT:	break;
-		case W3D_SYNCHRON:			break;
-		case W3D_INDIRECT:			break;
-		case W3D_GLOBALTEXENV:		break;
-		case W3D_DOUBLEHEIGHT:		break;
-		case W3D_FAST:				break;
-		case W3D_TEXMAPPING:		_glDisable(GL_TEXTURE_2D); break;
-		case W3D_PERSPECTIVE:		break;
-		case W3D_GOURAUD:			_glShadeModel(GL_FLAT); break;
-		case W3D_ZBUFFER:			_glDisable(GL_DEPTH_TEST); break;
-		case W3D_ZBUFFERUPDATE:		//qlDepthMask(GL_TRUE); break;
-		case W3D_BLENDING:			_glDisable(GL_BLEND); break;
-		case W3D_FOGGING:			_glDisable(GL_FOG); break;
-		case W3D_ANTI_POINT:		break;
-		case W3D_ANTI_LINE:			break;
-		case W3D_ANTI_POLYGON:		break;
-		case W3D_ANTI_FULLSCREEN:	break;
-		case W3D_DITHERING:			break;
-		case W3D_LOGICOP:			_glDisable(GL_COLOR_LOGIC_OP); break;
-		case W3D_STENCILBUFFER:		return W3D_UNSUPPORTEDSTATE;
-		case W3D_ALPHATEST:			_glDisable(GL_ALPHA_TEST); break;
-		case W3D_SPECULAR:			break;
-		case W3D_TEXMAPPING3D:		break;
-		case W3D_SCISSOR:			_glDisable(GL_SCISSOR_TEST); break;
-		case W3D_CHROMATEST:		return W3D_UNSUPPORTEDSTATE;
-		case W3D_CULLFACE:			break;
-		}
-	}
+	if (action == W3D_ENABLE) context->state |= state;
+	else context->state &= ~state;
+	if (state == W3D_STENCILBUFFER || state == W3D_CHROMATEST) return W3D_UNSUPPORTEDSTATE;
+	w = w3d_command(QT_W3D_SET_STATE, 2);
+	w[0] = state;
+	w[1] = action == W3D_ENABLE ? W3D_ENABLE : W3D_DISABLE;
 	return W3D_SUCCESS;
 }
 ULONG W3D_Hint(__REGA0(W3D_Context *context), __REGD0(ULONG mode), __REGD1(ULONG quality)) {

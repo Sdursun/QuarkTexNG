@@ -1,21 +1,27 @@
 #include "w3d.h"
 
-GLenum w3dalpha[] = {0, GL_NEVER, GL_LESS, GL_GEQUAL, GL_LEQUAL, GL_GREATER, GL_NOTEQUAL, GL_EQUAL, GL_ALWAYS};
-GLenum w3dblend[] = {0, GL_ZERO, GL_ONE, GL_SRC_COLOR, GL_DST_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_ONE_MINUS_DST_COLOR, GL_SRC_ALPHA,
-	GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA, GL_SRC_ALPHA_SATURATE, GL_CONSTANT_COLOR, GL_ONE_MINUS_CONSTANT_COLOR,
-	GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA};
-long w3dfog[] = {0, GL_LINEAR, GL_EXP, GL_EXP2, GL_EXP2}; //W3D_FOG_INTERPOLATED
-GLenum w3dlogic[] = {0, GL_CLEAR, GL_AND, GL_AND_REVERSE, GL_COPY, GL_AND_INVERTED, GL_NOOP, GL_XOR, GL_OR, GL_NOR, GL_EQUIV, GL_INVERT,
-	GL_OR_REVERSE, GL_COPY_INVERTED, GL_OR_INVERTED, GL_NAND, GL_SET};
+/* The host maps the Warp3D values to OpenGL (host/w3d.cpp). */
+
+static inline ULONG f2l(float f) {
+	union { float f; ULONG l; } u;
+	u.f = f;
+	return u.l;
+}
 
 ULONG W3D_SetAlphaMode(__REGA0(W3D_Context *context), __REGD1(ULONG mode), __REGA1(W3D_Float *refval)) {
+	ULONG *w;
 	LOG;
-	_glAlphaFunc(w3dalpha[mode], *refval);
+	w = w3d_command(QT_W3D_ALPHA_MODE, 2);
+	w[0] = mode;
+	w[1] = f2l(*refval);
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetBlendMode(__REGA0(W3D_Context *context), __REGD0(ULONG srcfunc), __REGD1(ULONG dstfunc)) {
+	ULONG *w;
 	LOG;
-	_glBlendFunc(w3dblend[srcfunc], w3dblend[dstfunc]);
+	w = w3d_command(QT_W3D_BLEND_MODE, 2);
+	w[0] = srcfunc;
+	w[1] = dstfunc;
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetDrawRegion(__REGA0(W3D_Context *context), __REGA1(struct BitMap *bm), __REGD1(int yoffset), __REGA2(W3D_Scissor *scissor)) {
@@ -29,30 +35,34 @@ ULONG W3D_SetDrawRegionWBM(__REGA0(W3D_Context *context), __REGA1(W3D_Bitmap *bm
 	return W3D_SUCCESS;
 }
 
-GLfloat color[] = { 0.0, 0.0, 0.0, 0.0 };
-
 ULONG W3D_SetFogParams(__REGA0(W3D_Context *context), __REGA1(W3D_Fog *fogparams), __REGD1(ULONG fogmode)) {
-	int i;
+	ULONG *w;
 	LOG;
-	_glFogf(GL_FOG_DENSITY, fogparams->fog_density);
-	_glFogf(GL_FOG_START, fogparams->fog_start);
-	_glFogf(GL_FOG_END, fogparams->fog_end);
-	color[0] = fogparams->fog_color.r;
-	color[1] = fogparams->fog_color.g;
-	color[2] = fogparams->fog_color.b;
-	SWAP32(color, 4)
-	_glFogfv(GL_FOG_COLOR, (GLfloat*) (memoffset + (long) color));
-	_glFogi(GL_FOG_MODE, w3dfog[fogmode]);
+	w = w3d_command(QT_W3D_FOG, 7);
+	w[0] = fogmode;
+	w[1] = f2l(fogparams->fog_start);
+	w[2] = f2l(fogparams->fog_end);
+	w[3] = f2l(fogparams->fog_density);
+	w[4] = f2l(fogparams->fog_color.r);
+	w[5] = f2l(fogparams->fog_color.g);
+	w[6] = f2l(fogparams->fog_color.b);
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetLogicOp(__REGA0(W3D_Context *context), __REGD1(ULONG operation)) {
+	ULONG *w;
 	LOG;
-	_glLogicOp(w3dlogic[operation]);
+	w = w3d_command(QT_W3D_LOGIC_OP, 1);
+	w[0] = operation;
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetColorMask(__REGA0(W3D_Context *context), __REGD0(W3D_Bool red), __REGD1(W3D_Bool green), __REGD2(W3D_Bool blue), __REGD3(W3D_Bool alpha)) {
+	ULONG *w;
 	LOG;
-	_glColorMask((GLboolean) red, (GLboolean) green, (GLboolean) blue, (GLboolean) alpha);
+	w = w3d_command(QT_W3D_COLOR_MASK, 4);
+	w[0] = (GLboolean) red;
+	w[1] = (GLboolean) green;
+	w[2] = (GLboolean) blue;
+	w[3] = (GLboolean) alpha;
 	return W3D_SUCCESS;
 }
 
@@ -62,8 +72,13 @@ ULONG W3D_SetPenMask(__REGA0(W3D_Context *context), __REGD1(ULONG pen)) {
 }
 
 ULONG W3D_SetCurrentColor(__REGA0(W3D_Context *context), __REGA1(W3D_Color *color)) {
+	ULONG *w;
 	LOG;
-	_glColor4f(color->r, color->g, color->b, color->a);
+	w = w3d_command(QT_W3D_CURRENT_COLOR, 4);
+	w[0] = f2l(color->r);
+	w[1] = f2l(color->g);
+	w[2] = f2l(color->b);
+	w[3] = f2l(color->a);
 	return W3D_SUCCESS;
 }
 
@@ -72,17 +87,15 @@ ULONG W3D_SetCurrentPen(__REGA0(W3D_Context *context), __REGD1(ULONG pen)) {
 	return W3D_SUCCESS;
 }
 
+/* OpenGL counts y from the bottom of the drawing area. */
 void W3D_SetScissor(__REGA0(W3D_Context *context), __REGA1(W3D_Scissor *scissor)) {
+	ULONG *w;
 	LOG;
-	_glScissor(scissor->left,
-	height - (scissor->top + scissor->height),
-	//60,
-	scissor->width, scissor->height);
-	
-	//{0,50,630,370}
-	//640x480
-	
-	//480-(50+370)=60
+	w = w3d_command(QT_W3D_SCISSOR, 4);
+	w[0] = scissor->left;
+	w[1] = height - (scissor->top + scissor->height);
+	w[2] = scissor->width;
+	w[3] = scissor->height;
 }
 
 void W3D_FlushFrame(__REGA0(W3D_Context *context)) {

@@ -224,6 +224,61 @@ int main() {
 	qt_flush();
 	check(joined() == "Enable(3553) ShadeModel(7425)", "QT_W3D_INIT_CONTEXT: " + joined());
 
+	// W3D_DrawTriangle, gouraud shading and z-buffer on, no texture: one DRAW
+	// command, drawn as w3d.c drawVertex did.
+	{
+		const ULONG state = (1 << 10) | (1 << 11); // W3D_GOURAUD | W3D_ZBUFFER
+		ULONG* w = qt_reserve(8 + 3 * QT_W3D_VERTEX_WORDS);
+		w[0] = (static_cast<ULONG>(QT_W3D_DRAW) << 16) | (8 + 3 * QT_W3D_VERTEX_WORDS);
+		w[1] = GL_TRIANGLES;
+		w[2] = state;
+		w[3] = 0; // no texture
+		w[4] = w[5] = w[6] = 0;
+		w[7] = 3;
+		for (int v = 0; v < 3; ++v) {
+			ULONG* vertex = w + 8 + v * QT_W3D_VERTEX_WORDS;
+			memset(vertex, 0, QT_W3D_VERTEX_WORDS * 4);
+			vertex[0] = qt_f2l(10.0f * (v + 1));  // x
+			vertex[1] = qt_f2l(20.0f * (v + 1));  // y
+			vertex[2] = qt_dhi(0.25 * (v + 1));   // z (double)
+			vertex[3] = qt_dlo(0.25 * (v + 1));
+			vertex[4] = qt_f2l(1.0f);             // w
+			vertex[8] = qt_f2l(0.5f);             // colour r, g, b, a
+			vertex[9] = qt_f2l(0.25f);
+			vertex[10] = qt_f2l(0.125f);
+			vertex[11] = qt_f2l(1.0f);
+		}
+		records.clear();
+		qt_flush();
+		check(joined() == "Begin(4) Color4f(0.5,0.25,0.125,1) Vertex3f(10,20,0.25) Color4f(0.5,0.25,0.125,1) Vertex3f(20,40,0.5) "
+			"Color4f(0.5,0.25,0.125,1) Vertex3f(30,60,0.75) End()", "QT_W3D_DRAW: " + joined());
+	}
+
+	// W3D_SetState(W3D_ZBUFFERUPDATE, W3D_ENABLE) switches blending on, as the
+	// missing break in 0.53 did.
+	records.clear();
+	{
+		ULONG* w = qt_reserve(3);
+		w[0] = (static_cast<ULONG>(QT_W3D_SET_STATE) << 16) | 3;
+		w[1] = 1 << 12;
+		w[2] = 1; // W3D_ENABLE
+	}
+	qt_flush();
+	check(joined() == "Enable(3042)", "QT_W3D_SET_STATE ZBUFFERUPDATE: " + joined());
+
+	// W3D_ClearDrawRegion in a window draws a rectangle in the colour.
+	records.clear();
+	{
+		ULONG* w = qt_reserve(5);
+		w[0] = (static_cast<ULONG>(QT_W3D_CLEAR) << 16) | 5;
+		w[1] = 0xFF204080; // ARGB
+		w[2] = 0;          // window
+		w[3] = 320;
+		w[4] = 240;
+	}
+	qt_flush();
+	check(joined() == "Color4f(0.125,0.25,0.5,0.99609375) Recti(0,0,320,240)", "QT_W3D_CLEAR: " + joined());
+
 	check(reports == 0, std::to_string(reports) + " bad commands reported");
 
 	// An unknown Warp3D opcode is reported, not executed.

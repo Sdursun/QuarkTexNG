@@ -4,6 +4,10 @@
  * triangle to the end of W3D_Flush (which waits for the host) is measured
  * with the E clock and logged as triangles per second. The scene is the same
  * every frame, so the frames can still be compared.
+ *
+ * For measurements, build it by hand with -DTRIANGLES=400000, and once more
+ * with -DNO_DRAW, which runs the loop without W3D_DrawTriangle: the
+ * difference between the two is the time spent in Warp3D.
  */
 #include <stdio.h>
 #include <devices/timer.h>
@@ -56,7 +60,9 @@ void test_draw(int frame) {
 		set_vertex(&tri.v3, x, y + 1.2f, 0.5f, 1 - shade, 1, shade, 1);
 		tri.tex = NULL;
 		tri.st_pattern = NULL;
+#ifndef NO_DRAW
 		W3D_DrawTriangle(context, &tri);
+#endif
 	}
 	W3D_Flush(context);
 	elapsed = seconds() - start;

@@ -178,12 +178,50 @@ void qt_report(const char* message) {
 
 // a1 = command buffer, d1 = its length in bytes. Returns the result of the
 // last command.
+// Time spent executing command buffers, logged per context when the
+// environment variable QUARKTEX_PROFILE is set.
+namespace {
+	struct Profile {
+		bool on;
+		LONGLONG ticks;
+		unsigned long calls;
+		unsigned long long bytes;
+	} profile;
+
+	void startProfile() {
+		profile.on = getenv("QUARKTEX_PROFILE") != 0;
+		profile.ticks = 0;
+		profile.calls = 0;
+		profile.bytes = 0;
+	}
+
+	void logProfile() {
+		if (!profile.on || !profile.calls) return;
+		LARGE_INTEGER frequency;
+		QueryPerformanceFrequency(&frequency);
+		char line[160];
+		snprintf(line, sizeof(line), "Profile %s: %lu buffers, %llu bytes, %.3f s executing",
+			captureLabel.empty() ? "context" : captureLabel.c_str(), profile.calls, profile.bytes,
+			static_cast<double>(profile.ticks) / frequency.QuadPart);
+		logString(line);
+	}
+}
+
 QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
 	if (!glContext) return 0;
-	return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
+	if (!profile.on) return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
+	LARGE_INTEGER start, end;
+	QueryPerformanceCounter(&start);
+	int32_t result = qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
+	QueryPerformanceCounter(&end);
+	profile.ticks += end.QuadPart - start.QuadPart;
+	++profile.calls;
+	profile.bytes += static_cast<uint32_t>(uni->d1);
+	return result;
 }
 
 QT_EXPORT int32_t __cdecl qt_free_context(struct uni*) {
+	logProfile();
 	if (glContext) {
 		wglMakeCurrent(0, 0);
 		wglDeleteContext(glContext);
@@ -265,6 +303,7 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	glTranslatef(-(static_cast<float>(width) / 2.0f), -(static_cast<float>(height) / 2.0f), 0.0f);
 
 	startCapture();
+	startProfile();
 	return 1;
 }
 

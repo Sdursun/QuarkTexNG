@@ -36,7 +36,7 @@ foreach ($exe in 'winuae.exe', 'winuae64.exe') {
 
 	$config = Join-Path $run 'probe.uae'
 	$template.Replace('@KICKSTART@', $cfg.Kickstart).Replace('@HARDFILE@', $cfg.HardFile).
-		Replace('@BOOTDIR@', (Join-Path $root 'tests\amiga\boot')).Replace('@TESTDIR@', $qttest) |
+		Replace('@BOOTDIR@', (Join-Path $root 'tests\amiga\boot')).Replace('@TESTDIR@', $qttest).Replace('@JITCACHE@', '0') |
 		Set-Content -Path $config -Encoding ASCII
 
 	Write-Host "== $exe"

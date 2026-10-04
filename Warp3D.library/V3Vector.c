@@ -1,42 +1,23 @@
 #include "w3d.h"
 
 ULONG W3D_DrawTriangleV(__REGA0(W3D_Context *context), __REGA1(W3D_TriangleV *triangle)) {
+	W3D_Vertex *v[3];
 	LOG;
-	if (context->state & W3D_TEXMAPPING) bindTexture(triangle->tex);
-	_glBegin(GL_TRIANGLES);
-		drawVertex(context, triangle->v1, triangle->tex);
-		drawVertex(context, triangle->v2, triangle->tex);
-		drawVertex(context, triangle->v3, triangle->tex);
-	_glEnd();
+	v[0] = triangle->v1;
+	v[1] = triangle->v2;
+	v[2] = triangle->v3;
+	drawPrimitiveList(context, GL_TRIANGLES, triangle->tex, v, 3);
 	return W3D_SUCCESS;
 }
 
 ULONG W3D_DrawTriFanV(__REGA0(W3D_Context *context), __REGA1(W3D_TrianglesV *triangles)) {
-	int i;
-	W3D_Vertex **v;
 	LOG;
-	v = triangles->v;
-	if (context->state & W3D_TEXMAPPING) bindTexture(triangles->tex);
-	_glBegin(GL_TRIANGLE_FAN);
-	for (i = 0; i < triangles->vertexcount; ++i) {
-		drawVertex(context, *v, triangles->tex);
-		++v;
-	}
-	_glEnd();
+	drawPrimitiveList(context, GL_TRIANGLE_FAN, triangles->tex, triangles->v, triangles->vertexcount);
 	return W3D_SUCCESS;
 }
 
 ULONG W3D_DrawTriStripV(__REGA0(W3D_Context *context), __REGA1(W3D_TrianglesV *triangles)) {
-	int i;
-	W3D_Vertex **v;
 	LOG;
-	v = triangles->v;
-	if (context->state & W3D_TEXMAPPING) bindTexture(triangles->tex);
-	_glBegin(GL_TRIANGLE_STRIP);
-	for (i = 0; i < triangles->vertexcount; ++i) {
-		drawVertex(context, *v, triangles->tex);
-		++v;
-	}
-	_glEnd();
+	drawPrimitiveList(context, GL_TRIANGLE_STRIP, triangles->tex, triangles->v, triangles->vertexcount);
 	return W3D_SUCCESS;
 }

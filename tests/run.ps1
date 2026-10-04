@@ -27,7 +27,9 @@ param(
 	# of the 32-bit winuae.exe and always run there.
 	[ValidateSet('winuae.exe', 'winuae64.exe')]
 	[string]$Emulator = 'winuae.exe',
-	[int]$TimeoutSec = 300
+	[int]$TimeoutSec = 300,
+	# Run the 68k code with the JIT compiler (16 MB cache), as games usually do.
+	[switch]$Jit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -97,7 +99,8 @@ foreach ($variant in $Variants) {
 
 	$config = Join-Path $dir 'test.uae'
 	$template.Replace('@KICKSTART@', $cfg.Kickstart).Replace('@HARDFILE@', $cfg.HardFile).
-		Replace('@BOOTDIR@', (Join-Path $PSScriptRoot 'amiga\boot')).Replace('@TESTDIR@', $qttest) |
+		Replace('@BOOTDIR@', (Join-Path $PSScriptRoot 'amiga\boot')).Replace('@TESTDIR@', $qttest).
+		Replace('@JITCACHE@', $(if ($Jit) { '16384' } else { '0' })) |
 		Set-Content -Path $config -Encoding ASCII
 
 	$exe = if ($variant -eq 'orig') { 'winuae.exe' } else { $Emulator }

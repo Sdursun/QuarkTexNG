@@ -29,6 +29,11 @@ typedef struct {
 void drawVertex(W3D_Context* context, W3D_Vertex* v, W3D_Texture* tex);
 void bindTexture(W3D_Texture* tex);
 
+/* Drawing on the host (w3d.c): count vertices stored one after the other,
+ * or given by an array of pointers. */
+void drawPrimitive(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex* v, int count);
+void drawPrimitiveList(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex** v, int count);
+
 extern W3D_Driver driver;
 extern W3D_Driver *drivers[];
 
