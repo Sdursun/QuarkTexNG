@@ -15,7 +15,12 @@
 #include <proto/timer.h>
 #include "common.h"
 
+/* A separate name keeps the loop-only frames from replacing the real ones. */
+#ifdef NO_DRAW
+const char test_name[] = "t09_loop_only";
+#else
 const char test_name[] = "t09_throughput";
+#endif
 
 #ifndef TRIANGLES
 #define TRIANGLES 20000

@@ -14,12 +14,22 @@
 #include "gldecode.h"
 #include "w3dcmd.h"
 
-// OpenGL 1.2 blend factors; the Windows headers stop at OpenGL 1.1.
+// OpenGL 1.2 blend factors and packed pixel types; the Windows headers stop
+// at OpenGL 1.1.
 #ifndef GL_CONSTANT_COLOR
 #define GL_CONSTANT_COLOR 0x8001
 #define GL_ONE_MINUS_CONSTANT_COLOR 0x8002
 #define GL_CONSTANT_ALPHA 0x8003
 #define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
+#endif
+#ifndef GL_UNSIGNED_SHORT_5_6_5
+#define GL_UNSIGNED_SHORT_5_6_5 0x8363
+#define GL_UNSIGNED_SHORT_4_4_4_4_REV 0x8365
+#define GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
+#define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
+#endif
+#ifndef GL_BGRA_EXT
+#define GL_BGRA_EXT 0x80E1
 #endif
 
 namespace {
@@ -41,6 +51,17 @@ namespace {
 	const GLenum w3dlogic[] = {0, GL_CLEAR, GL_AND, GL_AND_REVERSE, GL_COPY, GL_AND_INVERTED, GL_NOOP, GL_XOR, GL_OR,
 		GL_NOR, GL_EQUIV, GL_INVERT, GL_OR_REVERSE, GL_COPY_INVERTED, GL_OR_INVERTED, GL_NAND, GL_SET};
 	const GLenum w3dz[] = {0, GL_NEVER, GL_LESS, GL_GEQUAL, GL_LEQUAL, GL_GREATER, GL_NOTEQUAL, GL_EQUAL, GL_ALWAYS};
+
+	// Texture.c: W3D texture format to OpenGL format and type, and whether the
+	// 16/32-bit texels need their bytes swapped.
+	const GLint swapFormat[] = {0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0};
+	const GLenum formats[] = {0, GL_COLOR_INDEX, GL_BGRA_EXT, GL_RGB, GL_RGB, GL_BGRA_EXT, GL_BGRA_EXT, GL_ALPHA, GL_LUMINANCE,
+		GL_LUMINANCE_ALPHA, GL_INTENSITY, GL_RGBA};
+	const GLenum types[] = {0, GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT_1_5_5_5_REV, GL_UNSIGNED_SHORT_5_6_5, GL_UNSIGNED_BYTE,
+		GL_UNSIGNED_SHORT_4_4_4_4_REV, GL_UNSIGNED_INT_8_8_8_8_REV, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE,
+		GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE};
+	const GLint envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
+	const uint32_t W3D_BLEND = 4;
 
 	template <typename T, size_t N> bool lookup(const T (&table)[N], uint32_t index, T& value) {
 		if (index >= N) return false;
@@ -232,6 +253,78 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		if (c.words != 1) return false;
 		QT_GL(Clear)(GL_DEPTH_BUFFER_BIT);
 		return true;
+
+	case QT_W3D_TEX_ALLOC: {
+		// Texture.c W3D_AllocTexObj in 0.53.
+		uint32_t format = c.u(1);
+		GLint swap = 0;
+		GLenum glFormat = 0, glType = 0;
+		GLuint name = 0;
+		if (c.words != 5) return false;
+		lookup(swapFormat, format, swap);
+		lookup(formats, format, glFormat);
+		lookup(types, format, glType);
+		QT_GL(PixelStorei)(GL_UNPACK_SWAP_BYTES, swap ? GL_TRUE : GL_FALSE);
+		QT_GL(PixelStorei)(GL_UNPACK_ALIGNMENT, 1);
+		QT_GL(GenTextures)(1, &name);
+		QT_GL(BindTexture)(GL_TEXTURE_2D, name);
+		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		QT_GL(TexImage2D)(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3), 0,
+			glFormat, glType, static_cast<GLvoid*>(c.p(4)));
+		result = static_cast<int32_t>(name);
+		return true;
+	}
+
+	case QT_W3D_TEX_FREE: {
+		GLuint name = c.u(1);
+		if (c.words != 2) return false;
+		if (name) QT_GL(DeleteTextures)(1, &name);
+		return true;
+	}
+
+	case QT_W3D_TEX_FILTER:
+		if (c.words != 4) return false;
+		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
+		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (GLint) c.u(2));
+		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (GLint) c.u(3));
+		return true;
+
+	case QT_W3D_TEX_ENV: {
+		// Texture.c passed the colour as r, b, g, a.
+		uint32_t environment = c.u(2);
+		GLint mode = 0;
+		GLfloat color[4] = {c.f(3), c.f(5), c.f(4), c.f(6)};
+		if (c.words != 7) return false;
+		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
+		if (environment && lookup(envs, environment, mode)) QT_GL(TexEnvi)(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, mode);
+		if (environment == W3D_BLEND) QT_GL(TexEnvfv)(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, color);
+		return true;
+	}
+
+	case QT_W3D_TEX_WRAP: {
+		// Texture.c passed the border colour as r, b, g, a.
+		GLfloat color[4] = {c.f(4), c.f(6), c.f(5), c.f(7)};
+		if (c.words != 8) return false;
+		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
+		if (c.u(2)) QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (GLint) c.u(2));
+		if (c.u(3)) QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (GLint) c.u(3));
+		QT_GL(TexParameterfv)(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, color);
+		return true;
+	}
+
+	case QT_W3D_TEX_UPDATE: {
+		GLenum glFormat = 0, glType = 0;
+		if (c.words != 8) return false;
+		lookup(formats, c.u(2), glFormat);
+		lookup(types, c.u(2), glType);
+		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
+		QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4),
+			(GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), glFormat, glType, static_cast<GLvoid*>(c.p(7)));
+		return true;
+	}
 	}
 	return false;
 }

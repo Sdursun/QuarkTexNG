@@ -74,10 +74,27 @@ inline Record& operator<<(Record& r, double value) {
 	return r;
 }
 
+static bool inArena(const void* pointer) {
+	return pointer >= arena && pointer < arena + sizeof(arena);
+}
+
+// Pointers into Amiga memory as their address; pointers the host made up
+// itself (its own variables) as @?.
 template <typename T> Record& operator<<(Record& r, T* pointer) {
 	char text[32];
 	if (!pointer) snprintf(text, sizeof(text), "NULL");
+	else if (!inArena(pointer)) snprintf(text, sizeof(text), "@?");
 	else snprintf(text, sizeof(text), "@%lx", static_cast<unsigned long>(reinterpret_cast<const uint8_t*>(pointer) - arena));
+	r.add(text);
+	return r;
+}
+
+// A float array the host made up (colours for glFogfv, glTexEnvfv, ...):
+// its four values.
+inline Record& operator<<(Record& r, GLfloat* pointer) {
+	if (!pointer || inArena(pointer)) return operator<< <GLfloat>(r, pointer);
+	char text[96];
+	snprintf(text, sizeof(text), "{%.9g,%.9g,%.9g,%.9g}", pointer[0], pointer[1], pointer[2], pointer[3]);
 	r.add(text);
 	return r;
 }
@@ -278,6 +295,37 @@ int main() {
 	}
 	qt_flush();
 	check(joined() == "Color4f(0.125,0.25,0.5,0.99609375) Recti(0,0,320,240)", "QT_W3D_CLEAR: " + joined());
+
+	// W3D_AllocTexObj with an R5G6B5 image at Amiga address 0x14000.
+	records.clear();
+	{
+		ULONG* w = qt_reserve(5);
+		w[0] = (static_cast<ULONG>(QT_W3D_TEX_ALLOC) << 16) | 5;
+		w[1] = 3; // W3D_R5G6B5
+		w[2] = 32;
+		w[3] = 16;
+		w[4] = 0x14000;
+	}
+	qt_flush();
+	check(joined() == "PixelStorei(3312,1) PixelStorei(3317,1) GenTextures(1,@?) BindTexture(3553,0) "
+		"TexParameteri(3553,10242,10497) TexParameteri(3553,10243,10497) TexParameteri(3553,10240,9729) "
+		"TexParameteri(3553,10241,9729) TexImage2D(3553,0,6408,32,16,0,6407,33635,@14000)",
+		"QT_W3D_TEX_ALLOC: " + joined());
+
+	// W3D_SetTexEnv(W3D_BLEND): the colour goes to OpenGL as r, b, g, a.
+	records.clear();
+	{
+		ULONG* w = qt_reserve(7);
+		w[0] = (static_cast<ULONG>(QT_W3D_TEX_ENV) << 16) | 7;
+		w[1] = 5;  // texture name
+		w[2] = 4;  // W3D_BLEND
+		w[3] = qt_f2l(0.25f);
+		w[4] = qt_f2l(0.5f);
+		w[5] = qt_f2l(0.75f);
+		w[6] = qt_f2l(1.0f);
+	}
+	qt_flush();
+	check(joined() == "BindTexture(3553,5) TexEnvi(8960,8704,3042) TexEnvfv(8960,8705,{0.25,0.75,0.5,1})", "QT_W3D_TEX_ENV: " + joined());
 
 	check(reports == 0, std::to_string(reports) + " bad commands reported");
 

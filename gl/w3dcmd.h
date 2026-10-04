@@ -57,4 +57,26 @@
 /* W3D_ClearZBuffer. No arguments. */
 #define QT_W3D_CLEAR_Z 0x800E
 
+/*
+ * Textures. The host creates the OpenGL texture and returns its name, which
+ * Warp3D.library keeps in its Texture structure and passes back in the
+ * other commands (and in DRAW). Filter and wrap modes are passed as the
+ * OpenGL values Texture.c has always stored.
+ */
+/* W3D_AllocTexObj, synchronous: format (W3D_*), width, height, image. Returns
+ * the OpenGL name. */
+#define QT_W3D_TEX_ALLOC 0x8010
+/* W3D_FreeTexObj: name. */
+#define QT_W3D_TEX_FREE 0x8011
+/* W3D_SetFilter: name, min filter, mag filter (OpenGL). */
+#define QT_W3D_TEX_FILTER 0x8012
+/* W3D_SetTexEnv: name, environment (W3D_REPLACE...), colour r, g, b, a. */
+#define QT_W3D_TEX_ENV 0x8013
+/* W3D_SetWrapMode: name, s mode, t mode (OpenGL, 0 = unchanged), border
+ * colour r, g, b, a. */
+#define QT_W3D_TEX_WRAP 0x8014
+/* W3D_UpdateTexImage/UpdateTexSubImage, synchronous: name, format (W3D_*),
+ * x, y, width, height, image. */
+#define QT_W3D_TEX_UPDATE 0x8015
+
 #endif
