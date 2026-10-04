@@ -74,6 +74,9 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 		case W3D_ATO_HEIGHT:
 			tex->texheight = ATOTags->ti_Data;
 			break;
+		case W3D_ATO_PALETTE:
+			tex->palette = (ULONG*) ATOTags->ti_Data;
+			break;
 		//W3D_ATO_MIPMAPPTRS
 		}
 	}
@@ -86,11 +89,12 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 	((Texture*) tex->driver)->bordercolor.r = 0; ((Texture*) tex->driver)->bordercolor.g = 0; ((Texture*) tex->driver)->bordercolor.b = 0; ((Texture*) tex->driver)->bordercolor.a = 0;
 	/* The host creates the texture and returns its OpenGL name (host/w3d.cpp). */
 	{
-		ULONG *w = w3d_command(QT_W3D_TEX_ALLOC, 4);
+		ULONG *w = w3d_command(QT_W3D_TEX_ALLOC, 5);
 		w[0] = tex->texfmtsrc;
 		w[1] = tex->texwidth;
 		w[2] = tex->texheight;
 		w[3] = (ULONG) tex->texsource;
+		w[4] = (ULONG) tex->palette;
 		((Texture*) tex->driver)->glID = qt_flush();
 	}
 	if (error) *error = W3D_SUCCESS;
@@ -175,7 +179,7 @@ ULONG W3D_SetWrapMode(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *textur
 /* The host reads the image right away (synchronous command). bytesPerRow 0
  * means rows of width pixels without gaps. */
 static void updateTexture(W3D_Texture *texture, void *image, ULONG x, ULONG y, ULONG width, ULONG height, ULONG bytesPerRow) {
-	ULONG *w = w3d_command(QT_W3D_TEX_UPDATE, 8);
+	ULONG *w = w3d_command(QT_W3D_TEX_UPDATE, 9);
 	w[0] = ((Texture*) texture->driver)->glID;
 	w[1] = texture->texfmtsrc;
 	w[2] = x;
@@ -184,12 +188,14 @@ static void updateTexture(W3D_Texture *texture, void *image, ULONG x, ULONG y, U
 	w[5] = height;
 	w[6] = (ULONG) image;
 	w[7] = bytesPerRow;
+	w[8] = (ULONG) texture->palette;
 	qt_flush();
 }
 
 ULONG W3D_UpdateTexImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture), __REGA2(void *teximage), __REGD1(int level), __REGA3(ULONG *palette)) {
 	LOG;
 	texture->texsource = teximage;
+	if (palette) texture->palette = palette;
 	updateTexture(texture, teximage, 0, 0, texture->texwidth, texture->texheight, 0);
 	return W3D_SUCCESS;
 }
@@ -198,6 +204,7 @@ ULONG W3D_UpdateTexImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *tex
  * uploaded texsource instead and ignored calls with srcbpr != 0. */
 ULONG W3D_UpdateTexSubImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture), __REGA2(void *teximage), __REGD1(ULONG level), __REGA3(ULONG *palette), __REGA4(W3D_Scissor* scissor), __REGD0(ULONG srcbpr)) {
 	LOG;
+	if (palette) texture->palette = palette;
 	updateTexture(texture, teximage, scissor->left, scissor->top, scissor->width, scissor->height, srcbpr);
 	return W3D_SUCCESS;
 }

@@ -11,6 +11,8 @@
 #include <GL/gl.h>
 #define QT_GL(name) gl##name
 #endif
+#include <map>
+#include <vector>
 #include "gldecode.h"
 #include "w3dcmd.h"
 
@@ -127,6 +129,36 @@ namespace {
 		double value;
 		memcpy(&value, &bits, 8);
 		return value;
+	}
+
+	// CHUNKY textures: 8-bit indices into a palette of 256 ARGB words. OpenGL
+	// gets them as RGBA bytes (0.53 sent the indices as GL_COLOR_INDEX and
+	// ignored the palette). The palette is kept per texture, so updates
+	// without a palette use the last one.
+	const uint32_t W3D_CHUNKY = 1;
+	std::map<GLuint, std::vector<uint32_t> > palettes;
+
+	void readPalette(const Command& c, GLuint name, uint32_t address) {
+		std::vector<uint32_t>& palette = palettes[name];
+		palette.resize(256);
+		for (uint32_t i = 0; i < 256; ++i) palette[i] = readU32(c, address + 4 * i);
+	}
+
+	std::vector<GLubyte> chunkyToRgba(const Command& c, const std::vector<uint32_t>& palette, uint32_t image,
+			int32_t width, int32_t height, uint32_t bytesPerRow) {
+		std::vector<GLubyte> rgba(width > 0 && height > 0 ? static_cast<size_t>(width) * height * 4 : 0);
+		if (!bytesPerRow) bytesPerRow = static_cast<uint32_t>(width);
+		size_t out = 0;
+		for (int32_t y = 0; y < height; ++y) {
+			for (int32_t x = 0; x < width; ++x) {
+				uint32_t argb = palette[readU8(c, image + y * bytesPerRow + x)];
+				rgba[out++] = static_cast<GLubyte>(argb >> 16);
+				rgba[out++] = static_cast<GLubyte>(argb >> 8);
+				rgba[out++] = static_cast<GLubyte>(argb);
+				rgba[out++] = static_cast<GLubyte>(argb >> 24);
+			}
+		}
+		return rgba;
 	}
 
 	// The arrays of a DRAW_ARRAY command (words 7-17), V4Array.c in 0.53.
@@ -384,7 +416,8 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		GLint swap = 0;
 		GLenum glFormat = 0, glType = 0;
 		GLuint name = 0;
-		if (c.words != 5) return false;
+		uint32_t palette = c.u(5);
+		if (c.words != 6) return false;
 		lookup(swapFormat, format, swap);
 		lookup(formats, format, glFormat);
 		lookup(types, format, glType);
@@ -396,8 +429,17 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		QT_GL(TexImage2D)(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3), 0,
-			glFormat, glType, static_cast<GLvoid*>(c.p(4)));
+		if (format == W3D_CHUNKY && palette) {
+			int32_t width = static_cast<int32_t>(c.u(2)), height = static_cast<int32_t>(c.u(3));
+			readPalette(c, name, palette);
+			std::vector<GLubyte> rgba = chunkyToRgba(c, palettes[name], c.u(4), width, height, 0);
+			QT_GL(TexImage2D)(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+				rgba.empty() ? 0 : &rgba[0]);
+		}
+		else {
+			QT_GL(TexImage2D)(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei) (int32_t) c.u(2), (GLsizei) (int32_t) c.u(3), 0,
+				glFormat, glType, static_cast<GLvoid*>(c.p(4)));
+		}
 		result = static_cast<int32_t>(name);
 		return true;
 	}
@@ -406,6 +448,7 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		GLuint name = c.u(1);
 		if (c.words != 2) return false;
 		if (name) QT_GL(DeleteTextures)(1, &name);
+		palettes.erase(name);
 		return true;
 	}
 
@@ -461,12 +504,21 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 	case QT_W3D_TEX_UPDATE: {
 		GLenum glFormat = 0, glType = 0;
 		GLint pixelSize = 0;
-		uint32_t bytesPerRow = c.u(8);
-		if (c.words != 9) return false;
+		uint32_t bytesPerRow = c.u(8), palette = c.u(9);
+		GLuint name = c.u(1);
+		if (c.words != 10) return false;
 		lookup(formats, c.u(2), glFormat);
 		lookup(types, c.u(2), glType);
 		lookup(bytesPerPixel, c.u(2), pixelSize);
-		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
+		QT_GL(BindTexture)(GL_TEXTURE_2D, name);
+		if (c.u(2) == W3D_CHUNKY && (palette || palettes.count(name))) {
+			int32_t width = static_cast<int32_t>(c.u(5)), height = static_cast<int32_t>(c.u(6));
+			if (palette) readPalette(c, name, palette);
+			std::vector<GLubyte> rgba = chunkyToRgba(c, palettes[name], c.u(7), width, height, bytesPerRow);
+			QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), width, height,
+				GL_RGBA, GL_UNSIGNED_BYTE, rgba.empty() ? 0 : &rgba[0]);
+			return true;
+		}
 		bool rows = bytesPerRow && pixelSize && bytesPerRow % pixelSize == 0;
 		if (rows) QT_GL(PixelStorei)(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(bytesPerRow / pixelSize));
 		QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4),

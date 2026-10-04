@@ -28,10 +28,11 @@ OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
 | 3 | `SetTexEnv` and `SetWrapMode` passed their colours as r, b, g, a | t11_texcolors (new) | fixed |
 | 4 | `UpdateTexSubImage` uploaded `texsource` instead of its image and ignored `srcbpr`; `FreeAllTexObj` freed the wrong list nodes (and NULL) | t12_texupdate (new) | fixed |
 | 5 | `W3D_Point.pointsize` and line widths were ignored | t02_primitives (0.065 % of its pixels, below the 0.1 % threshold of the 0.53 comparison) | fixed |
-| 6 | CHUNKY textures ignore the palette | t03_textures, first quad | open |
+| 6 | CHUNKY textures ignored the palette (`W3D_ATO_PALETTE`, and the palette argument of the updates); the host now converts them to RGBA | t03_textures, first quad | fixed |
 | 7 | Depth buffer reads and writes use the wrong sizes and addresses | new test | open |
 | 8 | agl: 16/32-bit texture, pixel and display list data is byte-swapped one byte at a time (`void *` steps) | new test | open |
 | 9 | agl: `glDrawArrays` with stride 0 repeats the first vertex | a05_agl_queries | open |
+| 10 | `UpdateTexImage`/`UpdateTexSubImage` leave `UNPACK_SWAP_BYTES` as the last allocation set it, so 16-bit textures are updated with the wrong byte order after an 8-bit one was allocated | new test | open |
 
 ## Test infrastructure changes
 

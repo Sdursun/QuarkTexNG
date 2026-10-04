@@ -7,3 +7,4 @@ a05_agl_queries The 0.53 release returns a host pointer from glGetPointerv (Amig
 t10_zupdate Fixed in phase 5: W3D_ZBUFFERUPDATE switches depth writes. 0.53 never turned them off and switched blending instead (missing break), so the red quad hides the blue one and the green one is blended.
 t11_texcolors Fixed in phase 5: W3D_SetTexEnv and W3D_SetWrapMode pass their colours as r, g, b, a; 0.53 passed r, b, g, a, so the green colours came out blue.
 t12_texupdate Fixed in phase 5: W3D_UpdateTexSubImage uploads its image with srcbpr bytes per row. 0.53 uploaded the texture's original image instead and ignored calls with srcbpr != 0, so the blue and green rectangles are missing.
+t03_textures Fixed in phase 5: CHUNKY textures go through their palette (first quad). 0.53 sent the indices as GL_COLOR_INDEX and ignored the palette.

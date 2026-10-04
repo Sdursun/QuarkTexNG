@@ -118,6 +118,7 @@ void qt_report(const char* message) {
 
 static const ULONG capacity = 64;
 static ULONG buffer[capacity];
+static const uint8_t buffer8[4] = {0, 0, 0, 0}; // a header for hand-made Commands
 static ULONG used;
 static int flushes;
 
@@ -316,12 +317,13 @@ int main() {
 	// W3D_AllocTexObj with an R5G6B5 image at Amiga address 0x14000.
 	records.clear();
 	{
-		ULONG* w = qt_reserve(5);
-		w[0] = (static_cast<ULONG>(QT_W3D_TEX_ALLOC) << 16) | 5;
+		ULONG* w = qt_reserve(6);
+		w[0] = (static_cast<ULONG>(QT_W3D_TEX_ALLOC) << 16) | 6;
 		w[1] = 3; // W3D_R5G6B5
 		w[2] = 32;
 		w[3] = 16;
 		w[4] = 0x14000;
+		w[5] = 0;       // no palette
 	}
 	qt_flush();
 	check(joined() == "PixelStorei(3312,1) PixelStorei(3317,1) GenTextures(1,@?) BindTexture(3553,0) "
@@ -329,12 +331,30 @@ int main() {
 		"TexParameteri(3553,10241,9729) TexImage2D(3553,0,6408,32,16,0,6407,33635,@14000)",
 		"QT_W3D_TEX_ALLOC: " + joined());
 
+	// CHUNKY: a 2 x 2 rectangle of an image 4 bytes wide goes through the
+	// palette (ARGB) to RGBA bytes.
+	{
+		auto put32 = [](uint32_t address, uint32_t value) {
+			uint32_t big = qt_swap32(value);
+			memcpy(arena + address, &big, 4);
+		};
+		for (uint32_t i = 0; i < 256; ++i) put32(0x17000 + 4 * i, 0x80000000u | (i << 16) | ((255 - i) << 8) | (i / 2));
+		const uint8_t image[] = {1, 2, 9, 9, 3, 4, 9, 9};
+		memcpy(arena + 0x17400, image, sizeof(image));
+		Command c = {buffer8, 0, resolve};
+		readPalette(c, 99, 0x17000);
+		std::vector<GLubyte> rgba = chunkyToRgba(c, palettes[99], 0x17400, 2, 2, 4);
+		const GLubyte expected[] = {1, 254, 0, 128, 2, 253, 1, 128, 3, 252, 1, 128, 4, 251, 2, 128};
+		check(rgba.size() == 16 && memcmp(&rgba[0], expected, 16) == 0, "chunkyToRgba");
+		palettes.erase(99);
+	}
+
 	// W3D_UpdateTexSubImage of an R8G8B8 rectangle in an image 96 bytes wide:
 	// the row length is set for the upload and reset after it.
 	records.clear();
 	{
-		ULONG* w = qt_reserve(9);
-		w[0] = (static_cast<ULONG>(QT_W3D_TEX_UPDATE) << 16) | 9;
+		ULONG* w = qt_reserve(10);
+		w[0] = (static_cast<ULONG>(QT_W3D_TEX_UPDATE) << 16) | 10;
 		w[1] = 7;       // texture name
 		w[2] = 4;       // W3D_R8G8B8
 		w[3] = 18;
@@ -343,6 +363,7 @@ int main() {
 		w[6] = 8;
 		w[7] = 0x16000; // image
 		w[8] = 96;      // bytes per row
+		w[9] = 0;       // no palette
 	}
 	qt_flush();
 	check(joined() == "BindTexture(3553,7) PixelStorei(3314,32) TexSubImage2D(3553,0,18,20,12,8,6407,5121,@16000) "

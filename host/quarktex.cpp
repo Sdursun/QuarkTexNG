@@ -15,7 +15,7 @@
 #include "gldecode.h"
 
 // Must match QT_PROTOCOL_VERSION in gl/gl.c.
-#define QT_PROTOCOL_VERSION 5
+#define QT_PROTOCOL_VERSION 6
 
 extern "C" {
 	__declspec(dllexport) uni_resolve_function uni_resolve = 0;

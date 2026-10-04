@@ -63,8 +63,8 @@
  * other commands (and in DRAW). Filter and wrap modes are passed as the
  * OpenGL values Texture.c has always stored.
  */
-/* W3D_AllocTexObj, synchronous: format (W3D_*), width, height, image. Returns
- * the OpenGL name. */
+/* W3D_AllocTexObj, synchronous: format (W3D_*), width, height, image, palette
+ * (256 ARGB words for W3D_CHUNKY, or 0). Returns the OpenGL name. */
 #define QT_W3D_TEX_ALLOC 0x8010
 /* W3D_FreeTexObj: name. */
 #define QT_W3D_TEX_FREE 0x8011
@@ -77,7 +77,7 @@
 #define QT_W3D_TEX_WRAP 0x8014
 /* W3D_UpdateTexImage/UpdateTexSubImage, synchronous: name, format (W3D_*),
  * x, y, width, height, image of the rectangle, bytes per row of that image
- * (0: packed rows). */
+ * (0: packed rows), palette (0: the texture's last one). */
 #define QT_W3D_TEX_UPDATE 0x8015
 
 /*
