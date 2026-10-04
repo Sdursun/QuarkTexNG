@@ -78,7 +78,6 @@ Shown by the tests:
   a05_agl_queries is not drawn.
 
 Found in the code (kept as they are so that the frames still match 0.53):
-- Warp3D: `SetTexEnv` and `SetWrapMode` pass their colours as r, b, g, a.
 - Warp3D: `UpdateTexSubImage` uploads `texsource` instead of its image.
 - Warp3D: `FreeAllTexObj` frees the wrong list nodes.
 - Warp3D: the depth buffer reads and writes use the wrong sizes and addresses.

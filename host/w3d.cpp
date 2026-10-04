@@ -416,10 +416,10 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		return true;
 
 	case QT_W3D_TEX_ENV: {
-		// Texture.c passed the colour as r, b, g, a.
+		// The colour as r, g, b, a (0.53 passed it as r, b, g, a).
 		uint32_t environment = c.u(2);
 		GLint mode = 0;
-		GLfloat color[4] = {c.f(3), c.f(5), c.f(4), c.f(6)};
+		GLfloat color[4] = {c.f(3), c.f(4), c.f(5), c.f(6)};
 		if (c.words != 7) return false;
 		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
 		if (environment && lookup(envs, environment, mode)) QT_GL(TexEnvi)(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, mode);
@@ -428,8 +428,8 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 	}
 
 	case QT_W3D_TEX_WRAP: {
-		// Texture.c passed the border colour as r, b, g, a.
-		GLfloat color[4] = {c.f(4), c.f(6), c.f(5), c.f(7)};
+		// The border colour as r, g, b, a (0.53 passed it as r, b, g, a).
+		GLfloat color[4] = {c.f(4), c.f(5), c.f(6), c.f(7)};
 		if (c.words != 8) return false;
 		QT_GL(BindTexture)(GL_TEXTURE_2D, c.u(1));
 		if (c.u(2)) QT_GL(TexParameteri)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (GLint) c.u(2));

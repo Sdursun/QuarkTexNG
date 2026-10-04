@@ -329,7 +329,7 @@ int main() {
 		"TexParameteri(3553,10241,9729) TexImage2D(3553,0,6408,32,16,0,6407,33635,@14000)",
 		"QT_W3D_TEX_ALLOC: " + joined());
 
-	// W3D_SetTexEnv(W3D_BLEND): the colour goes to OpenGL as r, b, g, a.
+	// W3D_SetTexEnv(W3D_BLEND): the colour goes to OpenGL as r, g, b, a (0.53: r, b, g, a).
 	records.clear();
 	{
 		ULONG* w = qt_reserve(7);
@@ -342,7 +342,7 @@ int main() {
 		w[6] = qt_f2l(1.0f);
 	}
 	qt_flush();
-	check(joined() == "BindTexture(3553,5) TexEnvi(8960,8704,3042) TexEnvfv(8960,8705,{0.25,0.75,0.5,1})", "QT_W3D_TEX_ENV: " + joined());
+	check(joined() == "BindTexture(3553,5) TexEnvi(8960,8704,3042) TexEnvfv(8960,8705,{0.25,0.5,0.75,1})", "QT_W3D_TEX_ENV: " + joined());
 
 	// W3D_DrawElements: big-endian arrays in Amiga memory (the arena), three
 	// F_F_F vertices, RGBA float colours, UWORD indices 2, 0, 1.
