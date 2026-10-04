@@ -1,15 +1,14 @@
 // Warp3D on the host (docs/phase4-warp3d-on-host.md). Executes the Warp3D
 // commands Warp3D.library writes to the command buffer, with the OpenGL calls
-// the 68k code of QuarkTex 0.53 made - including its quirks, so that the
-// reference tests keep matching 0.53. Fixes belong to phase 5.
+// the 68k code of QuarkTex 0.53 made, minus the bugs phase 5 fixed. Since
+// phase 6 those OpenGL 1.1 calls go to the emulation in ffp.h, which draws
+// on an OpenGL 3.3 core context.
 //
 // The unit test (tests/host) includes this file with QT_TEST defined and
 // QT_GL pointing to recording stubs.
 #ifndef QT_TEST
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <GL/gl.h>
-#define QT_GL(name) gl##name
+#include "ffp.h"
+#define QT_GL(name) ffp::name
 #endif
 #include <map>
 #include <vector>
@@ -129,6 +128,12 @@ namespace {
 		double value;
 		memcpy(&value, &bits, 8);
 		return value;
+	}
+	void writeDouble(const Command& c, uint32_t address, double value) {
+		uint8_t* p = address ? static_cast<uint8_t*>(c.resolve(address)) : 0;
+		uint64_t bits;
+		memcpy(&bits, &value, 8);
+		if (p) for (int i = 0; i < 8; ++i) p[i] = static_cast<uint8_t>(bits >> (56 - 8 * i));
 	}
 
 	// CHUNKY textures: 8-bit indices into a palette of 256 ARGB words. OpenGL
@@ -291,6 +296,12 @@ namespace {
 	float channel(uint32_t color, int shift) {
 		return static_cast<float>((color >> shift) & 0xFF) / 256;
 	}
+}
+
+void qt_w3d_sync() {
+#ifndef QT_TEST
+	ffp::flush();
+#endif
 }
 
 bool qt_w3d_decode(const Command& c, int32_t& result) {
@@ -529,6 +540,35 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4),
 			(GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), glFormat, glType, static_cast<GLvoid*>(c.p(7)));
 		if (rows) QT_GL(PixelStorei)(GL_UNPACK_ROW_LENGTH, 0);
+		return true;
+	}
+
+	case QT_W3D_READ_Z: {
+		// The depth buffer holds (z + 1) / 2 (Warp3D z goes to OpenGL
+		// unprojected); Warp3D gets 2 * depth - 1 as big-endian doubles.
+		uint32_t count = c.u(3), address = c.u(4);
+		if (c.words != 5) return false;
+		if (!count || count > QT_W3D_MAX_DEPTH_SPAN) return true;
+		std::vector<GLfloat> depth(count);
+		QT_GL(ReadPixels)((GLint) (int32_t) c.u(1), (GLint) (int32_t) c.u(2), (GLsizei) count, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth[0]);
+		for (uint32_t i = 0; i < count; ++i) writeDouble(c, address + 8 * i, 2.0 * depth[i] - 1.0);
+		return true;
+	}
+
+	case QT_W3D_WRITE_Z: {
+		// One point per pixel at its centre; with a mask only where it is set.
+		int32_t x = static_cast<int32_t>(c.u(1)), y = static_cast<int32_t>(c.u(2));
+		uint32_t count = c.u(3), address = c.u(4), mask = c.u(5);
+		if (c.words != 6) return false;
+		if (count > QT_W3D_MAX_DEPTH_SPAN) return true;
+		std::vector<GLfloat> points;
+		for (uint32_t i = 0; i < count; ++i) {
+			if (mask && !readU8(c, mask + i)) continue;
+			points.push_back(static_cast<GLfloat>(x + static_cast<int32_t>(i)) + 0.5f);
+			points.push_back(static_cast<GLfloat>(y) + 0.5f);
+			points.push_back(static_cast<GLfloat>((readDouble(c, address + 8 * i) + 1.0) / 2.0));
+		}
+		if (!points.empty()) QT_GL(DepthPoints)(static_cast<GLsizei>(points.size() / 3), &points[0]);
 		return true;
 	}
 	}

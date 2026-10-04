@@ -21,7 +21,11 @@ typedef void GLvoid;
 
 void glInit(void);
 void glExit(void);
-int createContext(int left, int top, int width, int height); /* 1 on success */
+/* 1 on success. flags: QT_CONTEXT_CORE for an OpenGL 3.3 core profile
+ * context (Warp3D, drawn by the host's emulation), 0 for a compatibility
+ * one (agl, which passes OpenGL 1.1 calls on). */
+int createContext(int left, int top, int width, int height, int flags);
+#define QT_CONTEXT_CORE 1
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);

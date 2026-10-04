@@ -75,4 +75,8 @@ void qt_report(const char* message);
 // Returns false for an unknown opcode or a wrong word count.
 bool qt_w3d_decode(const Command& c, int32_t& result);
 
+// Draws what the Warp3D commands have batched (ffp::flush), before an OpenGL
+// command runs.
+void qt_w3d_sync();
+
 #endif

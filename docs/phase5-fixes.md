@@ -1,9 +1,10 @@
 # Phase 5: bug fixes
 
-Status: in progress, started 2026-10-05.
+Status: done (2026-10-05). All ten known bugs are fixed.
 
 The known bugs of QuarkTex 0.53 are fixed one at a time on the fixed-function
-OpenGL renderer. Moving to OpenGL 3.3 comes after this phase.
+OpenGL renderer. Moving to OpenGL 3.3 followed in phase 6
+(`docs/phase6-core-renderer.md`).
 
 ## How each fix is checked
 

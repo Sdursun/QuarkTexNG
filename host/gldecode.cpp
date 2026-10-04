@@ -121,6 +121,7 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		c.words = header & 0xFFFF;
 		if (c.words == 0 || offset + 4 * c.words > bytes) return qt_bad_command(c);
 		result = 0;
+		if ((header >> 16) < QT_W3D_FIRST) qt_w3d_sync();
 		switch (header >> 16) {
 #include "gldecode.auto.inc"
 		default:

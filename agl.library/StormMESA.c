@@ -46,9 +46,9 @@ struct amigamesa_context *AmigaMesaCreateContext(struct TagItem *tagList __asm("
 	//window = IntuitionBase->ActiveWindow;
 	window = (struct Window*) GetTagData(AMA_Window, NULL, tagList);
 	fullscreen = GetTagData(AMA_Fullscreen, 0, tagList);
-	if (fullscreen) createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height);
+	if (fullscreen) createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height, 0);
 	else createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
-			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom));
+			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom), 0);
 	/* The host turns the bytes of pixel data around (see glPixelStorei). */
 	_glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_TRUE);
 	_glPixelStorei(GL_PACK_SWAP_BYTES, GL_TRUE);

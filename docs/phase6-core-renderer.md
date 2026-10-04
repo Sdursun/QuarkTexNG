@@ -1,0 +1,97 @@
+# Phase 6: Warp3D on OpenGL 3.3 core
+
+Status: first step done (2026-10-05): Warp3D draws on an OpenGL 3.3 core
+profile context, pixel for pixel as the fixed-function renderer of phase 5.
+
+## Contexts
+
+`createContext` (gl/gl.c) takes flags; the host gets them in d5
+(`qt_create_context`, protocol version 7).
+
+| Library | Context | Drawing |
+| --- | --- | --- |
+| Warp3D.library | OpenGL 3.3 core (`QT_CONTEXT_CORE`) | host/w3d.cpp through the emulation in host/ffp.cpp |
+| agl.library | compatibility, as before | OpenGL 1.1 calls passed on |
+
+agl.library is an OpenGL 1.1 implementation whose calls go to the host one
+for one, so it needs the fixed-function pipeline of the driver. Warp3D does
+not: the host decides how to draw it. A core context also checks that: any
+OpenGL 1.1 call left in the Warp3D path is an error the driver reports,
+and `qt_swap_buffers` logs errors.
+
+The OpenGL 3.3 functions are loaded by host/gl3.cpp (declared in gl3.h, as
+Visual Studio has no glext.h). The context is made with
+`wglCreateContextAttribsARB`.
+
+## The emulation (host/ffp.cpp)
+
+w3d.cpp is unchanged in what it does: it still makes the OpenGL 1.1 calls
+of phase 5, through `QT_GL(name)`, which now means `ffp::name`. The unit test
+still points `QT_GL` at recording stubs, so its expectations stay as they
+were. ffp implements those calls with their OpenGL 1.1 meaning:
+
+- Immediate mode (`Begin`, `Vertex*`, `Color*`, `TexCoord*`, `End`, `Recti`)
+  with the current colour and texture coordinate, into a stream vertex buffer.
+- One shader with the parts of the fixed-function pipeline Warp3D uses:
+  smooth or flat shading (`flat` with the last vertex as provoking vertex, as
+  in OpenGL 1.1), the texture environments for an RGBA texture (replace,
+  modulate, decal, blend), projective texture coordinates, fog (linear, exp,
+  exp2, with the absolute eye z as fog coordinate), the alpha test. The 0.53
+  model view matrix becomes a uniform, built the way `glScalef` and
+  `glTranslatef` built it.
+- Textures: the OpenGL 1.1 pixel formats without a core equivalent become red
+  or red/green textures with a swizzle that gives the RGBA values OpenGL 1.1
+  stored (`GL_ALPHA` 0, 0, 0, A; `GL_LUMINANCE` L, L, L, 1; ...). A texture
+  is used only if it is complete, as in OpenGL 1.1 (an image, no mipmap
+  filter).
+- `GL_CLAMP`: the shader clamps the coordinate to 0..1 and the texture wraps
+  `GL_CLAMP_TO_BORDER`, so linear filtering at the edge mixes in the border
+  colour as OpenGL 1.1 does. With `GL_NEAREST` the clamp stops at the centre
+  of the edge texel. (`GL_CLAMP_TO_EDGE` alone changed t11_texcolors.)
+- Separate triangles, lines and points are batched while the state stays the
+  same: one buffer upload and one draw call instead of one per Warp3D
+  primitive. Every state change, every OpenGL command from the command
+  buffer (`qt_w3d_sync`), the buffer swap and frame capture draw the batch
+  first.
+
+## The z-buffer commands
+
+ZBuffer.c used `glRasterPos`, `glDrawPixels` and `glPushAttrib`, which the
+core profile does not have. Two Warp3D commands replace them (gl/w3dcmd.h):
+
+- `QT_W3D_READ_Z`: the host reads the depth buffer and writes `2 * depth - 1`
+  into the application's `W3D_Double` array.
+- `QT_W3D_WRITE_Z`: the host writes `(z + 1) / 2` with one point per pixel
+  and `gl_FragDepth`, colour writes off, depth test `GL_ALWAYS`, and restores
+  that state; with a mask only the masked pixels.
+
+Both are synchronous. Warp3D.library no longer converts or allocates.
+
+## Results
+
+All reference tests against the phase 5 snapshot (`run.ps1 -Against fix8`,
+strict), on Intel Iris Xe Graphics, OpenGL 3.3.0 - Build 32.0.101.7088,
+winuae.exe and winuae64.exe: 19 of 20 identical. t03_textures differs on
+purpose: `W3D_I8` is drawn now. OpenGL 1.1 does not take `GL_INTENSITY` as a
+pixel format, so that texture stayed empty and the quad white.
+
+t09_throughput, time the host spends executing the command buffers
+(`QUARKTEX_PROFILE=1`, winuae.exe with JIT, 60000 triangles):
+
+| Renderer | Host time | Triangles/s (68k timer) |
+| --- | --- | --- |
+| phase 5, fixed function | 27-29 ms | 2.6-2.8 million |
+| phase 6, core, without batching | (not measured with JIT) | 146000 without JIT, against 218000 |
+| phase 6, core, batched | 10 ms | 5.9-6.3 million |
+
+Without JIT the 68k side dominates and both renderers give about 210000
+triangles/s.
+
+## Next
+
+- Roadmap item 4 also names texture format conversion in the shader
+  (CLUT, R5G6B5, ...). Today CHUNKY textures are converted to RGBA on the
+  CPU and the 16-bit formats are uploaded with packed types; both work, so
+  this is an optimisation, not a fix.
+- Roadmap item 5: stencil, chroma key, several contexts at once (the host has
+  one context and the emulation one state), leaks.

@@ -99,14 +99,14 @@ W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCT
 			while (bitmap != window->RPort->BitMap && window != NULL && window != firstWindow) window = window->NextWindow;
 		}*/
 		created = createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
-			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom));
+			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom), QT_CONTEXT_CORE);
 		left = window->LeftEdge + window->BorderLeft;
 		top = window->TopEdge + window->BorderTop;
 		width = window->Width - (window->BorderLeft + window->BorderRight);
 		height = window->Height - (window->BorderTop + window->BorderBottom);
 	}
 	else {
-		created = createContext(0, 0, 0, 0);
+		created = createContext(0, 0, 0, 0, QT_CONTEXT_CORE);
 		GetDisplayInfoData(NULL, (UBYTE*)&dinfo, sizeof(dinfo), DTAG_DIMS, modeid);
 		left = 0;
 		top = 0;

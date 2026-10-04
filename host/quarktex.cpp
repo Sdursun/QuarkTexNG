@@ -1,9 +1,7 @@
 // QuarkTex host library. The emulator loads it through uaenative.library
 // (native_code=true) as quarktex-windows-x86.dll or quarktex-windows-x86-64.dll
 // and the 68k side calls the qt_* functions below.
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <GL/gl.h>
+#include "gl3.h"
 #include <GL/glu.h>
 #include <cstdio>
 #include <cstdlib>
@@ -13,9 +11,10 @@
 #include <vector>
 #include "uni.h"
 #include "gldecode.h"
+#include "ffp.h"
 
 // Must match QT_PROTOCOL_VERSION in gl/gl.c.
-#define QT_PROTOCOL_VERSION 6
+#define QT_PROTOCOL_VERSION 7
 
 extern "C" {
 	__declspec(dllexport) uni_resolve_function uni_resolve = 0;
@@ -27,7 +26,11 @@ namespace {
 	HWND windowHandle = 0;
 	HDC deviceContext = 0;
 	HGLRC glContext = 0;
+	bool coreProfile = false; // Warp3D: OpenGL 3.3 core and the ffp.h emulation
 	bool registered = false;
+
+	// qt_create_context flags, as QT_CONTEXT_CORE in gl/gl.h.
+	const int32_t contextCore = 1;
 
 	LRESULT CALLBACK windowFunc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 		switch (message) {
@@ -120,19 +123,32 @@ namespace {
 		int rowSize = (width * 3 + 3) & ~3;
 		std::vector<unsigned char> pixels(rowSize * height);
 
-		// Leave the pixel state of the Amiga application untouched.
-		glPushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
-		glPushAttrib(GL_PIXEL_MODE_BIT);
-		glPixelStorei(GL_PACK_ALIGNMENT, 4);
-		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
-		glPixelStorei(GL_PACK_SKIP_ROWS, 0);
-		glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
-		glPixelStorei(GL_PACK_SWAP_BYTES, GL_FALSE);
+		// Leave the pixel state of the Amiga application untouched. The core
+		// profile has no attribute stacks; there only the pack parameters
+		// and the read buffer can have changed.
+		const GLenum packs[] = {GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_ROWS, GL_PACK_SKIP_PIXELS, GL_PACK_SWAP_BYTES};
+		const GLint packValues[] = {4, 0, 0, 0, GL_FALSE};
+		GLint saved[5], readBuffer = GL_BACK;
+		if (coreProfile) {
+			for (int i = 0; i < 5; ++i) glGetIntegerv(packs[i], &saved[i]);
+			glGetIntegerv(GL_READ_BUFFER, &readBuffer);
+		}
+		else {
+			glPushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
+			glPushAttrib(GL_PIXEL_MODE_BIT);
+		}
+		for (int i = 0; i < 5; ++i) glPixelStorei(packs[i], packValues[i]);
 		glReadBuffer(GL_BACK);
 		// Bottom-up BGR rows padded to 4 bytes are exactly what BMP stores.
 		glReadPixels(0, 0, width, height, GL_BGR_EXT, GL_UNSIGNED_BYTE, &pixels[0]);
-		glPopAttrib();
-		glPopClientAttrib();
+		if (coreProfile) {
+			for (int i = 0; i < 5; ++i) glPixelStorei(packs[i], saved[i]);
+			glReadBuffer(static_cast<GLenum>(readBuffer));
+		}
+		else {
+			glPopAttrib();
+			glPopClientAttrib();
+		}
 
 		BITMAPFILEHEADER file;
 		BITMAPINFOHEADER info;
@@ -223,6 +239,8 @@ QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
 QT_EXPORT int32_t __cdecl qt_free_context(struct uni*) {
 	logProfile();
 	if (glContext) {
+		if (coreProfile) ffp::shutdown();
+		coreProfile = false;
 		wglMakeCurrent(0, 0);
 		wglDeleteContext(glContext);
 		glContext = 0;
@@ -242,9 +260,11 @@ QT_EXPORT int32_t __cdecl qt_free_context(struct uni*) {
 }
 
 // d1 = left, d2 = top, d3 = width, d4 = height of the drawing area inside the
-// Amiga display; width 0 means the whole display. Returns 1 on success.
+// Amiga display; width 0 means the whole display. d5 = flags (contextCore).
+// Returns 1 on success.
 QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	int left = uni->d1, top = uni->d2, width = uni->d3, height = uni->d4;
+	bool core = (uni->d5 & contextCore) != 0;
 
 	if (!instance) instance = GetModuleHandleA(0);
 	if (registered) UnregisterClassA("QuarkTex", instance);
@@ -294,13 +314,29 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	if ((pixelformat = ChoosePixelFormat(deviceContext, &pfd)) == 0) { logString("Warning: Could not choose pixel format"); return 0; }
 	if (!SetPixelFormat(deviceContext, pixelformat, &pfd)) { logString("Warning: Could not set pixel format"); return 0; }
 
-	if (!(glContext = wglCreateContext(deviceContext))) { logString("Warning: Could not create rendering context"); return 0; }
+	if (!(glContext = core ? gl3::createCoreContext(deviceContext) : wglCreateContext(deviceContext))) {
+		logString(core ? "Warning: Could not create an OpenGL 3.3 core rendering context" : "Warning: Could not create rendering context");
+		return 0;
+	}
 	if (!(wglMakeCurrent(deviceContext, glContext))) { logString("Warning: Could not activate the rendering context"); return 0; }
 
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	glScalef(2.0f / static_cast<float>(width), -2.0f / static_cast<float>(height), 1.0f);
-	glTranslatef(-(static_cast<float>(width) / 2.0f), -(static_cast<float>(height) / 2.0f), 0.0f);
+	if (core) {
+		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); return 0; }
+		if (!ffp::init(width, height)) return 0;
+		coreProfile = true;
+		static bool logged = false;
+		if (!logged) {
+			logged = true;
+			logString((std::string("OpenGL ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)) + ", " +
+				reinterpret_cast<const char*>(glGetString(GL_RENDERER))).c_str());
+		}
+	}
+	else {
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		glScalef(2.0f / static_cast<float>(width), -2.0f / static_cast<float>(height), 1.0f);
+		glTranslatef(-(static_cast<float>(width) / 2.0f), -(static_cast<float>(height) / 2.0f), 0.0f);
+	}
 
 	startCapture();
 	startProfile();
@@ -314,6 +350,7 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
 }
 
 QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni*) {
+	if (coreProfile) ffp::flush();
 	if (!captureDir.empty()) captureFrame();
 	SwapBuffers(deviceContext);
 

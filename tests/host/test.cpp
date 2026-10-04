@@ -102,6 +102,14 @@ inline Record& operator<<(Record& r, GLfloat* pointer) {
 #define QT_GL(name) stub_gl##name
 #include "glstubs.auto.inc"
 
+// ffp::DepthPoints (host/ffp.h), which only the Warp3D commands call: the
+// count and the x, y, depth triples.
+GLvoid stub_glDepthPoints(GLsizei count, const GLfloat* xyz) {
+	Record r("DepthPoints");
+	r << count;
+	for (GLsizei i = 0; i < 3 * count; ++i) r << xyz[i];
+}
+
 // --- Host side ---------------------------------------------------------------
 
 static int reports;
@@ -416,6 +424,49 @@ int main() {
 		qt_flush();
 		check(joined() == "Begin(4) Color4f(0.25,0.5,0.75,1) Vertex3f(20,21,22) Color4f(0.25,0.5,0.75,1) Vertex3f(0,1,2) "
 			"Color4f(0.25,0.5,0.75,1) Vertex3f(10,11,12) End()", "QT_W3D_DRAW_ARRAY: " + joined());
+	}
+
+	// W3D_WriteZSpan at (10, 20): z = -1, 0, 1 as big-endian doubles, the
+	// middle one masked out. Depths (z + 1) / 2 at the pixel centres.
+	{
+		const double z[3] = {-1.0, 0.0, 1.0};
+		for (int i = 0; i < 3; ++i) {
+			uint64_t bits;
+			memcpy(&bits, &z[i], 8);
+			for (int k = 0; k < 8; ++k) arena[0x15300 + 8 * i + k] = static_cast<uint8_t>(bits >> (56 - 8 * k));
+		}
+		const uint8_t mask[3] = {1, 0, 1};
+		memcpy(arena + 0x15400, mask, sizeof(mask));
+		ULONG* w = qt_reserve(6);
+		w[0] = (static_cast<ULONG>(QT_W3D_WRITE_Z) << 16) | 6;
+		w[1] = 10;
+		w[2] = 20;
+		w[3] = 3;
+		w[4] = 0x15300;
+		w[5] = 0x15400;
+		records.clear();
+		qt_flush();
+		check(joined() == "DepthPoints(2,10.5,20.5,0,12.5,20.5,1)", "QT_W3D_WRITE_Z: " + joined());
+	}
+
+	// W3D_ReadZSpan: the stub leaves the depths 0, which come back as z = -1.
+	{
+		ULONG* w = qt_reserve(5);
+		w[0] = (static_cast<ULONG>(QT_W3D_READ_Z) << 16) | 5;
+		w[1] = 3;
+		w[2] = 4;
+		w[3] = 2;
+		w[4] = 0x15500;
+		records.clear();
+		qt_flush();
+		double z[2];
+		for (int i = 0; i < 2; ++i) {
+			uint64_t bits = 0;
+			for (int k = 0; k < 8; ++k) bits = (bits << 8) | arena[0x15500 + 8 * i + k];
+			memcpy(&z[i], &bits, 8);
+		}
+		check(joined() == "ReadPixels(3,4,2,1,6402,5126,@?)" && z[0] == -1.0 && z[1] == -1.0,
+			"QT_W3D_READ_Z: " + joined() + " " + std::to_string(z[0]) + " " + std::to_string(z[1]));
 	}
 
 	check(reports == 0, std::to_string(reports) + " bad commands reported");

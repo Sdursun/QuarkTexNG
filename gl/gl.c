@@ -18,7 +18,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 6
+#define QT_PROTOCOL_VERSION 7
 
 #define QT_BUFFER_BYTES (256 * 1024)
 
@@ -146,10 +146,11 @@ void glExit(void) {
 	qt_UniBase = NULL;
 }
 
-int createContext(int left, int top, int width, int height) {
+int createContext(int left, int top, int width, int height, int flags) {
+	ULONG regs[12] = {left, top, width, height, flags, 0, 0, 0};
 	qt_flush();
-	if (!qt_buffer) return 0;
-	return (int) hostCall(qt_create, left, top, width, height, 0);
+	if (!qt_buffer || !qt_create) return 0;
+	return (int) qt_uni_call(qt_UniBase, qt_create, regs);
 }
 
 void moveWindow(int left, int top, int width, int height) {

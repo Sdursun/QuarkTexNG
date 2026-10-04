@@ -96,4 +96,15 @@
 #define QT_W3D_POINT_SIZE 0x8017
 #define QT_W3D_LINE_WIDTH 0x8018
 
+/*
+ * The z-buffer, synchronous (the host reads or fills the application's
+ * array). Depth values are Warp3D z as W3D_Double.
+ * READ_Z: x, y (OpenGL, from the bottom), count, address of count doubles.
+ * WRITE_Z: x, y (Warp3D, from the top), count, address of count doubles,
+ *   mask (count bytes, nonzero = write; 0 = write all).
+ */
+#define QT_W3D_READ_Z 0x8019
+#define QT_W3D_WRITE_Z 0x801A
+#define QT_W3D_MAX_DEPTH_SPAN 65536
+
 #endif
