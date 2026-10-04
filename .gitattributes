@@ -1,0 +1,2 @@
+# AmigaDOS scripts must keep LF line endings.
+tests/amiga/** text eol=lf

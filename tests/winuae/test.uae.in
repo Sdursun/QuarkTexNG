@@ -1,0 +1,37 @@
+; WinUAE configuration for the QuarkTex reference tests.
+; tests/run.ps1 fills in the @...@ values.
+config_description=QuarkTex reference tests
+config_hardware=true
+config_host=true
+use_gui=no
+use_debugger=false
+; QuarkTex loads its host DLL through the native code interface.
+native_code=true
+kickstart_rom_file=@KICKSTART@
+chipset=aga
+chipmem_size=4
+fastmem_size_k=0
+z3mem_size=256
+cpu_type=68040
+cpu_model=68040
+fpu_model=68040
+cpu_compatible=false
+cpu_cycle_exact=false
+cpu_memory_cycle_exact=false
+cpu_24bit_addressing=false
+cpu_speed=max
+cachesize=0
+gfxcard_size=64
+gfxcard_type=ZorroIII
+sound_output=none
+gfx_api=direct3d11
+gfx_fullscreen_amiga=false
+gfx_fullscreen_picasso=false
+gfx_width_windowed=1024
+gfx_height_windowed=768
+gfx_x_windowed=40
+gfx_y_windowed=40
+win32.start_not_captured=true
+hardfile2=ro,DH0:@HARDFILE@,32,16,2,512,-5,,uae0
+filesystem2=ro,QTBOOT:QTBOOT:@BOOTDIR@,10
+filesystem2=rw,QTTEST:QTTEST:@TESTDIR@,-128

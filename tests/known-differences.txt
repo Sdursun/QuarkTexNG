@@ -1,0 +1,5 @@
+# Tests whose frames are known to differ from the QuarkTex 0.53 release.
+# compare.py reports them as KNOWN instead of FAIL. One test per line:
+# <test name> <reason>
+
+t06_fog The 0.53 release draws fogged geometry black; the current build applies the fog colour and density as specified.

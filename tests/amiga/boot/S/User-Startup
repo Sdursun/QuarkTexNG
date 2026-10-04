@@ -1,0 +1,4 @@
+; Replaces the system's User-Startup during the tests: it may refer to
+; volumes that are not mounted here. Runs the tests and quits WinUAE, so
+; Workbench is never loaded.
+Execute QTTEST:S/run-tests

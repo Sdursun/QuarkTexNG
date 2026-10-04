@@ -5,6 +5,7 @@
 #   ./build.sh            Amiga libraries + host DLL, collected in dist/
 #   ./build.sh amiga      Warp3D.library and agl.library only
 #   ./build.sh host       QuarkTex.alib only
+#   ./build.sh tests      Warp3D test programs (run them with tests/run.ps1)
 #   ./build.sh generate   regenerate gl/*.auto.* from gl/glFuncs.txt
 #   ./build.sh clean
 set -e
@@ -45,6 +46,10 @@ amiga() {
 	run "$AMIGA_IMAGE" "make -f amiga/Makefile"
 }
 
+tests() {
+	run "$AMIGA_IMAGE" "make -f tests/Makefile"
+}
+
 host() {
 	host_image
 	run "$HOST_IMAGE" "cmake -S . -B build/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake >/dev/null && cmake --build build/host"
@@ -64,7 +69,8 @@ case "${1:-all}" in
 	all) amiga; host; dist ;;
 	amiga) amiga ;;
 	host) host ;;
+	tests) tests ;;
 	generate) generate ;;
 	clean) rm -rf build dist ;;
-	*) echo "usage: $0 [all|amiga|host|generate|clean]" >&2; exit 1 ;;
+	*) echo "usage: $0 [all|amiga|host|tests|generate|clean]" >&2; exit 1 ;;
 esac

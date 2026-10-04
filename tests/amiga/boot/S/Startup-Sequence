@@ -1,0 +1,14 @@
+; QuarkTex test boot volume (QTBOOT:).
+; Boots the AmigaOS installation on DH0: (mounted read-only) with
+; QTTEST:Libs in front of LIBS: and our User-Startup in front of S:.
+DH0:C/Assign SYS: DH0:
+DH0:C/Assign C: DH0:C
+DH0:C/Assign L: DH0:L
+DH0:C/Assign DEVS: DH0:Devs
+DH0:C/Assign FONTS: DH0:Fonts
+DH0:C/Assign LOCALE: DH0:Locale
+DH0:C/Assign LIBS: QTTEST:Libs
+DH0:C/Assign LIBS: DH0:Libs ADD
+DH0:C/Assign S: QTBOOT:S
+DH0:C/Assign S: DH0:S ADD
+Execute DH0:S/Startup-Sequence

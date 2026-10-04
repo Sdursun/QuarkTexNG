@@ -2,8 +2,12 @@
 #include <windows.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <string>
+#include <vector>
 //#include <strstream>
 
 #define DLL extern "C" __declspec(dllexport)
@@ -61,6 +65,86 @@ DLL void logString(const char* c) {
 		logcreated = true;
 	}
 	*out << c << std::endl;
+}
+
+// Frame capture for the reference tests in tests/. Off unless the environment
+// variable QUARKTEX_CAPTURE_DIR names a directory: every swapBuffers then
+// writes <label>_<frame>.bmp there. The label is the first line of label.txt
+// in that directory when the context is created (the test programs write it).
+namespace {
+	std::string captureDir;
+	std::string captureLabel;
+	int captureContexts = 0;
+	int captureFrames = 0;
+
+	void startCapture() {
+		const char* dir = getenv("QUARKTEX_CAPTURE_DIR");
+		captureDir = dir ? dir : "";
+		if (captureDir.empty()) return;
+		++captureContexts;
+		captureFrames = 0;
+
+		std::string line;
+		std::ifstream labelFile((captureDir + "\\label.txt").c_str());
+		if (labelFile) std::getline(labelFile, line);
+		captureLabel.clear();
+		for (size_t i = 0; i < line.size(); ++i) {
+			char c = line[i];
+			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') captureLabel += c;
+		}
+		if (captureLabel.empty()) {
+			char name[32];
+			sprintf(name, "context%02d", captureContexts);
+			captureLabel = name;
+		}
+	}
+
+	void captureFrame() {
+		RECT rect;
+		if (!GetClientRect(windowHandle, &rect)) return;
+		int width = rect.right - rect.left;
+		int height = rect.bottom - rect.top;
+		if (width <= 0 || height <= 0) return;
+
+		int rowSize = (width * 3 + 3) & ~3;
+		std::vector<unsigned char> pixels(rowSize * height);
+
+		// Leave the pixel state of the Amiga application untouched.
+		glPushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
+		glPushAttrib(GL_PIXEL_MODE_BIT);
+		glPixelStorei(GL_PACK_ALIGNMENT, 4);
+		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+		glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+		glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+		glPixelStorei(GL_PACK_SWAP_BYTES, GL_FALSE);
+		glReadBuffer(GL_BACK);
+		// Bottom-up BGR rows padded to 4 bytes are exactly what BMP stores.
+		glReadPixels(0, 0, width, height, GL_BGR_EXT, GL_UNSIGNED_BYTE, &pixels[0]);
+		glPopAttrib();
+		glPopClientAttrib();
+
+		BITMAPFILEHEADER file;
+		BITMAPINFOHEADER info;
+		memset(&file, 0, sizeof(file));
+		memset(&info, 0, sizeof(info));
+		file.bfType = 0x4D42;
+		file.bfOffBits = sizeof(file) + sizeof(info);
+		file.bfSize = file.bfOffBits + static_cast<DWORD>(pixels.size());
+		info.biSize = sizeof(info);
+		info.biWidth = width;
+		info.biHeight = height;
+		info.biPlanes = 1;
+		info.biBitCount = 24;
+		info.biCompression = BI_RGB;
+		info.biSizeImage = static_cast<DWORD>(pixels.size());
+
+		char name[32];
+		sprintf(name, "_%03d.bmp", captureFrames++);
+		std::ofstream bmp((captureDir + "\\" + captureLabel + name).c_str(), std::ios::binary);
+		bmp.write(reinterpret_cast<const char*>(&file), sizeof(file));
+		bmp.write(reinterpret_cast<const char*>(&info), sizeof(info));
+		bmp.write(reinterpret_cast<const char*>(&pixels[0]), pixels.size());
+	}
 }
 
 //                    d1   d2   d3   d4   d5   d6   d7   a1   a2   a3   a4   a5          a6
@@ -144,6 +228,7 @@ DLL int createContext(int left, int top, int width, int height, int, int, int, i
 	glTranslatef(-(static_cast<float>(width) / 2.0f), -(static_cast<float>(height) / 2.0f), 0.0f);
 
 	//logString("Rendering context successfully created and activated");
+	startCapture();
 	return 1;
 }
 
@@ -154,6 +239,7 @@ DLL void moveWindow(int left, int top, int width, int height) {
 DLL void swapBuffers(int, int, int, int, int, int, int, int, int, int, int, int, winuae* a6) {
 	//static unsigned oldnum;
 	//if (screenlost(a6, oldnum)) logString("Warning: Screen Lost");
+	if (!captureDir.empty()) captureFrame();
 	SwapBuffers(deviceContext);
 	//glClear(GL_COLOR_BUFFER_BIT);
 	
