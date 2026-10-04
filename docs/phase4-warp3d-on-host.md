@@ -1,97 +1,117 @@
 # Phase 4: Warp3D on the host
 
-Status: proposal, 2026-10-04
+Status: implemented, 2026-10-05. Warp3D drawing, state, textures and vertex
+arrays run on the host, and the reference tests still match 0.53 in 32-bit and
+64-bit WinUAE. With the JIT compiler on, Warp3D takes about a third of the time
+it took in 0.53 (see [Results](#results)).
 
 ## Decision
 
-Phase 3 showed that the traps were not the cost. The cost is the emulated 68k
-code that turns every Warp3D call into OpenGL calls: `drawVertex` and up to
+Phase 3 showed that the traps were not the cost. The cost was the emulated 68k
+code that turned every Warp3D call into OpenGL calls: `drawVertex` and up to
 eleven `_gl*` encoders per textured, shaded triangle. Phase 4 moves that
 translation to the host, so that a Warp3D call becomes one command:
 
 - Warp3D.library keeps the API, the `W3D_Context` and `W3D_Texture` structures
   that applications read, the window and screen handling (`SetFunction`
   patches, Picasso96 mode requests) and `W3D_GetState`.
-- Everything that calls OpenGL today becomes one Warp3D command in the phase 3
-  buffer. The host executes it with the same OpenGL calls the 68k code makes
-  now.
+- Drawing, state, textures and vertex arrays are Warp3D commands in the phase 3
+  buffer. `host/w3d.cpp` executes them with the OpenGL calls the 68k code made.
 - The OpenGL output stays the same, including the known bugs, so the reference
-  tests must keep matching 0.53. Fixing the bugs and a modern renderer
-  (OpenGL 3.3, shaders) are the next phase, where frames are allowed to change.
-- agl.library stays as it is. It implements the OpenGL API, so the phase 3
+  tests still match 0.53. Fixing the bugs and a modern renderer are later
+  phases.
+- agl.library is unchanged. It implements the OpenGL API, so the phase 3
   command buffer is already the right level for it.
 
 ## Commands
 
-Warp3D commands use the phase 3 buffer and header format with opcodes from
-0x8000 up; the host's `qt_decode` hands them to a Warp3D dispatcher
-(`host/w3d.cpp`). The rules are the same as in phase 3: commands that only
-pass values are queued, and commands that read or write application memory
-later, or return a value, flush the buffer and run at once.
+Warp3D commands (`gl/w3dcmd.h`) use the phase 3 buffer and header format with
+opcodes from 0x8000. `qt_decode` hands them to `qt_w3d_decode` in
+`host/w3d.cpp`. As in phase 3, commands that only pass values are queued.
+Commands that read or write application memory, or return a value, flush the
+buffer and run at once.
 
-| Group | Warp3D functions | Command contents | Kind |
+| Group | Warp3D functions | Command | Kind |
 | --- | --- | --- | --- |
-| Drawing | DrawTriangle, DrawTriFan, DrawTriStrip, DrawLine, DrawPoint, DrawLineStrip, DrawLineLoop, the `V` variants | `context->state`, texture handle, the vertices as raw 64-byte `W3D_Vertex` copies | queued |
-| Vertex arrays | DrawArray, DrawElements | state, texture handle, array addresses, strides and modes from the context, index address | synchronous (reads application arrays) |
-| State | SetState, SetBlendMode, SetAlphaMode, SetFogParams, SetZCompareMode, SetLogicOp, SetColorMask, SetScissor, SetCurrentColor, SetFilter, SetWrapMode, SetTexEnv | the values (the alpha reference and fog structure are copied) | queued |
-| Clearing | ClearDrawRegion, ClearZBuffer | colour, window size, fullscreen flag | queued |
-| Textures | AllocTexObj, UpdateTexImage, UpdateTexSubImage | handle, format, size, image and palette addresses | synchronous (the host reads the image) |
-| | FreeTexObj | handle | queued |
-| Depth buffer | ReadZPixel, ReadZSpan, WriteZPixel, WriteZSpan | coordinates, buffer address | synchronous |
-| Sync | Flush, WaitIdle, CheckIdle | none | synchronous |
+| Drawing | DrawTriangle, DrawTriFan, DrawTriStrip, DrawLine, DrawPoint, DrawLineStrip, DrawLineLoop, the `V` variants | `DRAW`: primitive, `context->state`, texture, then the vertices as raw 64-byte `W3D_Vertex` copies. More than 256 vertices: `DRAW_BEGIN`, `VERTICES`…, `DRAW_END` | queued |
+| Vertex arrays | DrawArray, DrawElements | `DRAW_ARRAY`: the context's array pointers, strides and modes, index type and pointer | synchronous |
+| State | SetState, SetBlendMode, SetAlphaMode, SetFogParams, SetZCompareMode, SetLogicOp, SetColorMask, SetCurrentColor, SetScissor | the values; the alpha reference and fog structure are copied | queued |
+| Clearing | ClearDrawRegion, ClearZBuffer | colour, fullscreen flag, window size | queued |
+| Textures | AllocTexObj | `TEX_ALLOC`: format, size, image; returns the OpenGL name | synchronous |
+| | UpdateTexImage, UpdateTexSubImage | `TEX_UPDATE`: name, format, rectangle, image | synchronous |
+| | FreeTexObj, FreeAllTexObj, SetFilter, SetTexEnv, SetWrapMode | name and values | queued |
+| Context | CreateContext | `INIT_CONTEXT`: texturing on, smooth shading | queued |
 
 Notes on the table:
-- **Texture handles** are the Amiga addresses of the `W3D_Texture` structures;
-  the host maps them to OpenGL texture names. It also keeps the texture width
-  and height, which `drawVertex` divides by.
-- **Vertices** are copied whole with `CopyMem`, big-endian, and the host picks
-  the fields it needs. This is the cheapest thing the 68k can do. A triangle
-  takes 204 bytes (header, state, texture handle and 3 × 64), so the 256 KB
-  buffer holds about 1280 of them.
-- **`context->state`** travels with every draw command, as the 68k code reads it
-  on every vertex today. Applications that change the field directly keep
+- **Textures:** the host returns the OpenGL name from `TEX_ALLOC`, and
+  Warp3D.library keeps it in its `Texture` structure as before. The design had
+  planned a map on the host instead; the name avoids it. `DRAW` carries the name
+  and the texture size, which `drawVertex` divides by.
+- **Vertices:** they are copied whole and big-endian, with `movem.l`
+  (`qt_copy_vertices`, 6 instructions per vertex). The host picks the fields it
+  needs. A triangle is one `DRAW` command of 224 bytes.
+- **`context->state`:** it travels with every draw command, because the 68k code
+  read it on every vertex. Applications that change the field directly keep
   working.
 
-## What the 68k side keeps
+### Kept on the OpenGL command path
 
-- `W3D_CreateContext`/`W3D_DestroyContext`: the structure, the window and
-  screen patches, `createContext` on the host, and one command that sets the
-  initial OpenGL state (texturing on, smooth shading).
-- Texture objects: the `W3D_Texture` structure and its fields stay filled in as
-  now. Only the OpenGL part moves.
-- Everything without OpenGL: driver queries, `W3D_GetState`, screen mode
-  requests, stencil stubs.
-- The library ABI: the same entry points, registers and structure layouts.
+These functions still call OpenGL from the 68k side through the phase 3 buffer:
+- `W3D_ReadZPixel`/`ReadZSpan` and `W3D_WriteZPixel`/`WriteZSpan`;
+- `glFinish` from `W3D_Flush`, `W3D_FlushFrame`, `W3D_WaitIdle` and
+  `W3D_CheckIdle`;
+- `glFrontFace`.
+
+They are rare and synchronous, and they already work in 64-bit WinUAE. The depth
+buffer functions are broken in 0.53: they read 4-byte floats into 8-byte
+`W3D_Double`s, and `WriteZPixel` passes the address of its pointer. Moving them
+would only rewrite those bugs; phase 5 fixes them where they are.
+
+## 0.53 behaviour kept on the host
+
+- `W3D_SetState(W3D_ZBUFFERUPDATE)` also switches blending: Context.c has no
+  `break` after that case.
+- The fog colour's alpha is 0.
+- `SetTexEnv` and `SetWrapMode` pass their colours as r, b, g, a.
+- `UpdateTexSubImage` uploads `texsource`, not its image argument.
+- `UNPACK_SWAP_BYTES` stays as the last texture allocation left it.
+- Without the z-buffer no depth reaches OpenGL (`glVertex2f`), so fog does
+  nothing.
+
+Removed: the `malloc` that `SetTexEnv` leaked on every call.
+
+## Results
+
+The test machine was WinUAE 6.0.3, AmigaOS 3.2 and a 68040 at `cpu_speed=max`.
+`t09_throughput` was built with 400000 triangles per frame, 1.2 million in all.
+Warp3D's share is the run time of t09 minus the run time of the same loop
+without `W3D_DrawTriangle` (`-DNO_DRAW`). The host time comes from
+`QUARKTEX_PROFILE=1`.
+
+| Build | Emulator | JIT off | JIT on | Host time, JIT on |
+| --- | --- | --- | --- | --- |
+| 0.53 | winuae.exe | 3.23 s | 1.34 s | – |
+| Phase 3 (OpenGL command buffer) | winuae.exe | about 2.8 s | – | – |
+| Phase 4 | winuae.exe | 1.92 s (−40 %) | 0.39 s (3.4× faster) | 0.31 s |
+| Phase 4 | winuae64.exe | 1.83 s (−44 %) | 0.44 s (3.1× faster) | 0.34 s |
+
+- **Without the JIT,** emulating the 68k code still dominates: the library
+  call, reserving the buffer and copying the vertices.
+- **With the JIT,** 80 % of what is left is on the host. Every triangle is drawn
+  with `glBegin`/`glEnd` and one OpenGL call per vertex attribute.
+  Batching the vertices into arrays, or the OpenGL 3.3 renderer, is the next
+  speed-up.
+
+Warp3D.library shrank from 87 KB (phase 3) to 35 KB.
 
 ## Tests
 
-- The reference tests (Warp3D and agl) must match 0.53 as now, in 32-bit and
-  64-bit WinUAE.
-- `t09_throughput` measures the gain. Expected: several times the phase 3 rate,
-  because the 68k work per triangle drops from about eleven encoder calls with
-  float conversions to one `CopyMem` of 192 bytes.
-- The unit test gets Warp3D cases: each command is encoded on the host with
-  known values, decoded against recording OpenGL stubs, and checked against the
-  calls the old 68k code would make.
-
-## Steps
-
-1. Protocol and host skeleton: opcode range, the Warp3D dispatcher, texture
-   handle map, and the context's initial state command.
-2. Drawing and state commands: DrawTriangle, DrawTriFan, DrawTriStrip, lines,
-   points and the `V` variants, SetState and the other state setters, and
-   ClearDrawRegion. After this step t01, t02, t04, t05, t06, t07 and t09 run on
-   the new path.
-3. Textures: AllocTexObj, Update(Sub)TexImage, FreeTexObj, SetFilter,
-   SetWrapMode, SetTexEnv (t03).
-4. Vertex arrays and the depth buffer reads/writes (t08).
-5. Measurements, unit tests, documentation; remove the `_gl*` calls from
-   Warp3D.library.
-
-## Open questions
-
-- Which applications read or write `W3D_Context` fields directly? The design
-  keeps every field filled in as now, so nothing should change for them.
+- The reference tests match 0.53 in both emulators. The only differences are
+  the known ones: t06_fog and a05_agl_queries.
+- `./build.sh unittest` covers the Warp3D commands: context setup, `DRAW`, the
+  `ZBUFFERUPDATE` fall-through, window clearing, texture allocation, the r, b, g,
+  a colour order, and `DRAW_ARRAY` with indices.
+- `tests/run.ps1 -Jit` runs the tests with the JIT compiler.
 
 ## Next
 

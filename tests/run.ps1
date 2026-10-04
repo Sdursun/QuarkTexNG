@@ -104,6 +104,14 @@ foreach ($variant in $Variants) {
 		Set-Content -Path $config -Encoding ASCII
 
 	$exe = if ($variant -eq 'orig') { 'winuae.exe' } else { $Emulator }
+	# A WinUAE from the previous run may still be shutting down; runs started
+	# right after one another sometimes produced no output at all.
+	for ($wait = 0; $wait -lt 20; ++$wait) {
+		$running = Get-Process winuae, winuae64 -ErrorAction SilentlyContinue |
+			Where-Object { $_.Path -and $_.Path.StartsWith($uae, [StringComparison]::OrdinalIgnoreCase) }
+		if (-not $running) { break }
+		Start-Sleep -Milliseconds 500
+	}
 	Write-Host "== ${variant}: running $($tests.Count) tests in $exe (timeout $TimeoutSec s)"
 	$env:QUARKTEX_CAPTURE_DIR = Join-Path $qttest 'capture'
 	$watch = [Diagnostics.Stopwatch]::StartNew()
