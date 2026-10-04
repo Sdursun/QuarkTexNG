@@ -2,11 +2,13 @@
 # Builds QuarkTex in Docker; only Docker and a POSIX shell (Git Bash on
 # Windows) are needed.
 #
-#   ./build.sh            Amiga libraries + host DLL, collected in dist/
+#   ./build.sh            Amiga libraries + host DLLs, collected in dist/
 #   ./build.sh amiga      Warp3D.library and agl.library only
-#   ./build.sh host       QuarkTex.alib only
-#   ./build.sh tests      Warp3D test programs (run them with tests/run.ps1)
-#   ./build.sh generate   regenerate gl/*.auto.* from gl/glFuncs.txt
+#   ./build.sh host       quarktex-windows-x86.dll and -x86-64.dll only
+#   ./build.sh tests      Warp3D test programs and the legacy QuarkTex.alib
+#                         the 0.53 reference libraries need (see tests/run.ps1)
+#   ./build.sh generate   regenerate the *.auto.* files from gl/glFuncs.txt
+#   ./build.sh unittest   check the generated encoder/decoder pair
 #   ./build.sh clean
 set -e
 
@@ -35,31 +37,47 @@ host_image() {
 
 generate() {
 	host_image
-	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++98 -Wall -O2 -o build/glgen gl/main.cpp && build/glgen gl"
-	# The generated files are stored with CRLF line endings.
-	for f in gl/glstatichandles.auto.c gl/glDLLfunc.auto.c gl/gldefinitions.auto.c gl/gldeclarations.auto.h; do
-		sed -i 's/\r*$/\r/' "$f"
-	done
+	run "$HOST_IMAGE" "mkdir -p build tests/host && g++ -std=c++11 -Wall -O2 -o build/glgen gl/glgen.cpp && build/glgen gl/glFuncs.txt ."
+}
+
+# Encoder/decoder round trip for every OpenGL function, on the build host.
+unittest() {
+	host_image
+	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++11 -Wall -Wno-int-to-pointer-cast -O1 -o build/unittest tests/host/test.cpp && build/unittest"
 }
 
 amiga() {
 	run "$AMIGA_IMAGE" "make -f amiga/Makefile"
 }
 
+# The QuarkTex 0.53 libraries from Aminet talk to QuarkTex.alib through the
+# uaelib traps. For the reference runs, build that host DLL as it was at the
+# end of phase 2: the 0.53 code plus frame capture.
+LEGACY_HOST_COMMIT=2a6a686
+
+legacy_host() {
+	host_image
+	mkdir -p build/legacy
+	git show "$LEGACY_HOST_COMMIT:QuarkTex.cpp" > build/legacy/QuarkTex.cpp
+	run "$HOST_IMAGE" "i686-w64-mingw32-g++ -std=c++11 -O2 -shared -static -s -o build/legacy/QuarkTex.alib build/legacy/QuarkTex.cpp -lopengl32 -lglu32 -lgdi32"
+}
+
 tests() {
 	run "$AMIGA_IMAGE" "make -f tests/Makefile"
+	legacy_host
 }
 
 host() {
 	host_image
-	run "$HOST_IMAGE" "cmake -S . -B build/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake >/dev/null && cmake --build build/host"
+	run "$HOST_IMAGE" "cmake -S . -B build/host-x86 -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-i686.cmake >/dev/null && cmake --build build/host-x86"
+	run "$HOST_IMAGE" "cmake -S . -B build/host-x64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake >/dev/null && cmake --build build/host-x64"
 }
 
 dist() {
 	rm -rf dist
-	mkdir -p dist/alib
+	mkdir -p dist
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
-	cp build/host/QuarkTex.alib dist/alib/
+	cp build/host-x86/quarktex-windows-x86.dll build/host-x64/quarktex-windows-x86-64.dll dist/
 	cp License.txt ReadMe.txt dist/
 	echo "dist/:"
 	ls -lR dist
@@ -71,6 +89,7 @@ case "${1:-all}" in
 	host) host ;;
 	tests) tests ;;
 	generate) generate ;;
+	unittest) unittest ;;
 	clean) rm -rf build dist ;;
-	*) echo "usage: $0 [all|amiga|host|tests|generate|clean]" >&2; exit 1 ;;
+	*) echo "usage: $0 [all|amiga|host|tests|generate|unittest|clean]" >&2; exit 1 ;;
 esac

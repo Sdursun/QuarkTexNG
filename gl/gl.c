@@ -1,53 +1,117 @@
 #include "gl.h"
+#include <exec/memory.h>
+#include <proto/exec.h>
+#include <inline/macros.h>
 
 /*
- * Bridge to the host side (QuarkTex.alib and opengl32.dll) through the
- * WinUAE native call trap at 0xF0FFC0:
- *   d0 = 100  open DLL        (a0 = name)                    -> d0 handle
- *   d0 = 101  find function   (d1 = handle, a0 = name)       -> d0 function
- *   d0 = 102  call function   (a0 = function, d1-d7/a1-a5 = arguments) -> d0
- *   d0 = 103  close DLL       (d1 = handle)
- *   d0 = 105  memory offset of the Amiga address space on the host
+ * Bridge to the host library (quarktex-windows-x86[-64].dll), reached through
+ * uaenative.library, which the emulator provides when native_code=true:
+ *   -30 open_library  (a1 = name, d0 = minimum version) -> handle
+ *   -36 close_library (a1 = handle)
+ *   -42 get_function  (a0 = library, a1 = name)         -> handle
+ *   -48 call_function (a0 = function, d1-d7/a1-a5 = arguments) -> d0
+ * Valid handles have bit 31 set.
+ *
+ * OpenGL calls are written to a command buffer (gl/glencode.auto.c, format in
+ * gl/glgen.cpp) and executed by qt_execute on the host when the buffer is
+ * flushed. Pointers are passed as Amiga addresses, so memoffset stays 0.
  */
 
-ULONG qt_trap(ULONG d0, ULONG d1, ULONG a0);
-ULONG qt_call(ULONG func, const ULONG regs[12]);
+/* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
+#define QT_PROTOCOL_VERSION 2
+
+#define QT_BUFFER_BYTES (256 * 1024)
+
+ULONG qt_uni_call(struct Library *base, ULONG func, const ULONG regs[12]);
 
 __asm__(
 	"	.text\n"
 	"	.even\n"
-	"	.globl	_qt_trap\n"
-	"_qt_trap:\n"
+	"	.globl	_qt_uni_call\n"
+	"_qt_uni_call:\n"
 	"	movem.l	d2-d7/a2-a6,-(sp)\n"
-	"	move.l	48(sp),d0\n"
-	"	move.l	52(sp),d1\n"
 	"	move.l	56(sp),a0\n"
-	"	jsr	0xf0ffc0\n"
-	"	movem.l	(sp)+,d2-d7/a2-a6\n"
-	"	rts\n"
-	"	.globl	_qt_call\n"
-	"_qt_call:\n"
-	"	movem.l	d2-d7/a2-a6,-(sp)\n"
-	"	move.l	52(sp),a0\n"
 	"	movem.l	(a0),d1-d7/a1-a5\n"
-	"	move.l	48(sp),a0\n"
-	"	moveq	#102,d0\n"
-	"	jsr	0xf0ffc0\n"
+	"	move.l	48(sp),a6\n"
+	"	move.l	52(sp),a0\n"
+	"	jsr	-48(a6)\n"
 	"	movem.l	(sp)+,d2-d7/a2-a6\n"
 	"	rts\n"
 );
+
+static struct Library *qt_UniBase;
+
+#define uni_open_library(name, min_version) \
+	LP2(30, ULONG, uni_open_library, const char *, name, a1, ULONG, min_version, d0, , qt_UniBase)
+#define uni_close_library(library) \
+	LP1NR(36, uni_close_library, ULONG, library, a1, , qt_UniBase)
+#define uni_get_function(library, name) \
+	LP2(42, ULONG, uni_get_function, ULONG, library, a0, const char *, name, a1, , qt_UniBase)
+
+#define UNI_VALID(handle) (((handle) & 0x80000000) != 0)
+
+static ULONG qt_host, qt_execute, qt_create, qt_move, qt_free, qt_swap, qt_log;
+long memoffset;
+char *bp, b;
+int i;
+
+static ULONG hostFunction(const char *name) {
+	ULONG handle = uni_get_function(qt_host, name);
+	return UNI_VALID(handle) ? handle : 0;
+}
+
+static ULONG hostCall(ULONG func, ULONG d1, ULONG d2, ULONG d3, ULONG d4, ULONG a1) {
+	ULONG regs[12] = {d1, d2, d3, d4, 0, 0, 0, a1};
+	return func ? qt_uni_call(qt_UniBase, func, regs) : 0;
+}
+
+/* Opens the host library; leaves the qt_* handles at 0 if that fails. */
+static void openHost(void) {
+	ULONG version;
+	qt_UniBase = OpenLibrary("uaenative.library", 1);
+	if (!qt_UniBase) return;
+	qt_host = uni_open_library("quarktex", 0);
+	if (!UNI_VALID(qt_host)) {
+		qt_host = 0;
+		return;
+	}
+	version = hostFunction("qt_protocol_version");
+	if (!version || hostCall(version, 0, 0, 0, 0, 0) != QT_PROTOCOL_VERSION) return;
+	qt_execute = hostFunction("qt_execute");
+	qt_create = hostFunction("qt_create_context");
+	qt_move = hostFunction("qt_move_window");
+	qt_free = hostFunction("qt_free_context");
+	qt_swap = hostFunction("qt_swap_buffers");
+	qt_log = hostFunction("qt_log");
+}
+
+/* --- Command buffer ------------------------------------------------------ */
+
+static ULONG *qt_buffer;
+static ULONG qt_used;
+static ULONG qt_scratch[32]; /* takes the commands while there is no buffer */
+
+/* Executes the buffered commands; returns the result of the last one. */
+static ULONG qt_flush(void) {
+	ULONG bytes = qt_used * 4;
+	qt_used = 0;
+	if (!bytes || !qt_buffer) return 0;
+	return hostCall(qt_execute, bytes, 0, 0, 0, (ULONG) qt_buffer);
+}
+
+static inline ULONG *qt_reserve(ULONG words) {
+	ULONG *w;
+	if (!qt_buffer) return qt_scratch;
+	if (qt_used + words > QT_BUFFER_BYTES / 4) qt_flush();
+	w = qt_buffer + qt_used;
+	qt_used += words;
+	return w;
+}
 
 static inline ULONG qt_f2l(float f) {
 	union { float f; ULONG l; } u;
 	u.f = f;
 	return u.l;
-}
-
-/* The host is little endian: the low word of a double comes first. */
-static inline ULONG qt_dlo(double d) {
-	union { double d; ULONG l[2]; } u;
-	u.d = d;
-	return u.l[1];
 }
 
 static inline ULONG qt_dhi(double d) {
@@ -56,74 +120,56 @@ static inline ULONG qt_dhi(double d) {
 	return u.l[0];
 }
 
-static ULONG
-#include "glstatichandles.auto.c"
-qt_create, qt_move, qt_free, qt_swap, qt_log;
-static ULONG w3d, gl;
-long memoffset;
-char *bp, b;
-int i;
-
-static long memOffset(void) {
-	return (long) qt_trap(105, 0, 0);
+static inline ULONG qt_dlo(double d) {
+	union { double d; ULONG l[2]; } u;
+	u.d = d;
+	return u.l[1];
 }
 
-static ULONG DLLopen(char* dll) {
-	return qt_trap(100, 0, (ULONG) dll);
-}
+#define QT_ADDRESS(p) ((ULONG) (p))
 
-static ULONG DLLfunc(ULONG dll, char* func) {
-	return qt_trap(101, dll, (ULONG) func);
-}
-
-static ULONG DLLclose(ULONG dll) {
-	return qt_trap(103, dll, 0);
-}
+/* --- Library life cycle and context ------------------------------------- */
 
 void glInit(void) {
-	memoffset = memOffset();
-	w3d = DLLopen("alib\\QuarkTex.alib");
-	if (!w3d) w3d = DLLopen("winuae_dll\\QuarkTex.alib");
-	if (!w3d) w3d = DLLopen("QuarkTex.alib");
-
-	qt_create = DLLfunc(w3d, "createContext");
-	qt_move = DLLfunc(w3d, "moveWindow");
-	qt_free = DLLfunc(w3d, "freeContext");
-	qt_swap = DLLfunc(w3d, "swapBuffers");
-	qt_log = DLLfunc(w3d, "logString");
-	gl = DLLopen("opengl32.dll");
-
-	#include "glDLLfunc.auto.c"
+	openHost();
+	if (qt_execute) qt_buffer = AllocVec(QT_BUFFER_BYTES, MEMF_ANY);
+	qt_used = 0;
 }
 
 void glExit(void) {
-	DLLclose(gl);
-	DLLclose(w3d);
+	qt_flush();
+	if (qt_buffer) FreeVec(qt_buffer);
+	if (qt_host) uni_close_library(qt_host);
+	if (qt_UniBase) CloseLibrary(qt_UniBase);
+	qt_buffer = NULL;
+	qt_host = qt_execute = qt_create = qt_move = qt_free = qt_swap = qt_log = 0;
+	qt_UniBase = NULL;
 }
 
-void createContext(int left, int top, int width, int height) {
-	ULONG r[12] = {(ULONG) left, (ULONG) top, (ULONG) width, (ULONG) height};
-	qt_call(qt_create, r);
+int createContext(int left, int top, int width, int height) {
+	qt_flush();
+	if (!qt_buffer) return 0;
+	return (int) hostCall(qt_create, left, top, width, height, 0);
 }
 
 void moveWindow(int left, int top, int width, int height) {
-	ULONG r[12] = {(ULONG) left, (ULONG) top, (ULONG) width, (ULONG) height};
-	qt_call(qt_move, r);
+	qt_flush();
+	hostCall(qt_move, left, top, width, height, 0);
 }
 
 void freeContext(void) {
-	ULONG r[12] = {0};
-	qt_call(qt_free, r);
+	qt_flush();
+	hostCall(qt_free, 0, 0, 0, 0, 0);
 }
 
 void swapBuffers(void) {
-	ULONG r[12] = {0};
-	qt_call(qt_swap, r);
+	qt_flush();
+	hostCall(qt_swap, 0, 0, 0, 0, 0);
 }
 
+/* c is an Amiga address. */
 void logString(char* c) {
-	ULONG r[12] = {(ULONG) c};
-	qt_call(qt_log, r);
+	hostCall(qt_log, 0, 0, 0, 0, (ULONG) c);
 }
 
-#include "gldefinitions.auto.c"
+#include "glencode.auto.c"

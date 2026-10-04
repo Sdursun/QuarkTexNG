@@ -35,12 +35,15 @@ VOID W3D_RectFill(__REGA1(struct RastPort *rp), __REGD0(LONG xMin), __REGD1(LONG
 }
 
 /************************** Context functions ***********************************/
+void W3D_DestroyContext(__REGA0(W3D_Context *context));
+
 W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCTags)) {
 	struct Window* firstWindow;
 	struct BitMap* bitmap;
 	unsigned int bla;
 	void *fake;
 	int modeid;
+	int created;
 	struct DimensionInfo dinfo;
 	W3D_Context *context;
 	LOG;
@@ -95,7 +98,7 @@ W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCT
 			window = window->NextWindow;
 			while (bitmap != window->RPort->BitMap && window != NULL && window != firstWindow) window = window->NextWindow;
 		}*/
-		createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
+		created = createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
 			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom));
 		left = window->LeftEdge + window->BorderLeft;
 		top = window->TopEdge + window->BorderTop;
@@ -103,12 +106,19 @@ W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCT
 		height = window->Height - (window->BorderTop + window->BorderBottom);
 	}
 	else {
-		createContext(0, 0, 0, 0);
+		created = createContext(0, 0, 0, 0);
 		GetDisplayInfoData(NULL, (UBYTE*)&dinfo, sizeof(dinfo), DTAG_DIMS, modeid);
 		left = 0;
 		top = 0;
 		width = dinfo.Nominal.MaxX-dinfo.Nominal.MinX+1;
 		height = dinfo.Nominal.MaxY-dinfo.Nominal.MinY+1;
+	}
+
+	/* No host library (native_code off, DLL missing or wrong version). */
+	if (!created) {
+		W3D_DestroyContext(context);
+		if (error) *error = W3D_NODRIVER;
+		return NULL;
 	}
 
 	//task = FindTask(NULL);

@@ -7,7 +7,7 @@ current build (`new`). The rendered frames are then compared pixel by pixel.
 ## Running
 
 ```sh
-./build.sh            # libraries and QuarkTex.alib
+./build.sh            # libraries and host DLLs
 ./build.sh tests      # test programs
 ```
 
@@ -19,6 +19,15 @@ pwsh tests/run.ps1
 The report is written to `build/tests/report/index.html`. Close WinUAE first.
 Each run boots WinUAE twice, which takes about a minute.
 
+`pwsh tests/run.ps1 -Variants new -Emulator winuae64.exe` runs only the current
+build, in 64-bit WinUAE, and compares it with the frames of the last 0.53 run.
+The 0.53 libraries always run in `winuae.exe`, because they need the uaelib
+traps of the 32-bit build. They talk to the legacy `QuarkTex.alib`, which
+`./build.sh tests` builds from the end of phase 2 (0.53 plus frame capture).
+
+`./build.sh unittest` checks the generated OpenGL encoder/decoder pair on the
+build host; it needs no emulator.
+
 Requirements:
 - a 32-bit `winuae.exe` with `Amiga Programs\UAEquit`
 - an A1200 Kickstart ROM
@@ -26,17 +35,19 @@ Requirements:
 
 ## How it works
 
-- `run.ps1` copies `winuae.exe` to `build/tests/winuae` and runs it in portable
-  mode (with a `winuae.ini`), so the normal installation is not touched. The
-  capture-enabled `QuarkTex.alib` goes into its `alib` directory.
+- `run.ps1` copies `winuae.exe` (and `winuae64.exe` if asked for) to
+  `build/tests/winuae` and runs it in portable mode (with a `winuae.ini`), so the
+  normal installation is not touched. The host libraries
+  `quarktex-windows-x86[-64].dll` go next to it, the legacy `QuarkTex.alib` into
+  its `alib` directory.
 - The test configuration (`winuae/test.uae.in`) boots from `QTBOOT:`
   (`amiga/boot`). That volume assigns the system from the read-only hard file,
   puts `QTTEST:Libs` in front of `LIBS:`, and replaces `User-Startup` with
   `QTTEST:S/run-tests`. This script runs every test and quits WinUAE with
   `UAEquit`.
 - Before creating its context, a test writes its name to
-  `QTTEST:capture/label.txt`. When `QUARKTEX_CAPTURE_DIR` is set,
-  `QuarkTex.alib` reads that name and saves every frame it presents as
+  `QTTEST:capture/label.txt`. When `QUARKTEX_CAPTURE_DIR` is set, the host
+  library reads that name and saves every frame it presents as
   `<test>_<frame>.bmp`.
 - `compare.py` compares the last frame of each test. A pixel counts as
   different when a channel differs by more than 8. A test fails when more than

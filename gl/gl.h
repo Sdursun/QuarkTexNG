@@ -21,7 +21,7 @@ typedef void GLvoid;
 
 void glInit(void);
 void glExit(void);
-void createContext(int left, int top, int width, int height);
+int createContext(int left, int top, int width, int height); /* 1 on success */
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);

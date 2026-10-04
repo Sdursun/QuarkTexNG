@@ -4,10 +4,12 @@ Runs the Warp3D reference tests in WinUAE and compares the rendered frames of
 the original QuarkTex 0.53 libraries ("orig") with the current build ("new").
 
 .DESCRIPTION
-Needs ./build.sh and ./build.sh tests to have run first. Both variants use the
-current, capture-enabled QuarkTex.alib in a private, portable copy of WinUAE
-under build/tests/winuae, so the normal WinUAE installation is not touched.
-The AmigaOS hard file is mounted read-only. Close WinUAE before running.
+Needs ./build.sh and ./build.sh tests to have run first. The tests run in a
+private, portable copy of WinUAE under build/tests/winuae, so the normal WinUAE
+installation is not touched. That copy gets the current host libraries
+(quarktex-windows-*.dll) and, for the 0.53 libraries, the legacy
+QuarkTex.alib; both capture frames. The AmigaOS hard file is mounted
+read-only. Close WinUAE before running.
 
 Settings (paths to WinUAE, Kickstart and the hard file) are read from
 tests/settings.local.psd1; see tests/settings.example.psd1.
@@ -15,11 +17,16 @@ tests/settings.local.psd1; see tests/settings.example.psd1.
 .EXAMPLE
 pwsh tests/run.ps1
 pwsh tests/run.ps1 -Variants new -TimeoutSec 120
+pwsh tests/run.ps1 -Emulator winuae64.exe   # the 0.53 run always uses winuae.exe
 #>
 param(
 	[string]$Settings = (Join-Path $PSScriptRoot 'settings.local.psd1'),
 	[ValidateSet('orig', 'new')]
 	[string[]]$Variants = @('orig', 'new'),
+	# Emulator for the current build. The 0.53 libraries need the uaelib traps
+	# of the 32-bit winuae.exe and always run there.
+	[ValidateSet('winuae.exe', 'winuae64.exe')]
+	[string]$Emulator = 'winuae.exe',
 	[int]$TimeoutSec = 300
 )
 
@@ -35,8 +42,9 @@ foreach ($key in 'WinUAEDir', 'Kickstart', 'HardFile') {
 	if (-not $cfg[$key]) { throw "$key is missing in $Settings" }
 }
 $uaequit = Join-Path $cfg.WinUAEDir 'Amiga Programs\UAEquit'
-foreach ($path in (Join-Path $cfg.WinUAEDir 'winuae.exe'), $cfg.Kickstart, $cfg.HardFile, $uaequit,
-		(Join-Path $root 'build\host\QuarkTex.alib'), (Join-Path $root 'build\amiga\Warp3D.library'),
+foreach ($path in (Join-Path $cfg.WinUAEDir 'winuae.exe'), (Join-Path $cfg.WinUAEDir $Emulator), $cfg.Kickstart, $cfg.HardFile, $uaequit,
+		(Join-Path $root 'build\host-x86\quarktex-windows-x86.dll'), (Join-Path $root 'build\host-x64\quarktex-windows-x86-64.dll'),
+		(Join-Path $root 'build\legacy\QuarkTex.alib'), (Join-Path $root 'build\amiga\Warp3D.library'),
 		(Join-Path $root 'build\tests\amiga')) {
 	if (-not (Test-Path $path)) { throw "Not found: $path (run ./build.sh and ./build.sh tests first?)" }
 }
@@ -52,9 +60,10 @@ function Write-AmigaText([string]$path, [string[]]$lines) {
 # Private portable WinUAE (winuae.ini next to the exe keeps it out of the registry).
 $uae = Join-Path $work 'winuae'
 New-Item -ItemType Directory -Force (Join-Path $uae 'alib') | Out-Null
-Copy-Item (Join-Path $cfg.WinUAEDir 'winuae.exe') $uae -Force
+Copy-Item (Join-Path $cfg.WinUAEDir 'winuae.exe'), (Join-Path $cfg.WinUAEDir $Emulator) $uae -Force
 if (-not (Test-Path (Join-Path $uae 'winuae.ini'))) { New-Item -ItemType File (Join-Path $uae 'winuae.ini') | Out-Null }
-Copy-Item (Join-Path $root 'build\host\QuarkTex.alib') (Join-Path $uae 'alib') -Force
+Copy-Item (Join-Path $root 'build\host-x86\quarktex-windows-x86.dll'), (Join-Path $root 'build\host-x64\quarktex-windows-x86-64.dll') $uae -Force
+Copy-Item (Join-Path $root 'build\legacy\QuarkTex.alib') (Join-Path $uae 'alib') -Force
 
 # Original QuarkTex 0.53 libraries from Aminet.
 $orig = Join-Path $work 'orig-0.53'
@@ -91,20 +100,24 @@ foreach ($variant in $Variants) {
 		Replace('@BOOTDIR@', (Join-Path $PSScriptRoot 'amiga\boot')).Replace('@TESTDIR@', $qttest) |
 		Set-Content -Path $config -Encoding ASCII
 
-	Write-Host "== ${variant}: running $($tests.Count) tests in WinUAE (timeout $TimeoutSec s)"
+	$exe = if ($variant -eq 'orig') { 'winuae.exe' } else { $Emulator }
+	Write-Host "== ${variant}: running $($tests.Count) tests in $exe (timeout $TimeoutSec s)"
 	$env:QUARKTEX_CAPTURE_DIR = Join-Path $qttest 'capture'
-	$process = Start-Process (Join-Path $uae 'winuae.exe') -ArgumentList '-f', "`"$config`"" -WorkingDirectory $uae -PassThru
+	$watch = [Diagnostics.Stopwatch]::StartNew()
+	$process = Start-Process (Join-Path $uae $exe) -ArgumentList '-f', "`"$config`"" -WorkingDirectory $uae -PassThru
 	if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 		Stop-Process $process -Force
 		Write-Warning "${variant}: WinUAE did not quit within $TimeoutSec s; the results are incomplete."
 	}
+	Write-Host ("   WinUAE ran for {0:N1} s (wall clock, boot included)" -f $watch.Elapsed.TotalSeconds)
 	Remove-Item Env:QUARKTEX_CAPTURE_DIR
 	$log = Join-Path $qttest 'capture\amiga.log'
 	if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "   $_" } }
 	else { Write-Warning "${variant}: no amiga.log - the test script did not run." }
 }
 
-if ($Variants.Count -eq 2) {
+# Compare with the last 0.53 run, also when only the new build ran now.
+if ($Variants -contains 'new' -and (Test-Path (Join-Path $work 'orig\qttest\capture'))) {
 	Write-Host '== comparing'
 	docker run --rm -v "${root}:/w" -w /w quarktex-host python3 tests/compare.py `
 		build/tests/orig/qttest/capture build/tests/new/qttest/capture build/tests/report

@@ -4,6 +4,17 @@ It transforms calls to the Warp3D API inside an emulated AmigaOS to native OpenG
 Developed by Robert Konrad.
 Released under the LGPL license.
 
+Installing
+----------
+
+- Copy quarktex-windows-x86.dll and quarktex-windows-x86-64.dll into the
+  WinUAE directory (or its plugins directory).
+- Copy Warp3D.library (and agl.library for StormMESA) to LIBS: in AmigaOS.
+- Enable native code in WinUAE (native_code=true in the configuration).
+
+QuarkTex works in 32-bit (winuae.exe) and 64-bit (winuae64.exe) WinUAE; each
+loads the DLL for its own architecture.
+
 Building
 --------
 
@@ -12,18 +23,20 @@ are all that is needed:
 
   ./build.sh            builds everything and collects the release in dist/
   ./build.sh amiga      Warp3D.library and agl.library (m68k-amigaos-gcc)
-  ./build.sh host       QuarkTex.alib (32-bit MinGW-w64)
+  ./build.sh host       quarktex-windows-x86.dll and -x86-64.dll (MinGW-w64)
+  ./build.sh tests      the reference tests, see tests/README.md
   ./build.sh generate   regenerates gl/*.auto.* after editing gl/glFuncs.txt
 
-QuarkTex.alib can also be built with Visual Studio 2022. It has to be a
-32-bit DLL and therefore runs only in 32-bit WinUAE:
+The host libraries can also be built with Visual Studio 2022:
 
-  cmake -S . -B build/host -A Win32
-  cmake --build build/host --config Release
+  cmake -S . -B build/host-x64 -A x64      (or -A Win32 for the x86 DLL)
+  cmake --build build/host-x64 --config Release
 
 Layout:
   Warp3D.library/   Warp3D 4 API on top of OpenGL (68k)
   agl.library/      StormMESA API on top of OpenGL (68k)
-  gl/               68k bridge to the host OpenGL, generated from glFuncs.txt
+  gl/               68k bridge to the host, generated from glFuncs.txt
   amiga/            library skeleton and build files for the 68k side
-  QuarkTex.cpp      host DLL: window and OpenGL context inside WinUAE
+  host/             host library: window and OpenGL context inside WinUAE
+  tests/            reference tests run in WinUAE
+  docs/             design notes

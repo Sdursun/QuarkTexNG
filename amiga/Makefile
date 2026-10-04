@@ -53,7 +53,7 @@ $(WARP3D_DIR)/libheader.o: amiga/libheader.c $(WARP3D_DIR)/functable.h
 $(WARP3D_DIR)/%.o: Warp3D.library/%.c Warp3D.library/w3d.h Warp3D.library/Warp3D.h $(GL_HEADERS) | $(WARP3D_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(WARP3D_DIR)/gl.o: gl/gl.c gl/gldefinitions.auto.c gl/glDLLfunc.auto.c gl/glstatichandles.auto.c $(GL_HEADERS) | $(WARP3D_DIR)
+$(WARP3D_DIR)/gl.o: gl/gl.c gl/glencode.auto.c $(GL_HEADERS) | $(WARP3D_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(WARP3D_DIR)/libc_shim.o: amiga/libc_shim.c | $(WARP3D_DIR)
@@ -73,7 +73,7 @@ $(AGL_DIR)/libheader.o: amiga/libheader.c $(AGL_DIR)/functable.h
 $(AGL_DIR)/%.o: agl.library/%.c $(GL_HEADERS) | $(AGL_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(AGL_DIR)/gl.o: gl/gl.c gl/gldefinitions.auto.c gl/glDLLfunc.auto.c gl/glstatichandles.auto.c $(GL_HEADERS) | $(AGL_DIR)
+$(AGL_DIR)/gl.o: gl/gl.c gl/glencode.auto.c $(GL_HEADERS) | $(AGL_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(AGL_DIR)/libc_shim.o: amiga/libc_shim.c | $(AGL_DIR)
