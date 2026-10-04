@@ -29,7 +29,12 @@ param(
 	[string]$Emulator = 'winuae.exe',
 	[int]$TimeoutSec = 300,
 	# Run the 68k code with the JIT compiler (16 MB cache), as games usually do.
-	[switch]$Jit
+	[switch]$Jit,
+	# Keep the frames of the current build as build/tests/snapshots/<name>.
+	[string]$Save,
+	# Compare the current build with a saved snapshot instead of 0.53 (no
+	# known differences apply): shows exactly what a change altered.
+	[string]$Against
 )
 
 $ErrorActionPreference = 'Stop'
@@ -125,6 +130,25 @@ foreach ($variant in $Variants) {
 	$log = Join-Path $qttest 'capture\amiga.log'
 	if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "   $_" } }
 	else { Write-Warning "${variant}: no amiga.log - the test script did not run." }
+}
+
+$newCapture = Join-Path $work 'new\qttest\capture'
+if ($Save -and $Variants -contains 'new') {
+	$snapshot = Join-Path $work "snapshots\$Save"
+	if (Test-Path $snapshot) { Remove-Item $snapshot -Recurse -Force }
+	New-Item -ItemType Directory -Force $snapshot | Out-Null
+	Copy-Item (Join-Path $newCapture '*') $snapshot
+	Write-Host "Saved the frames as snapshot '$Save'"
+}
+
+if ($Against) {
+	if (-not (Test-Path (Join-Path $work "snapshots\$Against"))) { throw "No snapshot '$Against' in $work\snapshots" }
+	Write-Host "== comparing with snapshot '$Against'"
+	docker run --rm -v "${root}:/w" -w /w quarktex-host python3 tests/compare.py `
+		"build/tests/snapshots/$Against" build/tests/new/qttest/capture "build/tests/report-$Against" --no-known
+	$result = $LASTEXITCODE
+	Write-Host "Report: $(Join-Path $work "report-$Against\index.html")"
+	exit $result
 }
 
 # Compare with the last 0.53 run, also when only the new build ran now.

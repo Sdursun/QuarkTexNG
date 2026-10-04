@@ -219,15 +219,18 @@ namespace {
 		return true;
 	}
 
-	// Context.c W3D_SetState in 0.53. The missing break after
-	// W3D_ZBUFFERUPDATE is kept: it switches blending as well.
+	// Context.c W3D_SetState in 0.53, with W3D_ZBUFFERUPDATE switching depth
+	// writes (0.53 had a missing break there and switched blending instead).
 	void setState(uint32_t state, bool enable) {
+		if (state == W3D_ZBUFFERUPDATE) {
+			QT_GL(DepthMask)(enable ? GL_TRUE : GL_FALSE);
+			return;
+		}
 		if (enable) {
 			switch (state) {
 			case W3D_TEXMAPPING: QT_GL(Enable)(GL_TEXTURE_2D); break;
 			case W3D_GOURAUD: QT_GL(ShadeModel)(GL_SMOOTH); break;
 			case W3D_ZBUFFER: QT_GL(Enable)(GL_DEPTH_TEST); break;
-			case W3D_ZBUFFERUPDATE:
 			case W3D_BLENDING: QT_GL(Enable)(GL_BLEND); break;
 			case W3D_FOGGING: QT_GL(Enable)(GL_FOG); break;
 			case W3D_LOGICOP: QT_GL(Enable)(GL_COLOR_LOGIC_OP); break;
@@ -240,7 +243,6 @@ namespace {
 			case W3D_TEXMAPPING: QT_GL(Disable)(GL_TEXTURE_2D); break;
 			case W3D_GOURAUD: QT_GL(ShadeModel)(GL_FLAT); break;
 			case W3D_ZBUFFER: QT_GL(Disable)(GL_DEPTH_TEST); break;
-			case W3D_ZBUFFERUPDATE:
 			case W3D_BLENDING: QT_GL(Disable)(GL_BLEND); break;
 			case W3D_FOGGING: QT_GL(Disable)(GL_FOG); break;
 			case W3D_LOGICOP: QT_GL(Disable)(GL_COLOR_LOGIC_OP); break;

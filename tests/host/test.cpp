@@ -271,8 +271,8 @@ int main() {
 			"Color4f(0.5,0.25,0.125,1) Vertex3f(30,60,0.75) End()", "QT_W3D_DRAW: " + joined());
 	}
 
-	// W3D_SetState(W3D_ZBUFFERUPDATE, W3D_ENABLE) switches blending on, as the
-	// missing break in 0.53 did.
+	// W3D_SetState(W3D_ZBUFFERUPDATE, W3D_ENABLE) switches depth writes, nothing
+	// else (0.53 switched blending through a missing break).
 	records.clear();
 	{
 		ULONG* w = qt_reserve(3);
@@ -281,7 +281,7 @@ int main() {
 		w[2] = 1; // W3D_ENABLE
 	}
 	qt_flush();
-	check(joined() == "Enable(3042)", "QT_W3D_SET_STATE ZBUFFERUPDATE: " + joined());
+	check(joined() == "DepthMask(1)", "QT_W3D_SET_STATE ZBUFFERUPDATE: " + joined());
 
 	// W3D_ClearDrawRegion in a window draws a rectangle in the colour.
 	records.clear();

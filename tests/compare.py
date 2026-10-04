@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Compare the frames captured by two test runs and write an HTML report.
 
-usage: compare.py <reference capture dir> <candidate capture dir> <report dir>
+usage: compare.py <reference capture dir> <candidate capture dir> <report dir> [--no-known]
 
 For every test the last captured frame (<test>_<n>.bmp with the highest n) is
 compared pixel by pixel. A pixel differs when one of its channels differs by
 more than TOLERANCE; a test passes when at most MAX_DIFF_RATIO of its pixels
 differ. Tests listed in tests/known-differences.txt are reported as KNOWN
-instead of FAIL when they differ. Exit code 0 when no test fails, 1 otherwise.
+instead of FAIL when they differ, unless --no-known is given (for comparisons
+with a snapshot of an earlier build). Exit code 0 when no test fails, 1 otherwise.
 """
 import html
 import os
@@ -102,10 +103,11 @@ def read_known_differences():
 
 
 def main():
-    if len(sys.argv) != 4:
+    args = [a for a in sys.argv[1:] if a != "--no-known"]
+    if len(args) != 3:
         sys.exit(__doc__)
-    ref_dir, new_dir, report_dir = sys.argv[1:]
-    known = read_known_differences()
+    ref_dir, new_dir, report_dir = args
+    known = {} if "--no-known" in sys.argv else read_known_differences()
     if os.path.isdir(report_dir):
         shutil.rmtree(report_dir)
     os.makedirs(report_dir)
@@ -150,7 +152,7 @@ def main():
         pics = "".join(
             '<figure><img src="%s"><figcaption>%s</figcaption></figure>' % (images[k], label)
             if k in images else "<figure><figcaption>%s: missing</figcaption></figure>" % label
-            for k, label in (("ref", "reference (0.53)"), ("new", "new build"), ("diff", "difference")))
+            for k, label in (("ref", "reference"), ("new", "new build"), ("diff", "difference")))
         cells.append('<section class="%s"><h2>%s <span>%s</span></h2><p>%s</p><div>%s</div></section>'
                      % (status.lower(), html.escape(test), status, html.escape(detail), pics))
     page = """<!doctype html><meta charset="utf-8"><title>QuarkTex reference tests</title>

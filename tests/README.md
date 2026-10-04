@@ -68,7 +68,8 @@ An agl test is `tests/aNN_name.c` with the same four parts (see
 `agl.library/agl_lib.fd`. It passes floats and doubles in fp0-fp7 as StormMESA
 does, which the `inline/macros.h` LP macros cannot.
 
-## Known bugs (in 0.53 and the current build; phase 5 fixes them)
+## Known bugs (in 0.53 and the current build; phase 5 fixes them, see
+`docs/phase5-fixes.md`)
 
 Shown by the tests:
 - Warp3D: without the z-buffer no depth reaches OpenGL, so fog does nothing
@@ -79,8 +80,6 @@ Shown by the tests:
   a05_agl_queries is not drawn.
 
 Found in the code (kept as they are so that the frames still match 0.53):
-- Warp3D: `W3D_SetState(W3D_ZBUFFERUPDATE)` also switches blending (a
-  missing `break`), and depth writes cannot be turned off.
 - Warp3D: `SetTexEnv` and `SetWrapMode` pass their colours as r, b, g, a.
 - Warp3D: `UpdateTexSubImage` uploads `texsource` instead of its image.
 - Warp3D: `FreeAllTexObj` frees the wrong list nodes.
