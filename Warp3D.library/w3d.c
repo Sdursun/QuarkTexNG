@@ -21,7 +21,7 @@ int fullscreen = 0;
 int width = 0;
 int height = 0;
 
-long envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
+static long envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
 
 void INIT_0_Warp3D(void) {
 	glInit();

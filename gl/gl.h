@@ -17,18 +17,18 @@ typedef double GLdouble;
 typedef double GLclampd;
 typedef void GLvoid;
 
+#include <exec/libraries.h>
+
 void glInit(void);
 void glExit(void);
-void createContext(int left __asm("d1"), int top __asm("d2"), int width __asm("d3"), int height __asm("d4"));
-void moveWindow(int left __asm("d1"), int top __asm("d2"), int width __asm("d3"), int height __asm("d4"));
+void createContext(int left, int top, int width, int height);
+void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);
-void logString(char* c __asm("d1"));
+void logString(char* c);
 
 #include "gldefines.h"
 #include "gldeclarations.auto.h"
-
-#include <exec/libraries.h>
 
 extern long memoffset;
 extern char *bp, b;

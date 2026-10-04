@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
+#include <cstring>
 #include <fstream>
 //#include <strstream>
 
@@ -54,8 +55,11 @@ namespace {
 std::ofstream* out;
 bool logcreated = false;
 
-DLL void logString(char* c) {
-	if (!logcreated) out = new std::ofstream("QuarkTexLog.txt");
+DLL void logString(const char* c) {
+	if (!logcreated) {
+		out = new std::ofstream("QuarkTexLog.txt");
+		logcreated = true;
+	}
 	*out << c << std::endl;
 }
 
@@ -75,15 +79,15 @@ DLL void freeContext(int, int, int, int, int, int, int, int, int, int, int, int,
 		windowHandle = 0;
 	}
 
-	UnregisterClass("QuarkTex", instance);
+	UnregisterClassA("QuarkTex", instance);
 	registered = false;
 }
 
 int cleft, ctop, cwidth, cheight;
 //                          d1       d2         d3          d4   d5   d6   d7   a1   a2   a3   a4   a5          a6
 DLL int createContext(int left, int top, int width, int height, int, int, int, int, int, int, int, int, winuae* a6) {
-	if (!instance) instance = GetModuleHandle(0);
-	if (registered) UnregisterClass("QuarkTex", instance);
+	if (!instance) instance = GetModuleHandleA(0);
+	if (registered) UnregisterClassA("QuarkTex", instance);
 	cleft = left; ctop = top; cwidth = width; cheight = height;
 //	std::strstream str;
 //	str << "Creating Context(left: " << left << ", top: " << top << ", width: " << width << ", height: " << height << ")\n";
@@ -102,8 +106,8 @@ DLL int createContext(int left, int top, int width, int height, int, int, int, i
 		top += rect.top;
 	}
 
-	WNDCLASS wc;
-	memset(&wc, 0, sizeof(WNDCLASS));
+	WNDCLASSA wc;
+	memset(&wc, 0, sizeof(WNDCLASSA));
 	wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
 	wc.lpfnWndProc = windowFunc;
 	wc.hInstance = instance;
@@ -111,10 +115,10 @@ DLL int createContext(int left, int top, int width, int height, int, int, int, i
 	wc.hCursor = LoadCursor(0, IDC_ARROW);
 	wc.lpszClassName = "QuarkTex";
 
-	if (!RegisterClass(&wc)) { logString("Warning: Could not register Window Class"); return 0; }
+	if (!RegisterClassA(&wc)) { logString("Warning: Could not register Window Class"); return 0; }
 	registered = true;
 
-	if (!(windowHandle = CreateWindowEx(0, "QuarkTex", "", WS_CHILD | WS_VISIBLE, left, top, width, height, a6->amigawnd, 0, 0, 0))) logString("Warning: Could not create Window");
+	if (!(windowHandle = CreateWindowExA(0, "QuarkTex", "", WS_CHILD | WS_VISIBLE, left, top, width, height, a6->amigawnd, 0, 0, 0))) logString("Warning: Could not create Window");
 	if (!(deviceContext = GetDC(windowHandle))) { logString("Warning: Could not get Device Context"); return 0; }
 
 	PIXELFORMATDESCRIPTOR pfd;
@@ -158,4 +162,4 @@ DLL void swapBuffers(int, int, int, int, int, int, int, int, int, int, int, int,
 		logString((char *) gluErrorString(code));
 		code = glGetError();
 	}
-}
+}

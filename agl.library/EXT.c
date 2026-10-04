@@ -20,7 +20,7 @@ void glDrawArraysEXT(GLenum mode __asm("d0"), GLint first __asm("d1"), GLsizei c
 void glGenTexturesEXT(GLsizei n __asm("d0"), GLuint *textures __asm("a0")) {LOG;}
 void glDeleteTexturesEXT(GLsizei n __asm("d0"), GLuint *textures __asm("a0")) {LOG;}
 void glBindTextureEXT(GLenum target __asm("d0"), GLuint texture __asm("d1")) {LOG;}
-void glPrioritizeTexturesEXT(GLsizei n __asm("d0"), GLuint textures __asm("a0"), GLclampf priorities __asm("a1")) {LOG;}
+void glPrioritizeTexturesEXT(GLsizei n __asm("d0"), GLuint *textures __asm("a0"), GLclampf *priorities __asm("a1")) {LOG;}
 void glAreTexturesResidentEXT(GLsizei n __asm("d0"), GLuint *textures __asm("a0"), GLboolean *residences __asm("a1")) {LOG;}
 void glIsTextureEXT(GLuint texture __asm("d0")) {LOG;}
 //__REG(GL EXT texture3D

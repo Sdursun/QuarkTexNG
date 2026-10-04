@@ -1,5 +1,6 @@
 #include "w3d.h"
 #include <proto/exec.h>
+#include <proto/graphics.h>
 #include <proto/utility.h>
 #include <intuition/intuitionbase.h>
 

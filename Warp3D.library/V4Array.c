@@ -1,7 +1,7 @@
 #include "w3d.h"
 
 unsigned int primitives[] = {GL_TRIANGLES, GL_TRIANGLE_FAN, GL_TRIANGLE_STRIP, GL_POINTS, GL_LINES, GL_LINE_LOOP, GL_LINE_STRIP};
-int envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
+static int envs[] = {0, GL_REPLACE, GL_DECAL, GL_MODULATE, GL_BLEND};
 
 ULONG W3D_VertexPointer(__REGA0(W3D_Context* context), __REGA1(void *pointer), __REGD0(int stride), __REGD1(ULONG mode), __REGD2(ULONG flags)) {
 	LOG;
