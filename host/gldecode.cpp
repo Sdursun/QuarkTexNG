@@ -128,6 +128,21 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 			if ((header >> 16) < QT_W3D_FIRST || !qt_w3d_decode(c, result)) return qt_bad_command(c);
 			break;
 		}
+		// Tracing: which OpenGL command an error comes from (opcode = line in
+		// gl/glFuncs.txt), with its first arguments. Not between glBegin (5)
+		// and glEnd (75), where glGetError is an error itself.
+		static bool insideBegin = false;
+		if (qt_w3d_trace_all && (header >> 16) == 5) insideBegin = true;
+		else if ((header >> 16) == 75) insideBegin = false;
+		if (qt_w3d_trace_all && !insideBegin && (header >> 16) < QT_W3D_FIRST) {
+			GLenum error = QT_GL(GetError)();
+			if (error) {
+				char line[120];
+				snprintf(line, sizeof(line), "GL error 0x%X after opcode %u: %X %X %X", error, header >> 16,
+					c.words > 1 ? c.u(1) : 0, c.words > 2 ? c.u(2) : 0, c.words > 3 ? c.u(3) : 0);
+				qt_report(line);
+			}
+		}
 		offset += 4 * c.words;
 	}
 	return result;

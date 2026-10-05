@@ -103,3 +103,19 @@ them with the public types only (as the RTCW port's minigl-shim does).
   `GL_ARB_multitexture`, no paletted textures yet.
 - `library_test` and `ballonly` (shared library clients from MiniGL
   Classic's archive) run: the Boing ball, 1 ms per frame by its own count.
+
+## First game: RTCW
+
+RTCW (rtcw-sp, the PiStorm3D port) runs on QuarkTex's minigl.library:
+escape1 draws as through MiniGL Classic and Warp3D, 58 fps by the game's
+counter (59 through Warp3D; both are bound by the emulation here, measured
+in stage 4). The trace found one error per frame: the RTCW port defines
+values of its own for GL names MiniGL lacks (`GL_CLIP_PLANE0 = 0x7A07`,
+stencil, normal arrays) and MiniGL ignores them. The enum translation now
+marks a value that is neither MiniGL's nor an OpenGL constant as unknown,
+and the generated wrappers skip such a call (logged once per entry); since
+then the game runs without OpenGL errors.
+
+The trace (`QUARKTEX_TRACE_FRAME`) also checks OpenGL's error after every
+OpenGL command of the traced frame outside glBegin/glEnd and logs the
+command.

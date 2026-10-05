@@ -31,3 +31,16 @@ void mgl_missing(const char *name) {
 	logString("minigl.library: not implemented:");
 	logString((char *) name);
 }
+
+/* A call with a constant MiniGL does not know (applications define values of
+ * their own for what MiniGL lacks): skipped, as MiniGL skips it; logged once
+ * per entry. */
+void mgl_unknown(const char *name) {
+	static const char *logged[64];
+	static int count;
+	int i;
+	for (i = 0; i < count; ++i) if (logged[i] == name) return;
+	if (count < 64) logged[count++] = name;
+	logString("minigl.library: skipped a call with an unknown constant:");
+	logString((char *) name);
+}

@@ -45,8 +45,10 @@ typedef struct QtMglContext {
 
 extern GLcontext mgl_current;
 
-/* lib.c: an entry the library does not implement yet is logged. */
+/* lib.c: an entry the library does not implement yet, and a call with a
+ * constant MiniGL does not know, are logged. */
 void mgl_missing(const char *name);
+void mgl_unknown(const char *name);
 
 /* glfuncs.c: the vertex arrays of the current context are reset. */
 void mgl_resetArrays(void);

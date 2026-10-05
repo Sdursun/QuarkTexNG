@@ -94,6 +94,9 @@ $env:QUARKTEX_CAPTURE_DIR = Join-Path $qttest 'capture'
 $env:QUARKTEX_CAPTURE_EVERY = "$CaptureEvery"
 if ($Trace) { $env:QUARKTEX_TRACE = '1' }
 if ($TraceFrame -ge 0) { $env:QUARKTEX_TRACE_FRAME = "$TraceFrame" }
+# The host writes its log only when it has something to say: an old one
+# must not be taken for this run's.
+Remove-Item (Join-Path $uae 'QuarkTexLog.txt') -ErrorAction SilentlyContinue
 $process = Start-Process (Join-Path $uae $Emulator) -ArgumentList '-f', "`"$config`"" -WorkingDirectory $uae -PassThru
 if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 	Stop-Process $process -Force
