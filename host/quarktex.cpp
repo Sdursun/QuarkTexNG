@@ -31,6 +31,9 @@ namespace {
 
 	// qt_create_context flags, as QT_CONTEXT_CORE in gl/gl.h.
 	const int32_t contextCore = 1;
+	// QT_CONTEXT_PLAIN: a compatibility context without the 0.53 model view
+	// matrix, with a 24-bit depth buffer (minigl.library).
+	const int32_t contextPlain = 2;
 
 	LRESULT CALLBACK windowFunc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 		switch (message) {
@@ -354,7 +357,7 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	pfd.dwLayerMask = PFD_MAIN_PLANE;
 	pfd.iPixelType = PFD_TYPE_RGBA;
 	pfd.cColorBits = 32;
-	pfd.cDepthBits = 16;
+	pfd.cDepthBits = (uni->d5 & contextPlain) ? 24 : 16;
 	pfd.cStencilBits = 8;
 	int pixelformat;
 	if ((pixelformat = ChoosePixelFormat(c->deviceContext, &pfd)) == 0) { logString("Warning: Could not choose pixel format"); destroy(c); return 0; }
@@ -379,7 +382,7 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 				reinterpret_cast<const char*>(glGetString(GL_RENDERER))).c_str());
 		}
 	}
-	else {
+	else if (!(uni->d5 & contextPlain)) {
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
 		glScalef(2.0f / static_cast<float>(width), -2.0f / static_cast<float>(height), 1.0f);

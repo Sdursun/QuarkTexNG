@@ -28,7 +28,7 @@ fi
 run() {
 	image=$1
 	shift
-	MSYS_NO_PATHCONV=1 docker run --rm $USER_FLAGS -v "$VOLUME:/w" -w /w "$image" sh -c "$*"
+	MSYS_NO_PATHCONV=1 docker run --rm $USER_FLAGS -v "$VOLUME:/w" $SDK_MOUNT -w /w "$image" sh -c "$*"
 }
 
 host_image() {
@@ -46,7 +46,19 @@ unittest() {
 	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++11 -Wall -Wno-int-to-pointer-cast -O1 -Igl -o build/unittest tests/host/test.cpp && build/unittest"
 }
 
+# MiniGL's SDK include directory (from the PiStorm3D or MiniGL Classic
+# archive) for minigl.library; without it that library is not built.
+SDK_MOUNT=
+if [ -n "$MINIGL_SDK" ] && [ -f "$MINIGL_SDK/libraries/minigl_dispatch.h" ]; then
+	if command -v cygpath >/dev/null 2>&1; then SDK_MOUNT="-v $(cygpath -w "$MINIGL_SDK"):/sdk:ro"
+	else SDK_MOUNT="-v $MINIGL_SDK:/sdk:ro"; fi
+fi
+
 amiga() {
+	if [ -n "$SDK_MOUNT" ]; then
+		host_image
+		run "$HOST_IMAGE" "python3 minigl.library/mglgen.py /sdk gl build/amiga/minigl minigl.library/*.c"
+	fi
 	run "$AMIGA_IMAGE" "make -f amiga/Makefile"
 }
 
@@ -77,6 +89,7 @@ dist() {
 	rm -rf dist
 	mkdir -p dist
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
+	if [ -f build/amiga/minigl.library ]; then cp build/amiga/minigl.library dist/; fi
 	cp build/host-x86/quarktex-windows-x86.dll build/host-x64/quarktex-windows-x86-64.dll dist/
 	cp License.txt ReadMe.txt dist/
 	echo "dist/:"

@@ -29,6 +29,9 @@ void glExit(void);
  * selected); selectContext flushes the buffer when it switches. */
 ULONG createContext(int left, int top, int width, int height, int flags);
 #define QT_CONTEXT_CORE 1
+/* An OpenGL compatibility context as OpenGL makes it: no QuarkTex 0.53 model
+ * view matrix, and a 24-bit depth buffer (minigl.library). */
+#define QT_CONTEXT_PLAIN 2
 void selectContext(ULONG id);
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);

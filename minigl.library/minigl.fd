@@ -1,0 +1,6 @@
+* QuarkTex minigl.library: MiniGL's shared library interface (dispatch ABI 3).
+* The one entry point returns the dispatch table; libminigl.a calls it.
+##base _MiniGLBase
+##bias 30
+MGLGetDispatchTable()()
+##end

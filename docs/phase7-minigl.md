@@ -1,7 +1,7 @@
 # Phase 7: a QuarkTex minigl.library
 
-Status: planned (2026-10-05). Stage 1, the analysis of the interface, is
-done.
+Status: in progress (2026-10-05). Stages 1 (analysis) and 2 (skeleton) are
+done: MiniGL's demos library_test and ballonly (the Boing ball) run on it.
 
 ## Why
 
@@ -73,3 +73,33 @@ newer header with appended entries, it refuses an older library; then the
 table is regenerated from the new header and the new functions are added.
 The SDK header is the single source for the table order and the enum
 values, and a test checks the table against it.
+
+## Building
+
+minigl.library needs MiniGL's SDK headers, which are not part of QuarkTex
+(they are under the Hyperion MiniGL Open Source License; QuarkTex is LGPL).
+`MINIGL_SDK=<SDK include directory> ./build.sh` mounts them into the build
+containers, runs `minigl.library/mglgen.py` and builds
+`build/amiga/minigl.library`; without `MINIGL_SDK` the library is skipped.
+The SDK's `mgl/context.h`, `mgl/vertexbuffer.h` and `mgl/minigl.h` include
+backend headers the SDK does not ship; `minigl.library/sdk-shim/` replaces
+them with the public types only (as the RTCW port's minigl-shim does).
+
+## Stage 2 (done)
+
+- `minigl.library/mglgen.py` generates the enum translation (252 values),
+  the encoder declarations with plain C types (`qgl.auto.h`) and the
+  dispatch table: 52 entries are generated wrappers, 96 hand-written
+  (`context.c`, `glfuncs.c`), 5 log "not implemented" (interleaved arrays,
+  edge flag and index pointers, blend equation and separate blend
+  functions).
+- Contexts: a screen of the asked size (`BestModeID`) with a backdrop window,
+  or a window, or the application's window; `FromBitMap` returns NULL.
+  The host context is a compatibility one without the 0.53 model view
+  matrix and with a 24-bit depth buffer (`QT_CONTEXT_PLAIN`).
+- Vertex arrays are read on the 68k and sent as immediate mode; float
+  parameter arrays go as byte-swapped copies; `glGet*` results are turned
+  around and constants translated back. One texture unit, no
+  `GL_ARB_multitexture`, no paletted textures yet.
+- `library_test` and `ballonly` (shared library clients from MiniGL
+  Classic's archive) run: the Boing ball, 1 ms per frame by its own count.

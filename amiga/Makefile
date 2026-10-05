@@ -23,15 +23,28 @@ WARP3D_SRC = $(wildcard Warp3D.library/*.c)
 AGL_SRC    = $(wildcard agl.library/*.c)
 GL_SRC     = gl/gl.c
 
+# minigl.library needs MiniGL's SDK headers (not part of QuarkTex); build.sh
+# mounts them at /sdk and runs minigl.library/mglgen.py first.
+MINIGL_SDK ?= /sdk
+MINIGL_SRC  = $(wildcard minigl.library/*.c)
+# MINIGL_BACKEND_FLAG_CLASSIC, and QuarkTex's own bit (docs/phase7-minigl.md).
+MINIGL_FLAGS = 0x102
+
 WARP3D_DIR = $(BUILD)/Warp3D
+MINIGL_DIR = $(BUILD)/minigl
 AGL_DIR    = $(BUILD)/agl
 
 WARP3D_OBJ = $(WARP3D_DIR)/libheader.o $(patsubst %.c,$(WARP3D_DIR)/%.o,$(notdir $(WARP3D_SRC) $(GL_SRC))) $(WARP3D_DIR)/libc_shim.o
 AGL_OBJ    = $(AGL_DIR)/libheader.o $(patsubst %.c,$(AGL_DIR)/%.o,$(notdir $(AGL_SRC) $(GL_SRC))) $(AGL_DIR)/libc_shim.o
+MINIGL_OBJ = $(MINIGL_DIR)/libheader.o $(patsubst %.c,$(MINIGL_DIR)/%.o,$(notdir $(MINIGL_SRC) $(GL_SRC))) \
+             $(MINIGL_DIR)/dispatch.auto.o $(MINIGL_DIR)/mglenum.auto.o $(MINIGL_DIR)/libc_shim.o
 
 GL_HEADERS = gl/gl.h gl/gldefines.h gl/gldeclarations.auto.h gl/w3dcmd.h
 
 all: $(BUILD)/Warp3D.library $(BUILD)/agl.library
+ifneq ($(wildcard $(MINIGL_SDK)/libraries/minigl_dispatch.h),)
+all: $(BUILD)/minigl.library
+endif
 
 $(BUILD)/Warp3D.library: $(WARP3D_OBJ)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -79,7 +92,40 @@ $(AGL_DIR)/gl.o: gl/gl.c gl/glencode.auto.c $(GL_HEADERS) | $(AGL_DIR)
 $(AGL_DIR)/libc_shim.o: amiga/libc_shim.c | $(AGL_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(WARP3D_DIR) $(AGL_DIR):
+# --- minigl.library (MiniGL's shared library interface) ---------------------
+# The *.auto.* files come from minigl.library/mglgen.py (run by build.sh).
+
+MINIGL_CFLAGS = $(CFLAGS) -Iminigl.library/sdk-shim -I$(MINIGL_SDK) -I$(MINIGL_DIR) -Iminigl.library -DMGL_QUARKTEX_BACKEND_FLAGS=$(MINIGL_FLAGS)
+MINIGL_GENERATED = $(MINIGL_DIR)/qgl.auto.h $(MINIGL_DIR)/dispatch.auto.c $(MINIGL_DIR)/mglenum.auto.c
+
+$(BUILD)/minigl.library: $(MINIGL_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+$(MINIGL_GENERATED):
+	@echo "$@ is missing: run minigl.library/mglgen.py (./build.sh does)" >&2; exit 1
+
+$(MINIGL_DIR)/functable.h: minigl.library/minigl.fd amiga/fd2functable.py | $(MINIGL_DIR)
+	$(PYTHON) amiga/fd2functable.py $< $@
+
+$(MINIGL_DIR)/libheader.o: amiga/libheader.c $(MINIGL_DIR)/functable.h
+	$(CC) $(CFLAGS) -I$(MINIGL_DIR) -DLIB_NAME='"minigl.library"' \
+		-DLIB_VERSION=27 -DLIB_REVISION=0 \
+		-DLIB_IDSTRING='"minigl.library 27.0 ($(DATE)) QuarkTex, host OpenGL"' \
+		-DLIB_INIT=INIT_0_MiniGL -DLIB_EXIT=EXIT_0_MiniGL -c -o $@ $<
+
+$(MINIGL_DIR)/%.o: minigl.library/%.c minigl.library/mgl.h $(MINIGL_DIR)/qgl.auto.h | $(MINIGL_DIR)
+	$(CC) $(MINIGL_CFLAGS) -c -o $@ $<
+
+$(MINIGL_DIR)/%.auto.o: $(MINIGL_DIR)/%.auto.c $(MINIGL_DIR)/qgl.auto.h
+	$(CC) $(MINIGL_CFLAGS) -c -o $@ $<
+
+$(MINIGL_DIR)/gl.o: gl/gl.c gl/glencode.auto.c $(GL_HEADERS) | $(MINIGL_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(MINIGL_DIR)/libc_shim.o: amiga/libc_shim.c | $(MINIGL_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(WARP3D_DIR) $(AGL_DIR) $(MINIGL_DIR):
 	mkdir -p $@
 
 clean:
