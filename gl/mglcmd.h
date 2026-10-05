@@ -13,11 +13,20 @@
  * glDrawArrays/glDrawElements with the vertex arrays, read by the host from
  * Amiga memory (big-endian), synchronous: mode, first, count, index type
  * (0 for glDrawArrays, else GL_UNSIGNED_BYTE/SHORT/INT), index address; then
- * for the vertex, colour and texture coordinate arrays each: enabled, size,
- * type, stride (in bytes, not 0), address.
+ * for the vertex, colour, and texture units 0 and 1 coordinate arrays each:
+ * enabled, size, type, stride (in bytes, not 0), address.
  */
 #define QT_MGL_DRAW 0x9000
-#define QT_MGL_DRAW_WORDS 21
+#define QT_MGL_DRAW_WORDS 26
 #define QT_MGL_MAX_VERTICES 1048576
+
+/* GL_ARB_multitexture, which OpenGL 1.1's command set lacks; units are
+ * GL_TEXTURE0 and up, QT_MGL_TEXTURE_UNITS of them. glActiveTexture: unit.
+ * glMultiTexCoord2f: unit, s, t. */
+#define QT_MGL_ACTIVE_TEXTURE 0x9001
+#define QT_MGL_ACTIVE_TEXTURE_WORDS 2
+#define QT_MGL_MULTI_TEX_COORD 0x9002
+#define QT_MGL_MULTI_TEX_COORD_WORDS 4
+#define QT_MGL_TEXTURE_UNITS 2
 
 #endif

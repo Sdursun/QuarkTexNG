@@ -6,19 +6,51 @@
 // own vertex arrays, so the 68k does not touch them vertex by vertex (it did
 // until phase 7 stage 4, sending them as immediate mode).
 //
+// GL_ARB_multitexture: the OpenGL 1.3 functions are looked up when first
+// used, in the context that executes the command.
+//
 // The unit test (tests/host) includes this file with QT_TEST defined and
-// QT_GL pointing to recording stubs.
+// QT_GL and QT_GL13 pointing to recording stubs.
 #ifndef QT_TEST
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <GL/gl.h>
 #define QT_GL(name) gl##name
+#define QT_GL13(name) mgl::gl13::name
 #endif
 #include <vector>
 #include "gldecode.h"
 #include "mglcmd.h"
 
+#ifndef GL_TEXTURE0
+#define GL_TEXTURE0 0x84C0
+#endif
+
 namespace mgl {
+#ifndef QT_TEST
+	namespace gl13 {
+		typedef void (APIENTRY* UnitFunction)(GLenum unit);
+		typedef void (APIENTRY* TexCoordFunction)(GLenum unit, GLfloat s, GLfloat t);
+		UnitFunction activeTexture, clientActiveTexture;
+		TexCoordFunction multiTexCoord2f;
+
+		bool load() {
+			static bool loaded = false;
+			if (!loaded) {
+				loaded = true;
+				activeTexture = reinterpret_cast<UnitFunction>(reinterpret_cast<void*>(wglGetProcAddress("glActiveTexture")));
+				clientActiveTexture = reinterpret_cast<UnitFunction>(reinterpret_cast<void*>(wglGetProcAddress("glClientActiveTexture")));
+				multiTexCoord2f = reinterpret_cast<TexCoordFunction>(reinterpret_cast<void*>(wglGetProcAddress("glMultiTexCoord2f")));
+			}
+			return activeTexture && clientActiveTexture && multiTexCoord2f;
+		}
+
+		void ActiveTexture(GLenum unit) { if (load()) activeTexture(unit); }
+		void ClientActiveTexture(GLenum unit) { if (load()) clientActiveTexture(unit); }
+		void MultiTexCoord2f(GLenum unit, GLfloat s, GLfloat t) { if (load()) multiTexCoord2f(unit, s, t); }
+	}
+#endif
+
 	struct Array {
 		bool enabled;
 		uint32_t size, type, stride, address;
@@ -86,11 +118,29 @@ namespace mgl {
 		return a;
 	}
 
+	// The arrays in QT_MGL_DRAW's order.
+	enum { Vertices, Colours, TexCoords0, TexCoords1, Arrays };
+
+	void setArray(int k, bool on, GLint size, GLenum type, const void* data) {
+		static const GLenum states[Arrays] = {GL_VERTEX_ARRAY, GL_COLOR_ARRAY, GL_TEXTURE_COORD_ARRAY, GL_TEXTURE_COORD_ARRAY};
+		if (k >= TexCoords0) QT_GL13(ClientActiveTexture)(GL_TEXTURE0 + (k - TexCoords0));
+		if (!on) {
+			QT_GL(DisableClientState)(states[k]);
+			return;
+		}
+		QT_GL(EnableClientState)(states[k]);
+		void* pointer = const_cast<void*>(data);
+		if (k == Vertices) QT_GL(VertexPointer)(size, type, 0, pointer);
+		else if (k == Colours) QT_GL(ColorPointer)(size, type, 0, pointer);
+		else QT_GL(TexCoordPointer)(size, type, 0, pointer);
+	}
+
 	bool draw(const Command& c) {
 		GLenum mode = c.u(1);
 		uint32_t first = c.u(2), count = c.u(3), indexType = c.u(4), indexAddress = c.u(5);
-		Array arrays[3] = {array(c, 6), array(c, 11), array(c, 16)}; // vertex, colour, texture coordinate
-		if (!count || !arrays[0].enabled) return true;
+		Array arrays[Arrays];
+		for (int k = 0; k < Arrays; ++k) arrays[k] = array(c, 6 + 5 * k);
+		if (!count || !arrays[Vertices].enabled) return true;
 
 		// The indices, and how many elements of the arrays they reach.
 		std::vector<uint32_t> indices;
@@ -111,26 +161,15 @@ namespace mgl {
 		}
 		if (elements > QT_MGL_MAX_VERTICES) return true;
 
-		Converted converted[3];
-		const GLenum states[3] = {GL_VERTEX_ARRAY, GL_COLOR_ARRAY, GL_TEXTURE_COORD_ARRAY};
+		Converted converted[Arrays];
+		bool on[Arrays];
+		for (int k = 0; k < Arrays; ++k) on[k] = arrays[k].enabled && convert(c, arrays[k], elements, converted[k]);
+		if (!on[Vertices]) return true;
 		QT_GL(PushClientAttrib)(GL_CLIENT_VERTEX_ARRAY_BIT);
-		for (int k = 0; k < 3; ++k) {
-			if (!arrays[k].enabled || !convert(c, arrays[k], elements, converted[k])) {
-				QT_GL(DisableClientState)(states[k]);
-				if (k == 0) {
-					QT_GL(PopClientAttrib)();
-					return true;
-				}
-				continue;
-			}
-			QT_GL(EnableClientState)(states[k]);
+		for (int k = 0; k < Arrays; ++k) {
 			bool bytes = !converted[k].bytes.empty();
-			const void* data = bytes ? static_cast<const void*>(&converted[k].bytes[0]) : static_cast<const void*>(&converted[k].floats[0]);
-			GLenum type = bytes ? GL_UNSIGNED_BYTE : GL_FLOAT;
-			GLint size = static_cast<GLint>(arrays[k].size);
-			if (k == 0) QT_GL(VertexPointer)(size, type, 0, const_cast<void*>(data));
-			else if (k == 1) QT_GL(ColorPointer)(size, type, 0, const_cast<void*>(data));
-			else QT_GL(TexCoordPointer)(size, type, 0, const_cast<void*>(data));
+			const void* data = !on[k] ? 0 : bytes ? static_cast<const void*>(&converted[k].bytes[0]) : static_cast<const void*>(&converted[k].floats[0]);
+			setArray(k, on[k], static_cast<GLint>(arrays[k].size), bytes ? GL_UNSIGNED_BYTE : GL_FLOAT, data);
 		}
 		QT_GL(DisableClientState)(GL_NORMAL_ARRAY);
 		QT_GL(DisableClientState)(GL_INDEX_ARRAY);
@@ -140,6 +179,10 @@ namespace mgl {
 		QT_GL(PopClientAttrib)();
 		return true;
 	}
+
+	bool validUnit(uint32_t unit) {
+		return unit >= GL_TEXTURE0 && unit < GL_TEXTURE0 + QT_MGL_TEXTURE_UNITS;
+	}
 }
 
 bool qt_mgl_decode(const Command& c, int32_t& result) {
@@ -148,6 +191,14 @@ bool qt_mgl_decode(const Command& c, int32_t& result) {
 	case QT_MGL_DRAW:
 		if (c.words != QT_MGL_DRAW_WORDS) return false;
 		return mgl::draw(c);
+	case QT_MGL_ACTIVE_TEXTURE:
+		if (c.words != QT_MGL_ACTIVE_TEXTURE_WORDS) return false;
+		if (mgl::validUnit(c.u(1))) QT_GL13(ActiveTexture)(c.u(1));
+		return true;
+	case QT_MGL_MULTI_TEX_COORD:
+		if (c.words != QT_MGL_MULTI_TEX_COORD_WORDS) return false;
+		if (mgl::validUnit(c.u(1))) QT_GL13(MultiTexCoord2f)(c.u(1), c.f(2), c.f(3));
+		return true;
 	}
 	return false;
 }

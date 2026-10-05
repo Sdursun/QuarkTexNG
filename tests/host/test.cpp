@@ -136,6 +136,24 @@ GLvoid stub_glStencilPoints(GLsizei count, const GLfloat* xy, const GLuint* valu
 	for (GLsizei i = 0; i < count; ++i) r << xy[2 * i] << xy[2 * i + 1] << values[i];
 }
 
+// The OpenGL 1.3 functions host/mgl.cpp looks up (GL_ARB_multitexture).
+#define QT_GL13(name) stub_gl##name
+
+GLvoid stub_glActiveTexture(GLenum unit) {
+	Record r("ActiveTexture");
+	r << unit;
+}
+
+GLvoid stub_glClientActiveTexture(GLenum unit) {
+	Record r("ClientActiveTexture");
+	r << unit;
+}
+
+GLvoid stub_glMultiTexCoord2f(GLenum unit, GLfloat s, GLfloat t) {
+	Record r("MultiTexCoord2f");
+	r << unit << s << t;
+}
+
 // --- Host side ---------------------------------------------------------------
 
 static int reports;
@@ -541,8 +559,9 @@ int main() {
 	}
 
 	// minigl.library's glDrawElements: big-endian float vertices (size 3,
-	// stride 16) and unsigned byte colours, unsigned short indices; the host
-	// converts the elements the indices reach and draws them.
+	// stride 16), unsigned byte colours and texture unit 1 coordinates,
+	// unsigned short indices; the host converts the elements the indices
+	// reach and draws them.
 	{
 		const float xyz[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
 		for (int i = 0; i < 3; ++i)
@@ -558,12 +577,14 @@ int main() {
 			GL_TRIANGLES, 0, 3, GL_UNSIGNED_SHORT, 0x16200,
 			1, 3, GL_FLOAT, 16, 0x16000,
 			1, 4, GL_UNSIGNED_BYTE, 4, 0x16100,
-			0, 2, GL_FLOAT, 8, 0};
+			0, 2, GL_FLOAT, 8, 0,
+			1, 2, GL_FLOAT, 16, 0x16000};
 		memcpy(w, words, sizeof(words));
 		records.clear();
 		qt_flush();
 		check(joined() == "PushClientAttrib(2) EnableClientState(32884) VertexPointer(3,5126,0,@?) EnableClientState(32886) "
-			"ColorPointer(4,5121,0,@?) DisableClientState(32888) DisableClientState(32885) DisableClientState(32887) "
+			"ColorPointer(4,5121,0,@?) ClientActiveTexture(33984) DisableClientState(32888) ClientActiveTexture(33985) "
+			"EnableClientState(32888) TexCoordPointer(2,5126,0,@?) DisableClientState(32885) DisableClientState(32887) "
 			"DisableClientState(32889) DrawElements(4,3,5125,@?) PopClientAttrib()", "QT_MGL_DRAW: " + joined());
 
 		Command c = {buffer8, 0, resolve};
@@ -573,6 +594,18 @@ int main() {
 		bool ok = convert(c, vertices, 3, v) && convert(c, colours, 3, col);
 		check(ok && v.floats.size() == 9 && v.floats[0] == 1 && v.floats[4] == 5 && v.floats[8] == 9
 			&& col.bytes.size() == 12 && col.bytes[0] == 10 && col.bytes[11] == 21, "QT_MGL_DRAW conversion");
+	}
+
+	// glActiveTextureARB and glMultiTexCoord2fARB; a unit beyond
+	// QT_MGL_TEXTURE_UNITS is ignored.
+	{
+		const ULONG words[] = {(static_cast<ULONG>(QT_MGL_ACTIVE_TEXTURE) << 16) | QT_MGL_ACTIVE_TEXTURE_WORDS, 0x84C1,
+			(static_cast<ULONG>(QT_MGL_MULTI_TEX_COORD) << 16) | QT_MGL_MULTI_TEX_COORD_WORDS, 0x84C1, qt_f2l(0.5f), qt_f2l(0.25f),
+			(static_cast<ULONG>(QT_MGL_ACTIVE_TEXTURE) << 16) | QT_MGL_ACTIVE_TEXTURE_WORDS, 0x84C2};
+		memcpy(qt_reserve(sizeof(words) / 4), words, sizeof(words));
+		records.clear();
+		qt_flush();
+		check(joined() == "ActiveTexture(33985) MultiTexCoord2f(33985,0.5,0.25)", "QT_MGL_ACTIVE_TEXTURE: " + joined());
 	}
 
 	check(reports == 0, std::to_string(reports) + " bad commands reported");

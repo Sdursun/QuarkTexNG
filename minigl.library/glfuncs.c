@@ -7,9 +7,8 @@
  * numbers (mgl_enum translates them). Pointers to floats and integers that
  * the host would read go as byte-swapped copies, since the host reads Amiga
  * memory as it is; results the host writes are turned around afterwards.
- * Vertex arrays are read here, on the 68k, and sent as immediate mode (the
- * host has no access to them in their byte order); drawing them on the host
- * is stage 4 of docs/phase7-minigl.md.
+ * glDrawArrays and glDrawElements leave reading the vertex arrays to the
+ * host; glArrayElement reads them here.
  */
 
 /* --- Byte order ----------------------------------------------------------- */
@@ -54,16 +53,33 @@ void mgl_GLVertex4fv(GLcontext context, GLfloat *v) { _glVertex4f(v[0], v[1], v[
 void mgl_GLEdgeFlagv(GLcontext context, const GLboolean *flag) { _glEdgeFlag(*flag != 0); }
 void mgl_GLIndexiv(GLcontext context, const GLint *c) { _glIndexi(*c); }
 
-/* One texture unit (GL_ARB_multitexture is not offered): unit 0 only. */
-void mgl_GLActiveTextureARB(GLcontext context, GLenum unit) {}
-void mgl_GLClientActiveTextureARB(GLcontext context, GLenum unit) {}
+/* --- GL_ARB_multitexture (QT_MGL_TEXTURE_UNITS units) ---------------------- */
+
+void mgl_GLActiveTextureARB(GLcontext context, GLenum unit) {
+	ULONG *w = qt_reserve(QT_MGL_ACTIVE_TEXTURE_WORDS);
+	w[0] = ((ULONG) QT_MGL_ACTIVE_TEXTURE << 16) | QT_MGL_ACTIVE_TEXTURE_WORDS;
+	w[1] = mgl_enum(unit);
+}
+
+static void multiTexCoord(unsigned int unit, GLfloat s, GLfloat t) {
+	ULONG *w;
+	if (unit == QGL_TEXTURE0_ARB) {
+		_glTexCoord2f(s, t);
+		return;
+	}
+	w = qt_reserve(QT_MGL_MULTI_TEX_COORD_WORDS);
+	w[0] = ((ULONG) QT_MGL_MULTI_TEX_COORD << 16) | QT_MGL_MULTI_TEX_COORD_WORDS;
+	w[1] = unit;
+	*(GLfloat *) &w[2] = s;
+	*(GLfloat *) &w[3] = t;
+}
 
 void mgl_GLMultiTexCoord2fARB(GLcontext context, GLenum unit, GLfloat s, GLfloat t) {
-	if (mgl_enum(unit) == QGL_TEXTURE0_ARB) _glTexCoord2f(s, t);
+	multiTexCoord(mgl_enum(unit), s, t);
 }
 
 void mgl_GLMultiTexCoord2fvARB(GLcontext context, GLenum unit, GLfloat *v) {
-	if (mgl_enum(unit) == QGL_TEXTURE0_ARB) _glTexCoord2f(v[0], v[1]);
+	multiTexCoord(mgl_enum(unit), v[0], v[1]);
 }
 
 /* --- Matrices -------------------------------------------------------------- */
@@ -279,7 +295,7 @@ void mgl_GLGetIntegerv(GLcontext context, GLenum pname, GLint *params) {
 	int i, count = getCount(gl);
 	for (i = 0; i < 16; ++i) values[i] = 0;
 	if (gl == QGL_MAX_TEXTURE_UNITS_ARB) {
-		*params = 1;
+		*params = QT_MGL_TEXTURE_UNITS;
 		return;
 	}
 	_glGetIntegerv(gl, values);
@@ -319,7 +335,9 @@ void mgl_GLGetPointerv(GLcontext context, GLenum pname, GLvoid **params) {
 static const char vendor[] = "QuarkTex";
 static const char renderer[] = "QuarkTex minigl.library (host OpenGL)";
 static const char version[] = "1.2";
-static const char extensions[] = "GL_EXT_compiled_vertex_array";
+/* MiniGL's name for GL_ARB_multitexture, which applications looking for
+ * "GL_ARB_multitexture" in the string find as well. */
+static const char extensions[] = "GL_MGL_ARB_multitexture GL_EXT_compiled_vertex_array";
 
 const GLubyte *mgl_GLGetString(GLcontext context, GLenum name) {
 	switch (mgl_enum(name)) {
@@ -393,7 +411,10 @@ typedef struct {
 	const UBYTE *pointer;
 } Array;
 
-static Array vertices, colors, texCoords;
+/* Texture coordinates per unit; glTexCoordPointer and the client state of
+ * GL_TEXTURE_COORD_ARRAY go to the unit glClientActiveTextureARB chose. */
+static Array vertices, colors, texCoords[QT_MGL_TEXTURE_UNITS];
+static int clientUnit;
 
 static int typeSize(unsigned int type) {
 	switch (type) {
@@ -412,7 +433,10 @@ static void setArray(Array *a, int size, GLenum type, GLsizei stride, const GLvo
 }
 
 void mgl_resetArrays(void) {
-	vertices.enabled = colors.enabled = texCoords.enabled = FALSE;
+	int u;
+	vertices.enabled = colors.enabled = FALSE;
+	for (u = 0; u < QT_MGL_TEXTURE_UNITS; ++u) texCoords[u].enabled = FALSE;
+	clientUnit = 0;
 }
 
 void mgl_GLVertexPointer(GLcontext context, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer) {
@@ -424,14 +448,19 @@ void mgl_GLColorPointer(GLcontext context, GLint size, GLenum type, GLsizei stri
 }
 
 void mgl_GLTexCoordPointer(GLcontext context, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer) {
-	setArray(&texCoords, size, type, stride, pointer);
+	setArray(&texCoords[clientUnit], size, type, stride, pointer);
+}
+
+void mgl_GLClientActiveTextureARB(GLcontext context, GLenum unit) {
+	unsigned int u = mgl_enum(unit) - QGL_TEXTURE0_ARB;
+	if (u < QT_MGL_TEXTURE_UNITS) clientUnit = u;
 }
 
 static Array *clientArray(GLenum cap) {
 	switch (mgl_enum(cap)) {
 	case QGL_VERTEX_ARRAY: return &vertices;
 	case QGL_COLOR_ARRAY: return &colors;
-	case QGL_TEXTURE_COORD_ARRAY: return &texCoords;
+	case QGL_TEXTURE_COORD_ARRAY: return &texCoords[clientUnit];
 	}
 	return NULL;
 }
@@ -468,11 +497,13 @@ static void element(int i) {
 		else if (colors.size == 3) _glColor3f(component(&colors, i, 0), component(&colors, i, 1), component(&colors, i, 2));
 		else _glColor4f(component(&colors, i, 0), component(&colors, i, 1), component(&colors, i, 2), component(&colors, i, 3));
 	}
-	if (texCoords.enabled && texCoords.pointer) {
-		if (texCoords.size == 4) {
-			_glTexCoord4f(component(&texCoords, i, 0), component(&texCoords, i, 1), component(&texCoords, i, 2), component(&texCoords, i, 3));
-		}
-		else _glTexCoord2f(component(&texCoords, i, 0), component(&texCoords, i, 1));
+	if (texCoords[0].enabled && texCoords[0].pointer) {
+		const Array *t = &texCoords[0];
+		if (t->size == 4) _glTexCoord4f(component(t, i, 0), component(t, i, 1), component(t, i, 2), component(t, i, 3));
+		else _glTexCoord2f(component(t, i, 0), component(t, i, 1));
+	}
+	if (texCoords[1].enabled && texCoords[1].pointer) {
+		multiTexCoord(QGL_TEXTURE1_ARB, component(&texCoords[1], i, 0), component(&texCoords[1], i, 1));
 	}
 	if (vertices.enabled && vertices.pointer) {
 		if (vertices.size == 2) _glVertex2f(component(&vertices, i, 0), component(&vertices, i, 1));
@@ -509,7 +540,8 @@ static void drawHost(GLenum mode, GLint first, GLsizei count, unsigned int index
 	w[3] = count;
 	w[4] = indexType;
 	w[5] = (ULONG) indices;
-	arrayWords(arrayWords(arrayWords(w + 6, &vertices), &colors), &texCoords);
+	w = arrayWords(arrayWords(w + 6, &vertices), &colors);
+	arrayWords(arrayWords(w, &texCoords[0]), &texCoords[1]);
 	qt_flush();
 }
 
