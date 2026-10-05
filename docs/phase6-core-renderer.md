@@ -195,6 +195,14 @@ directory volumes do not find files whose full Windows path is longer than
 
 Tried with MiniGL Classic 27.0 (a minigl.library on Warp3D):
 
+- Return to Castle Wolfenstein SP (rtcw-sp 1.0, the PiStorm3D port), started
+  with `+exec amiga.cfg +set s_initsound 0 +map escape1`, winuae64.exe:
+  the level loads and draws as on PiStorm3D: textured walls with lightmaps
+  (blended in a second pass, as multitexture is off), models, HUD; the
+  game's counter shows 59 fps at 640x480. Its texture mode is
+  `GL_LINEAR_MIPMAP_LINEAR`, so without the mipmaps above nothing would be
+  textured.
+
 - OpenLara MiniGL 1.7 (Tomb Raider): the intro video with subtitles and the
   main menu draw. The 3D objects on the menu ring (the passport) look dark
   and untextured; not explained yet.
