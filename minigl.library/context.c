@@ -52,7 +52,10 @@ static void destroy(QtMglContext *c) {
 
 /* The host context for the window; the context becomes the current one. */
 static void *attach(QtMglContext *c) {
-	if (c->fullscreen) c->host = createContext(0, 0, 0, 0, QT_CONTEXT_PLAIN);
+	/* In fullscreen, the screen's size at the top left of the display: the
+	 * display mode can be larger than the screen (JK2 got a 640 x 480 screen
+	 * in a 1024 x 768 mode), and the screen shows at its top left. */
+	if (c->fullscreen) c->host = createContext(0, 0, c->width, c->height, QT_CONTEXT_PLAIN);
 	else c->host = createContext(c->left, c->top, c->width, c->height, QT_CONTEXT_PLAIN);
 	if (!c->host) {
 		destroy(c);

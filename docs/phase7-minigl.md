@@ -1,7 +1,7 @@
 # Phase 7: a QuarkTex minigl.library
 
-Status: in progress (2026-10-05). Stages 1 (analysis) and 2 (skeleton) are
-done: MiniGL's demos library_test and ballonly (the Boing ball) run on it.
+Status: in progress (2026-10-05). Stages 1 (analysis), 2 (skeleton) and 5
+(the games) are done: RTCW, JK2, OpenLara and Hurrican run on it.
 
 ## Why
 
@@ -119,3 +119,24 @@ then the game runs without OpenGL errors.
 The trace (`QUARKTEX_TRACE_FRAME`) also checks OpenGL's error after every
 OpenGL command of the traced frame outside glBegin/glEnd and logs the
 command.
+
+## Stage 5: the games (done)
+
+All with `tests/run-app.ps1`, winuae64.exe with JIT, no OpenGL errors in the
+host log, frame rates by each game's own counter:
+
+| Game | Result | Through MiniGL Classic and Warp3D |
+| --- | --- | --- |
+| RTCW (rtcw-sp) | escape1 draws, 58 fps | the same picture, 59 fps |
+| JK2 (jk2sp) | intro, crawl, cutscene, Kejim in third person, 90 fps | not tried |
+| OpenLara MiniGL 1.7 | intro video, the Caves cutscene and Lara in the level, 49 fps | the menu; its 3D objects dark |
+| Hurrican (classic build) | cracktro with logo and stars, menu, the demo level with all backgrounds | logo, intro pictures and backgrounds missing (phase 6) |
+
+One fix came out of it: in fullscreen the host window was the whole emulator
+display, but JK2 got its 640 x 480 screen in a 1024 x 768 display mode, which
+shows the screen at its top left; the picture was drawn at the bottom left of
+a 1024 x 768 window. The host window now has the screen's size at the top
+left.
+
+Hurrican's missing parts through MiniGL Classic (its vertex arrays, phase 6)
+do not occur here: this library reads the application's arrays itself.
