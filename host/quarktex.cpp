@@ -1,5 +1,5 @@
 // QuarkTex host library. The emulator loads it through uaenative.library
-// (native_code=true) as quarktex-windows-x86.dll or quarktex-windows-x86-64.dll
+// (native_code=true) as quartexng-windows-x86.dll or quartexng-windows-x86-64.dll
 // and the 68k side calls the qt_* functions below.
 //
 // Every Warp3D or agl context the Amiga side creates gets its own child
@@ -27,7 +27,7 @@ extern "C" {
 
 namespace {
 	HINSTANCE instance = 0;
-	int classUsers = 0; // windows of the "QuarkTex" class
+	int classUsers = 0; // windows of the "QuartexNG" class
 
 	// qt_create_context flags, as QT_CONTEXT_CORE in gl/gl.h.
 	const int32_t contextCore = 1;
@@ -79,7 +79,7 @@ namespace {
 	std::ofstream* out;
 
 	void logString(const char* c) {
-		if (!out) out = new std::ofstream("QuarkTexLog.txt");
+		if (!out) out = new std::ofstream("QuartexNGLog.txt");
 		*out << c << std::endl;
 	}
 
@@ -253,7 +253,7 @@ namespace {
 		if (c->deviceContext) ReleaseDC(c->window, c->deviceContext);
 		if (c->window) {
 			DestroyWindow(c->window);
-			if (--classUsers == 0) UnregisterClassA("QuarkTex", instance);
+			if (--classUsers == 0) UnregisterClassA("QuartexNG", instance);
 		}
 		delete c;
 	}
@@ -345,14 +345,14 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 		wc.hInstance = instance;
 		wc.hIcon = LoadIcon(0, IDI_APPLICATION);
 		wc.hCursor = LoadCursor(0, IDC_ARROW);
-		wc.lpszClassName = "QuarkTex";
+		wc.lpszClassName = "QuartexNG";
 		if (!RegisterClassA(&wc)) { logString("Warning: Could not register Window Class"); return 0; }
 	}
 
 	Context* c = new Context();
-	if (!(c->window = CreateWindowExA(0, "QuarkTex", "", WS_CHILD | WS_VISIBLE, left, top, width, height, amigaWindow, 0, 0, 0))) {
+	if (!(c->window = CreateWindowExA(0, "QuartexNG", "", WS_CHILD | WS_VISIBLE, left, top, width, height, amigaWindow, 0, 0, 0))) {
 		logString("Warning: Could not create Window");
-		if (!classUsers) UnregisterClassA("QuarkTex", instance);
+		if (!classUsers) UnregisterClassA("QuartexNG", instance);
 		delete c;
 		return 0;
 	}

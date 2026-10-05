@@ -1,6 +1,6 @@
-# Host side of QuarkTex: the library the emulator loads through
+# Host side of QuartexNG: the library the emulator loads through
 # uaenative.library. The name carries the architecture, as uaenative expects:
-# quarktex-windows-x86.dll (32-bit WinUAE) or quarktex-windows-x86-64.dll.
+# quartexng-windows-x86.dll (32-bit WinUAE) or quartexng-windows-x86-64.dll.
 #
 # Visual Studio 2022:  cmake -S . -B build/host-x64 -A x64     (or -A Win32)
 #                      cmake --build build/host-x64 --config Release
@@ -25,7 +25,7 @@ target_include_directories(quarktex PRIVATE gl)
 target_link_libraries(quarktex PRIVATE OpenGL::GL OpenGL::GLU)
 set_target_properties(quarktex PROPERTIES
 	PREFIX ""
-	OUTPUT_NAME "quarktex-windows-${QT_ARCH}"
+	OUTPUT_NAME "quartexng-windows-${QT_ARCH}"
 	CXX_STANDARD 11
 	CXX_STANDARD_REQUIRED ON)
 

@@ -7,7 +7,7 @@ the original QuarkTex 0.53 libraries ("orig") with the current build ("new").
 Needs ./build.sh and ./build.sh tests to have run first. The tests run in a
 private, portable copy of WinUAE under build/tests/winuae, so the normal WinUAE
 installation is not touched. That copy gets the current host libraries
-(quarktex-windows-*.dll) and, for the 0.53 libraries, the legacy
+(quartexng-windows-*.dll) and, for the 0.53 libraries, the legacy
 QuarkTex.alib; both capture frames. The AmigaOS hard file is mounted
 read-only. Close WinUAE before running.
 
@@ -50,7 +50,7 @@ foreach ($key in 'WinUAEDir', 'Kickstart', 'HardFile') {
 }
 $uaequit = Join-Path $cfg.WinUAEDir 'Amiga Programs\UAEquit'
 foreach ($path in (Join-Path $cfg.WinUAEDir 'winuae.exe'), (Join-Path $cfg.WinUAEDir $Emulator), $cfg.Kickstart, $cfg.HardFile, $uaequit,
-		(Join-Path $root 'build\host-x86\quarktex-windows-x86.dll'), (Join-Path $root 'build\host-x64\quarktex-windows-x86-64.dll'),
+		(Join-Path $root 'build\host-x86\quartexng-windows-x86.dll'), (Join-Path $root 'build\host-x64\quartexng-windows-x86-64.dll'),
 		(Join-Path $root 'build\legacy\QuarkTex.alib'), (Join-Path $root 'build\amiga\Warp3D.library'),
 		(Join-Path $root 'build\tests\amiga')) {
 	if (-not (Test-Path $path)) { throw "Not found: $path (run ./build.sh and ./build.sh tests first?)" }
@@ -69,7 +69,7 @@ $uae = Join-Path $work 'winuae'
 New-Item -ItemType Directory -Force (Join-Path $uae 'alib') | Out-Null
 Copy-Item (Join-Path $cfg.WinUAEDir 'winuae.exe'), (Join-Path $cfg.WinUAEDir $Emulator) $uae -Force
 if (-not (Test-Path (Join-Path $uae 'winuae.ini'))) { New-Item -ItemType File (Join-Path $uae 'winuae.ini') | Out-Null }
-Copy-Item (Join-Path $root 'build\host-x86\quarktex-windows-x86.dll'), (Join-Path $root 'build\host-x64\quarktex-windows-x86-64.dll') $uae -Force
+Copy-Item (Join-Path $root 'build\host-x86\quartexng-windows-x86.dll'), (Join-Path $root 'build\host-x64\quartexng-windows-x86-64.dll') $uae -Force
 Copy-Item (Join-Path $root 'build\legacy\QuarkTex.alib') (Join-Path $uae 'alib') -Force
 
 # Original QuarkTex 0.53 libraries from Aminet.

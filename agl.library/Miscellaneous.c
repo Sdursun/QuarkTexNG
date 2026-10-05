@@ -190,7 +190,7 @@ GLubyte * glGetString(GLenum name __asm("d0")) {
 	case GL_VENDOR:
 		return "Robert Konrad";
 	case GL_RENDERER:
-		return "QuarkTex";
+		return QT_PRODUCT;
 	case GL_VERSION:
 		return "1.1.0.5";
 	case GL_EXTENSIONS:

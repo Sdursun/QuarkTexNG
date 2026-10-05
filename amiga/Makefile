@@ -11,9 +11,13 @@ CPU     = -m68020-60 -m68881
 CFLAGS  = $(CPU) -O2 -fomit-frame-pointer -fcommon -fno-toplevel-reorder \
           -Wall -Wno-unused -Wno-pointer-sign -Wno-unknown-pragmas \
           -Wno-int-conversion -Werror=implicit-function-declaration \
-          -Iamiga/include -include amiga/compat.h
+          -Iamiga/include -include amiga/compat.h -DQT_PRODUCT='"$(PRODUCT)"'
 LDFLAGS = $(CPU) -nostartfiles -nostdlib
 LIBS    = -lgcc
+
+# The product and its version, in the libraries' id strings and in what
+# Warp3D, agl and minigl report as their driver or renderer (QT_PRODUCT).
+PRODUCT  = QuartexNG 1.0 beta
 
 VERSION  = 4
 REVISION = 2
@@ -46,6 +50,9 @@ ifneq ($(wildcard $(MINIGL_SDK)/libraries/minigl_dispatch.h),)
 all: $(BUILD)/minigl.library
 endif
 
+# PRODUCT, the versions and the flags are set here: a change rebuilds all.
+$(WARP3D_OBJ) $(AGL_OBJ) $(MINIGL_OBJ): amiga/Makefile
+
 $(BUILD)/Warp3D.library: $(WARP3D_OBJ)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
@@ -60,7 +67,7 @@ $(WARP3D_DIR)/functable.h: Warp3D.library/Warp3D.fd amiga/fd2functable.py | $(WA
 $(WARP3D_DIR)/libheader.o: amiga/libheader.c $(WARP3D_DIR)/functable.h
 	$(CC) $(CFLAGS) -I$(WARP3D_DIR) -DLIB_NAME='"Warp3D.library"' \
 		-DLIB_VERSION=$(VERSION) -DLIB_REVISION=$(REVISION) \
-		-DLIB_IDSTRING='"Warp3D.library $(VERSION).$(REVISION) ($(DATE)) QuarkTex"' \
+		-DLIB_IDSTRING='"Warp3D.library $(VERSION).$(REVISION) ($(DATE)) $(PRODUCT)"' \
 		-DLIB_INIT=INIT_0_Warp3D -DLIB_EXIT=EXIT_0_Warp3D -c -o $@ $<
 
 $(WARP3D_DIR)/%.o: Warp3D.library/%.c Warp3D.library/w3d.h Warp3D.library/Warp3D.h $(GL_HEADERS) | $(WARP3D_DIR)
@@ -80,7 +87,7 @@ $(AGL_DIR)/functable.h: agl.library/agl_lib.fd amiga/fd2functable.py | $(AGL_DIR
 $(AGL_DIR)/libheader.o: amiga/libheader.c $(AGL_DIR)/functable.h
 	$(CC) $(CFLAGS) -I$(AGL_DIR) -DLIB_NAME='"agl.library"' \
 		-DLIB_VERSION=$(VERSION) -DLIB_REVISION=$(REVISION) \
-		-DLIB_IDSTRING='"agl.library $(VERSION).$(REVISION) ($(DATE)) QuarkTex"' \
+		-DLIB_IDSTRING='"agl.library $(VERSION).$(REVISION) ($(DATE)) $(PRODUCT)"' \
 		-DLIB_INIT=INIT_0_StormMESA -DLIB_EXIT=EXIT_0_StormMESA -c -o $@ $<
 
 $(AGL_DIR)/%.o: agl.library/%.c $(GL_HEADERS) | $(AGL_DIR)
@@ -110,7 +117,7 @@ $(MINIGL_DIR)/functable.h: minigl.library/minigl.fd amiga/fd2functable.py | $(MI
 $(MINIGL_DIR)/libheader.o: amiga/libheader.c $(MINIGL_DIR)/functable.h
 	$(CC) $(CFLAGS) -I$(MINIGL_DIR) -DLIB_NAME='"minigl.library"' \
 		-DLIB_VERSION=27 -DLIB_REVISION=0 \
-		-DLIB_IDSTRING='"minigl.library 27.0 ($(DATE)) QuarkTex, host OpenGL"' \
+		-DLIB_IDSTRING='"minigl.library 27.0 ($(DATE)) $(PRODUCT)"' \
 		-DLIB_INIT=INIT_0_MiniGL -DLIB_EXIT=EXIT_0_MiniGL -c -o $@ $<
 
 $(MINIGL_DIR)/%.o: minigl.library/%.c minigl.library/mgl.h $(MINIGL_DIR)/qgl.auto.h | $(MINIGL_DIR)
