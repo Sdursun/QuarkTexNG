@@ -44,7 +44,7 @@ static ULONG support(ULONG query) {
 	case W3D_Q_DRAW_POINT_X: case W3D_Q_DRAW_LINE_X:
 	case W3D_Q_DRAW_POINT_FX: case W3D_Q_DRAW_LINE_FX:
 	case W3D_Q_DRAW_POINT_TEX: case W3D_Q_DRAW_LINE_TEX:
-	case W3D_Q_TEXMAPPING: case W3D_Q_BILINEARFILTER:
+	case W3D_Q_TEXMAPPING: case W3D_Q_BILINEARFILTER: case W3D_Q_MIPMAPPING: case W3D_Q_MMFILTER:
 	case W3D_Q_LINEAR_REPEAT: case W3D_Q_LINEAR_CLAMP:
 	case W3D_Q_PERSPECTIVE: case W3D_Q_PERSP_REPEAT: case W3D_Q_PERSP_CLAMP:
 	case W3D_Q_ENV_REPLACE: case W3D_Q_ENV_DECAL: case W3D_Q_ENV_MODULATE: case W3D_Q_ENV_BLEND:
@@ -63,7 +63,7 @@ static ULONG support(ULONG query) {
 	case W3D_Q_INTERPOLATED: /* drawn as exp2 fog */
 		return W3D_PARTIALLY_SUPPORTED;
 
-	/* No mipmaps (a mipmap filter turns texturing off), no specular colour,
+	/* No specular colour,
 	 * stippling, antialiasing, dithering, volume textures or culling. */
 	default:
 		return W3D_NOT_SUPPORTED;

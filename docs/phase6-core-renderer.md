@@ -156,17 +156,51 @@ width and height (`W3D_QueryDriver` even to those), so applications turned
 on what QuarkTex does not do. `W3D_Query` and `W3D_QueryDriver` now share
 one table (Hardware.c `support`) of what the renderer does:
 
-- not supported: mipmapping and mipmap filters (no mipmaps are made, and a
-  mipmap filter turns texturing off), specular highlights (the vertices'
-  specular colour is not used), line and polygon stippling, antialiasing,
-  dithering, volume textures, backface culling, and unknown queries;
+- not supported: specular highlights (the vertices' specular colour is not
+  used), line and polygon stippling, antialiasing, dithering, volume
+  textures, backface culling, and unknown queries;
 - partially: `W3D_Q_INTERPOLATED` (drawn as exp2 fog);
 - 2048 for the maximum texture sizes, also the perspective ones (0.53
   answered 3 there);
 - fully supported: the rest.
 
 Test: t18_query (new); against the snapshot before (`query0`) only it
-changed.
+changed. (Mipmapping was answered "not supported" here until the mipmaps
+below; since then it is supported.)
+
+## Mipmaps
+
+Warp3D makes the mipmaps of a texture that the application does not supply.
+QuarkTex made none, so a mipmap filter (`W3D_SetFilter(..., W3D_*_MIP_*)`)
+left the OpenGL texture incomplete and drawing went on without it. The
+emulation now makes them with `glGenerateMipmap` when such a texture is
+drawn and its image changed since (`ffp.cpp texturing`). It also sets
+`GL_TEXTURE_MAX_LEVEL` to the last level: with the default of 1000 the Intel
+driver took the generated chain as incomplete, and the textures came out
+black. `W3D_Q_MIPMAPPING` and `W3D_Q_MMFILTER` are now supported.
+
+Test: t20_mipmap (new): 1-texel stripes drawn at their size and shrunk 4 and
+8 times; the shrunk quads are an even purple. Against the snapshot before
+(`mip0`, white quads) only t20 and the two squares of t18 changed.
+
+## Real software (tests/run-app.ps1)
+
+`tests/run-app.ps1` runs an Amiga program from a directory mounted as a
+volume in the test WinUAE (68060, JIT, 512 MB), with the current libraries
+and extra ones (such as a minigl.library) in LIBS:, and saves every n-th
+frame (`QUARKTEX_CAPTURE_EVERY`), its output and free memory before and
+after. Give it a copy: programs write their settings and logs. WinUAE's
+directory volumes do not find files whose full Windows path is longer than
+185 characters, so keep that copy's path short.
+
+Tried with MiniGL Classic 27.0 (a minigl.library on Warp3D):
+
+- OpenLara MiniGL 1.7 (Tomb Raider): the intro video with subtitles and the
+  main menu draw. The 3D objects on the menu ring (the passport) look dark
+  and untextured; not explained yet.
+- Hurrican (classic MiniGL build): the cracktro runs; its logo is not drawn.
+  In the first runs the game stopped after it, because its copy's paths
+  were too long (above); not retried since.
 
 ## Leaks
 

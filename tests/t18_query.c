@@ -5,8 +5,8 @@
  * maximum texture sizes), grey for anything else. A square's right half
  * shows W3D_QueryDriver, which must agree. The answers are logged.
  * (QuarkTex 0.53 answered W3D_FULLY_SUPPORTED to every query but the maximum
- * texture width and height, also for mipmapping, specular highlights,
- * stippling and antialiasing, which it does not do, and for the maximum
+ * texture width and height, also for specular highlights, stippling and
+ * antialiasing, which it does not do, and for the maximum
  * perspective texture sizes, which are numbers.)
  */
 #include <stdio.h>

@@ -97,6 +97,7 @@ namespace {
 		ffp::Context* ffp; // Warp3D (OpenGL 3.3 core) only
 		std::string label; // frame capture
 		int frames;
+		unsigned long swaps;
 		Profile profile;
 	};
 
@@ -141,6 +142,7 @@ namespace {
 // and so on.
 namespace {
 	std::string captureDir;
+	unsigned long captureEvery = 1; // QUARKTEX_CAPTURE_EVERY: only every nth swap
 	int captureContexts = 0;
 
 	std::string captureLabel() {
@@ -382,6 +384,8 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	if (!captureDir.empty()) {
 		++captureContexts;
 		c->label = captureLabel();
+		const char* every = getenv("QUARKTEX_CAPTURE_EVERY");
+		captureEvery = every && atol(every) > 0 ? static_cast<unsigned long>(atol(every)) : 1;
 	}
 	c->profile.on = getenv("QUARKTEX_PROFILE") != 0;
 	c->id = nextId++;
@@ -402,7 +406,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 	Context* c = find(uni->d1);
 	if (!c || !activate(c)) return 0;
 	ffp::flush();
-	if (!captureDir.empty()) captureFrame(c);
+	if (!captureDir.empty() && c->swaps++ % captureEvery == 0) captureFrame(c);
 	SwapBuffers(c->deviceContext);
 
 	GLenum code = glGetError();

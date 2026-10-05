@@ -14,6 +14,7 @@ typedef ptrdiff_t GLsizeiptr;
 
 #define GL_CLAMP_TO_EDGE 0x812F
 #define GL_CLAMP_TO_BORDER 0x812D
+#define GL_TEXTURE_MAX_LEVEL 0x813D
 #define GL_BGR 0x80E0
 #define GL_BGRA 0x80E1
 #define GL_RG 0x8227
@@ -65,7 +66,8 @@ typedef ptrdiff_t GLsizeiptr;
 	F(void, BufferData, (GLenum target, GLsizeiptr size, const void* data, GLenum usage)) \
 	F(void, DeleteBuffers, (GLsizei n, const GLuint* buffers)) \
 	F(void, VertexAttribPointer, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer)) \
-	F(void, EnableVertexAttribArray, (GLuint index))
+	F(void, EnableVertexAttribArray, (GLuint index)) \
+	F(void, GenerateMipmap, (GLenum target))
 
 namespace gl3 {
 #define QT_GL3_DECLARE(result, name, parameters) extern result (APIENTRY* name) parameters;

@@ -128,7 +128,8 @@ namespace {
 	// GL_CLAMP never reaches the border there.
 	struct TextureInfo {
 		bool image;
-		bool mipmapFilter; // never complete: QuarkTex makes no mipmaps
+		bool mipmapFilter;
+		bool mipmapsMade; // for the current image (see texturing)
 		bool clampS, clampT;
 		bool magLinear;
 		GLsizei width, height;
@@ -209,11 +210,23 @@ namespace {
 		return 0;
 	}
 
-	// The bound texture if texturing is on and it is complete, else 0.
+	// The bound texture if texturing is on and it has an image, else 0. With a
+	// mipmap filter its mipmaps are made from the image here, when it is drawn,
+	// as Warp3D makes the mipmaps an application does not supply. (OpenGL 1.1
+	// would take the texture as incomplete and draw without it.) The last
+	// level is set explicitly: with the default of 1000 the Intel driver took
+	// the generated chain as incomplete.
 	const TextureInfo* texturing() {
 		if (!ctx->state.texture2D || !ctx->bound) return 0;
-		std::map<GLuint, TextureInfo>::const_iterator info = ctx->textures.find(ctx->bound);
-		if (info == ctx->textures.end() || !info->second.image || info->second.mipmapFilter) return 0;
+		std::map<GLuint, TextureInfo>::iterator info = ctx->textures.find(ctx->bound);
+		if (info == ctx->textures.end() || !info->second.image) return 0;
+		if (info->second.mipmapFilter && !info->second.mipmapsMade) {
+			GLint last = 0;
+			for (GLsizei size = info->second.width > info->second.height ? info->second.width : info->second.height; size > 1; size /= 2) ++last;
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, last);
+			gl3::GenerateMipmap(GL_TEXTURE_2D);
+			info->second.mipmapsMade = true;
+		}
 		return &info->second;
 	}
 
@@ -570,7 +583,7 @@ namespace ffp {
 		glGenTextures(n, names);
 		for (GLsizei i = 0; i < n; ++i) {
 			// GL_NEAREST_MIPMAP_LINEAR, GL_REPEAT, GL_LINEAR
-			TextureInfo info = {false, true, false, false, true, 0, 0};
+			TextureInfo info = {false, true, false, false, false, true, 0, 0};
 			ctx->textures[names[i]] = info;
 		}
 	}
@@ -624,6 +637,7 @@ namespace ffp {
 		if (target == GL_TEXTURE_2D && level == 0 && ctx->textures.count(ctx->bound)) {
 			TextureInfo& info = ctx->textures[ctx->bound];
 			info.image = width > 0 && height > 0;
+			info.mipmapsMade = false;
 			info.width = width;
 			info.height = height;
 			ctx->dirty = true;
@@ -637,6 +651,7 @@ namespace ffp {
 		GLint internalFormat, swizzle[4];
 		legacyFormat(format, upload, internalFormat, swizzle);
 		glTexSubImage2D(target, level, x, y, width, height, upload, type, pixels);
+		if (target == GL_TEXTURE_2D && level == 0 && ctx->textures.count(ctx->bound)) ctx->textures[ctx->bound].mipmapsMade = false;
 	}
 
 	void DepthPoints(GLsizei count, const GLfloat* xyz) {
