@@ -105,12 +105,62 @@ static QtMglContext *allocate(void) {
 	return (QtMglContext *) AllocVec(sizeof(QtMglContext), MEMF_ANY | MEMF_CLEAR);
 }
 
+/* Appends n in decimal (hex: in hexadecimal) to the text at *p. */
+static void appendNumber(char **p, ULONG n, BOOL hex) {
+	char digits[12];
+	int count = 0;
+	do {
+		ULONG digit = hex ? n & 15 : n % 10;
+		digits[count++] = (char) (digit < 10 ? '0' + digit : 'A' + digit - 10);
+		n = hex ? n >> 4 : n / 10;
+	} while (n);
+	while (count) *(*p)++ = digits[--count];
+}
+
+static void appendText(char **p, const char *text) {
+	while (*text) *(*p)++ = *text++;
+}
+
+/* Logs the screen opened and the display mode it is in (their sizes can
+ * differ: then only part of the screen shows). */
+static void logScreen(int width, int height, ULONG mode) {
+	struct DimensionInfo dims;
+	char line[96], *p = line;
+	appendText(&p, "minigl.library: screen ");
+	appendNumber(&p, (ULONG) width, FALSE);
+	appendText(&p, "x");
+	appendNumber(&p, (ULONG) height, FALSE);
+	appendText(&p, " in mode 0x");
+	appendNumber(&p, mode, TRUE);
+	if (GetDisplayInfoData(NULL, (UBYTE *) &dims, sizeof(dims), DTAG_DIMS, mode)) {
+		appendText(&p, " (");
+		appendNumber(&p, (ULONG) (dims.Nominal.MaxX - dims.Nominal.MinX + 1), FALSE);
+		appendText(&p, "x");
+		appendNumber(&p, (ULONG) (dims.Nominal.MaxY - dims.Nominal.MinY + 1), FALSE);
+		appendText(&p, ")");
+	}
+	*p = 0;
+	logString(line);
+}
+
 /* A screen of width x height in the mode (INVALID_ID: the best one for that
  * size and the chosen depth) and a backdrop window on it for the input. */
 static void *openScreen(QtMglContext *c, ULONG mode, int width, int height) {
 	int depth = pixelDepth > 16 ? 24 : pixelDepth > 8 ? 16 : 8;
 	if (mode == INVALID_ID) {
-		mode = BestModeID(BIDTAG_NominalWidth, width, BIDTAG_NominalHeight, height, BIDTAG_Depth, depth, TAG_DONE);
+		/* Picasso96 picks the RTG mode of that size; graphics.library's
+		 * BestModeID gave RTCW's 1024 x 768 screen a 640 x 480 mode (also
+		 * with the Desired tags), of which only the top left showed. It
+		 * stays for systems without Picasso96. */
+		mode = INVALID_ID;
+		if (P96Base) {
+			mode = p96BestModeIDTags(P96BIDTAG_NominalWidth, width, P96BIDTAG_NominalHeight, height,
+				P96BIDTAG_Depth, depth, TAG_DONE);
+		}
+		if (mode == INVALID_ID) {
+			mode = BestModeID(BIDTAG_DesiredWidth, width, BIDTAG_DesiredHeight, height,
+				BIDTAG_NominalWidth, width, BIDTAG_NominalHeight, height, BIDTAG_Depth, depth, TAG_DONE);
+		}
 		if (mode == INVALID_ID) {
 			destroy(c);
 			return NULL;
@@ -122,6 +172,7 @@ static void *openScreen(QtMglContext *c, ULONG mode, int width, int height) {
 		destroy(c);
 		return NULL;
 	}
+	logScreen(width, height, mode);
 	c->window = OpenWindowTags(NULL, WA_CustomScreen, (ULONG) c->screen, WA_Left, 0, WA_Top, 0,
 		WA_Width, width, WA_Height, height, WA_Backdrop, TRUE, WA_Borderless, TRUE, WA_Activate, TRUE,
 		WA_RMBTrap, TRUE, WA_ReportMouse, TRUE, WA_IDCMP, QT_IDCMP, TAG_DONE);

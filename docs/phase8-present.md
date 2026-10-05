@@ -90,3 +90,19 @@ the 68k.
   in exclusive fullscreen show the games.
 - A minigl.library of protocol 8 with this host gets no context (and the
   other way round): the libraries and DLLs go together.
+
+## Screen modes
+
+RTCW started without arguments (`r_mode 6`, `r_fullscreen 1`: a 1024 x 768
+screen) showed only the top left of its menu. minigl.library picked the
+display mode with graphics.library's `BestModeID`, which gave the 1024 x 768
+screen a 640 x 480 RTG mode, with the size in the Nominal tags (they only
+give the aspect ratio) and with the Desired tags as well, although a
+1024 x 768 16-bit mode was there. It now asks Picasso96
+(`p96BestModeIDTags`) and keeps `BestModeID` for systems without it: RTCW
+gets 1024 x 768, JK2 640 x 480 (it had a 1024 x 768 mode for its 640 x 480
+screen), m01 320 x 240. The host log names the screen and its mode
+(`minigl.library: screen 1024x768 in mode 0x50051100 (1024x768)`).
+
+`tests/run-app.ps1 -UaeOptions` adds WinUAE configuration lines, for
+example `gfx_width_fullscreen=800` as in a user's configuration.

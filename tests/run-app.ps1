@@ -44,6 +44,9 @@ param(
 	# WinUAE's display mode: 'false' (a window), 'true' (fullscreen) or
 	# 'fullwindow' (a borderless window over the whole screen).
 	[ValidateSet('false', 'true', 'fullwindow')] [string]$Fullscreen = 'false',
+	# More WinUAE configuration lines (for example 'gfx_width_fullscreen=800');
+	# a later line wins over the same key in the template.
+	[string[]]$UaeOptions = @(),
 	[string]$Settings = (Join-Path $PSScriptRoot 'settings.local.psd1')
 )
 
@@ -94,6 +97,7 @@ $template = (Get-Content (Join-Path $PSScriptRoot 'winuae\test.uae.in') -Raw).
 	Replace('gfx_fullscreen_amiga=false', "gfx_fullscreen_amiga=$Fullscreen").
 	Replace('gfx_fullscreen_picasso=false', "gfx_fullscreen_picasso=$Fullscreen")
 $template += "filesystem2=rw,${Volume}:${Volume}:$VolumeDir,-128`n"
+foreach ($option in $UaeOptions) { $template += "$option`n" }
 $config = Join-Path $dir 'app.uae'
 Set-Content -Path $config -Value $template -Encoding ASCII
 
