@@ -155,9 +155,19 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 			} else if (opcode < QT_W3D_FIRST || !qt_w3d_decode(c, result)) return qt_bad_command(c);
 			break;
 		}
-		// Tracing: which OpenGL command an error comes from (opcode = line in
-		// gl/glFuncs.txt), with its first arguments. Not between glBegin (5)
-		// and glEnd (75), where glGetError is an error itself.
+		// Tracing (QUARKTEX_TRACE_FRAME): every OpenGL and minigl command of
+		// the frame (opcode = line in gl/glFuncs.txt, or gl/mglcmd.h) with its
+		// first arguments in hex; Warp3D's are traced in host/w3d.cpp.
+		if (qt_w3d_trace_all && (opcode < QT_W3D_FIRST || opcode >= QT_MGL_FIRST)) {
+			char line[160];
+			int n = snprintf(line, sizeof(line), "GL %X:", opcode);
+			for (uint32_t i = 1; i < c.words && i <= 8 && n > 0 && n < static_cast<int>(sizeof(line)) - 12; ++i)
+				n += snprintf(line + n, sizeof(line) - n, " %X", c.u(i));
+			qt_report(line);
+		}
+		// Which OpenGL command an error comes from, with its first arguments.
+		// Not between glBegin (5) and glEnd (75), where glGetError is an error
+		// itself.
 		static bool insideBegin = false;
 		if (qt_w3d_trace_all && (header >> 16) == 5) insideBegin = true;
 		else if ((header >> 16) == 75) insideBegin = false;

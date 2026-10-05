@@ -19,6 +19,7 @@
 #define QT_GL(name) gl##name
 #define QT_GL13(name) mgl::gl13::name
 #endif
+#include <cstdio>
 #include <vector>
 #include "gldecode.h"
 #include "mglcmd.h"
@@ -147,6 +148,57 @@ namespace mgl {
 		else QT_GL(TexCoordPointer)(size, type, 0, pointer);
 	}
 
+	// Tracing (QUARKTEX_TRACE_FRAME): what a draw gets, for finding out why
+	// something does not show: the arrays, the first vertices as read, the
+	// matrices and the state that decides whether fragments are written.
+	void traceDraw(const Command& c, const Array* arrays, const Converted* converted, const std::vector<uint32_t>& indices) {
+		char line[400];
+		int n = snprintf(line, sizeof(line), "  arrays");
+		for (int k = 0; k < Arrays; ++k)
+			n += snprintf(line + n, sizeof(line) - n, " [%u %u %X %u %X]", arrays[k].enabled ? 1u : 0u, arrays[k].size,
+				arrays[k].type, arrays[k].stride, arrays[k].address);
+		qt_report(line);
+		for (int v = 0; v < 3; ++v) {
+			uint32_t i = indices.empty() ? c.u(2) + v : (static_cast<size_t>(v) < indices.size() ? indices[v] : 0);
+			n = snprintf(line, sizeof(line), "  vertex %u:", i);
+			for (int k = 0; k < Arrays; ++k) {
+				const Converted& a = converted[k];
+				uint32_t size = arrays[k].size;
+				if (!a.floats.empty() && (i + 1) * size <= a.floats.size())
+					for (uint32_t j = 0; j < size; ++j) n += snprintf(line + n, sizeof(line) - n, " %g", a.floats[i * size + j]);
+				else if (!a.bytes.empty() && (i + 1) * size <= a.bytes.size())
+					for (uint32_t j = 0; j < size; ++j) n += snprintf(line + n, sizeof(line) - n, " %u", a.bytes[i * size + j]);
+				n += snprintf(line + n, sizeof(line) - n, " |");
+			}
+			qt_report(line);
+		}
+		const GLenum matrices[2] = {GL_MODELVIEW_MATRIX, GL_PROJECTION_MATRIX};
+		for (int m = 0; m < 2; ++m) {
+			GLfloat f[16];
+			QT_GL(GetFloatv)(matrices[m], f);
+			n = snprintf(line, sizeof(line), m ? "  projection" : "  modelview");
+			for (int j = 0; j < 16; ++j) n += snprintf(line + n, sizeof(line) - n, " %g", f[j]);
+			qt_report(line);
+		}
+		GLint depthFunc = 0, blendSrc = 0, blendDst = 0, alphaFunc = 0, depthMask = 0, colorMask[4] = {0, 0, 0, 0};
+		GLfloat alphaRef = 0, depthRange[2] = {0, 0}, color[4] = {0, 0, 0, 0};
+		QT_GL(GetIntegerv)(GL_DEPTH_FUNC, &depthFunc);
+		QT_GL(GetIntegerv)(GL_BLEND_SRC, &blendSrc);
+		QT_GL(GetIntegerv)(GL_BLEND_DST, &blendDst);
+		QT_GL(GetIntegerv)(GL_ALPHA_TEST_FUNC, &alphaFunc);
+		QT_GL(GetFloatv)(GL_ALPHA_TEST_REF, &alphaRef);
+		QT_GL(GetIntegerv)(GL_DEPTH_WRITEMASK, &depthMask);
+		QT_GL(GetIntegerv)(GL_COLOR_WRITEMASK, colorMask);
+		QT_GL(GetFloatv)(GL_DEPTH_RANGE, depthRange);
+		QT_GL(GetFloatv)(GL_CURRENT_COLOR, color);
+		snprintf(line, sizeof(line), "  state: blend %d (%X %X) alpha test %d (%X %g) depth test %d (%X, mask %d, range %g %g) "
+			"cull %d texture %d colour mask %d%d%d%d current colour %g %g %g %g",
+			QT_GL(IsEnabled)(GL_BLEND), blendSrc, blendDst, QT_GL(IsEnabled)(GL_ALPHA_TEST), alphaFunc, alphaRef,
+			QT_GL(IsEnabled)(GL_DEPTH_TEST), depthFunc, depthMask, depthRange[0], depthRange[1], QT_GL(IsEnabled)(GL_CULL_FACE),
+			QT_GL(IsEnabled)(GL_TEXTURE_2D), colorMask[0], colorMask[1], colorMask[2], colorMask[3], color[0], color[1], color[2], color[3]);
+		qt_report(line);
+	}
+
 	bool draw(const Command& c) {
 		GLenum mode = c.u(1);
 		uint32_t first = c.u(2), count = c.u(3), indexType = c.u(4), indexAddress = c.u(5);
@@ -177,6 +229,7 @@ namespace mgl {
 		bool on[Arrays];
 		for (int k = 0; k < Arrays; ++k) on[k] = arrays[k].enabled && convert(c, arrays[k], elements, converted[k]);
 		if (!on[Vertices]) return true;
+		if (qt_w3d_trace_all) traceDraw(c, arrays, converted, indices);
 		QT_GL(PushClientAttrib)(GL_CLIENT_VERTEX_ARRAY_BIT);
 		for (int k = 0; k < Arrays; ++k) {
 			bool bytes = !converted[k].bytes.empty();
