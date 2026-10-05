@@ -149,6 +149,25 @@ Test: t17_contexts (new): two windows, two Warp3D contexts drawing in turns
 with different blending. Against the snapshot before (`multi0`, where the
 second context could not be created) all other tests are unchanged.
 
+## W3D_Query
+
+0.53 answered `W3D_FULLY_SUPPORTED` to every query but the maximum texture
+width and height (`W3D_QueryDriver` even to those), so applications turned
+on what QuarkTex does not do. `W3D_Query` and `W3D_QueryDriver` now share
+one table (Hardware.c `support`) of what the renderer does:
+
+- not supported: mipmapping and mipmap filters (no mipmaps are made, and a
+  mipmap filter turns texturing off), specular highlights (the vertices'
+  specular colour is not used), line and polygon stippling, antialiasing,
+  dithering, volume textures, backface culling, and unknown queries;
+- partially: `W3D_Q_INTERPOLATED` (drawn as exp2 fog);
+- 2048 for the maximum texture sizes, also the perspective ones (0.53
+  answered 3 there);
+- fully supported: the rest.
+
+Test: t18_query (new); against the snapshot before (`query0`) only it
+changed.
+
 ## Results
 
 All reference tests against the phase 5 snapshot (`run.ps1 -Against fix8`,
@@ -175,5 +194,4 @@ triangles/s.
   (CLUT, R5G6B5, ...). Today CHUNKY textures are converted to RGBA on the
   CPU and the 16-bit formats are uploaded with packed types; both work, so
   this is an optimisation, not a fix.
-- Roadmap item 5, still open: leaks; also `W3D_Query`, which answers
-  "fully supported" to nearly every query.
+- Roadmap item 5, still open: leaks.

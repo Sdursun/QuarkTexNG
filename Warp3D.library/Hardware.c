@@ -27,10 +27,52 @@ ULONG W3D_CheckIdle(__REGA0(W3D_Context *context)) {
 	_glFinish();
 	return W3D_SUCCESS;
 }
+/*
+ * What the host's renderer does (host/w3d.cpp, host/ffp.cpp), for any
+ * destination format. 0.53 answered W3D_FULLY_SUPPORTED to everything but
+ * the maximum texture width and height.
+ */
+static ULONG support(ULONG query) {
+	switch (query) {
+	case W3D_Q_MAXTEXWIDTH:
+	case W3D_Q_MAXTEXHEIGHT:
+	case W3D_Q_MAXTEXWIDTH_P:
+	case W3D_Q_MAXTEXHEIGHT_P:
+		return 2048;
+
+	case W3D_Q_DRAW_POINT: case W3D_Q_DRAW_LINE: case W3D_Q_DRAW_TRIANGLE:
+	case W3D_Q_DRAW_POINT_X: case W3D_Q_DRAW_LINE_X:
+	case W3D_Q_DRAW_POINT_FX: case W3D_Q_DRAW_LINE_FX:
+	case W3D_Q_DRAW_POINT_TEX: case W3D_Q_DRAW_LINE_TEX:
+	case W3D_Q_TEXMAPPING: case W3D_Q_BILINEARFILTER:
+	case W3D_Q_LINEAR_REPEAT: case W3D_Q_LINEAR_CLAMP:
+	case W3D_Q_PERSPECTIVE: case W3D_Q_PERSP_REPEAT: case W3D_Q_PERSP_CLAMP:
+	case W3D_Q_ENV_REPLACE: case W3D_Q_ENV_DECAL: case W3D_Q_ENV_MODULATE: case W3D_Q_ENV_BLEND:
+	case W3D_Q_WRAP_ASYM: case W3D_Q_BLEND_DECAL_FOG: case W3D_Q_CHROMATEST:
+	case W3D_Q_RECTTEXTURES: case W3D_Q_PALETTECONV:
+	case W3D_Q_FLATSHADING: case W3D_Q_GOURAUDSHADING:
+	case W3D_Q_ZBUFFER: case W3D_Q_ZBUFFERUPDATE: case W3D_Q_ZCOMPAREMODES:
+	case W3D_Q_ALPHATEST: case W3D_Q_ALPHATESTMODES:
+	case W3D_Q_BLENDING: case W3D_Q_SRCFACTORS: case W3D_Q_DESTFACTORS: case W3D_Q_ONE_ONE:
+	case W3D_Q_FOGGING: case W3D_Q_LINEAR: case W3D_Q_EXPONENTIAL: case W3D_Q_S_EXPONENTIAL:
+	case W3D_Q_SCISSOR: case W3D_Q_LOGICOP: case W3D_Q_MASKING:
+	case W3D_Q_STENCILBUFFER: case W3D_Q_STENCIL_MASK: case W3D_Q_STENCIL_FUNC:
+	case W3D_Q_STENCIL_SFAIL: case W3D_Q_STENCIL_DPFAIL: case W3D_Q_STENCIL_DPPASS: case W3D_Q_STENCIL_WRMASK:
+		return W3D_FULLY_SUPPORTED;
+
+	case W3D_Q_INTERPOLATED: /* drawn as exp2 fog */
+		return W3D_PARTIALLY_SUPPORTED;
+
+	/* No mipmaps (a mipmap filter turns texturing off), no specular colour,
+	 * stippling, antialiasing, dithering, volume textures or culling. */
+	default:
+		return W3D_NOT_SUPPORTED;
+	}
+}
+
 ULONG W3D_Query(__REGA0(W3D_Context *context), __REGD0(ULONG query), __REGD1(ULONG destfmt)) {
 	LOG;
-	if (query == W3D_Q_MAXTEXWIDTH || query == W3D_Q_MAXTEXHEIGHT) return 2048;
-	return W3D_FULLY_SUPPORTED; /* the stencil buffer and chroma test too, since phase 6 */
+	return support(query);
 }
 ULONG W3D_GetTexFmtInfo(__REGA0(W3D_Context *context), __REGD0(ULONG texfmt), __REGD1(ULONG destfmt)) {
 	LOG;
@@ -50,9 +92,9 @@ W3D_Driver **W3D_GetDrivers(void) {
 	LOG;
 	return drivers;
 }
-ULONG W3D_QueryDriver(__REGA0(W3D_Driver* driver), __REGD0(ULONG hoppla), __REGD1(ULONG destfmt)) {
+ULONG W3D_QueryDriver(__REGA0(W3D_Driver* driver), __REGD0(ULONG query), __REGD1(ULONG destfmt)) {
 	LOG;
-	return W3D_FULLY_SUPPORTED;
+	return support(query);
 }
 ULONG W3D_GetDriverTexFmtInfo(__REGA0(W3D_Driver* driver), __REGD0(ULONG query), __REGD1(ULONG destfmt)) {
 	LOG;
