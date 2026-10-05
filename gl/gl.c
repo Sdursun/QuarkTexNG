@@ -2,6 +2,14 @@
 #include <exec/memory.h>
 #include <proto/exec.h>
 #include <inline/macros.h>
+/* gl.c opens graphics.library and Picasso96 itself, under names of its own,
+ * so that the three libraries' bases do not matter here. */
+#define GfxBase qt_GfxBase
+#define P96Base qt_P96Base
+#include <graphics/rastport.h>
+#include <graphics/clip.h>
+#include <proto/graphics.h>
+#include <proto/picasso96.h>
 
 /*
  * Bridge to the host library (quartexng-windows-x86[-64].dll), reached through
@@ -153,6 +161,8 @@ void glInit(void) {
 	openHost();
 	if (qt_execute) qt_buffer = AllocVec(QT_BUFFER_BYTES, MEMF_ANY);
 	qt_used = 0;
+	qt_GfxBase = (struct qt_GfxBase *) OpenLibrary("graphics.library", 39);
+	qt_P96Base = OpenLibrary("Picasso96API.library", 2);
 	qt_fpu_extended = fpuExtended();
 	if (!qt_fpu_extended) {
 		logString("Warning: the emulated FPU computes with 64 bits, not the 68k's 80. Games compute wrong values "
@@ -168,6 +178,10 @@ void glExit(void) {
 	qt_buffer = NULL;
 	qt_host = qt_execute = qt_create = qt_move = qt_free = qt_swap = qt_log = qt_finish = 0;
 	qt_UniBase = NULL;
+	if (qt_P96Base) CloseLibrary(qt_P96Base);
+	if (qt_GfxBase) CloseLibrary((struct Library *) qt_GfxBase);
+	qt_P96Base = NULL;
+	qt_GfxBase = NULL;
 }
 
 ULONG createContext(int left, int top, int width, int height, int flags) {
@@ -198,6 +212,42 @@ void freeContext(void) {
 void swapBuffersTo(const QtTarget *target) {
 	qt_flush();
 	hostCall(qt_swap, qt_context, 0, 0, 0, 0, (ULONG) target);
+}
+
+/* --- Presenting into Amiga display memory (QT_CONTEXT_OFFSCREEN) --------- */
+
+struct qt_GfxBase *qt_GfxBase;
+struct Library *qt_P96Base;
+
+int presentable(struct BitMap *bitmap) {
+	ULONG format;
+	if (!qt_P96Base || !bitmap || !p96GetBitMapAttr(bitmap, P96BMA_ISP96)) return 0;
+	format = p96GetBitMapAttr(bitmap, P96BMA_RGBFORMAT);
+	return format >= RGBFB_R8G8B8 && format <= RGBFB_B5G5R5PC;
+}
+
+void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height, int wait) {
+	struct RenderInfo info;
+	QtTarget target;
+	LONG lock;
+	if (layer) LockLayerRom(layer);
+	lock = p96LockBitMap(bitmap, (UBYTE *) &info, sizeof(info));
+	if (lock) {
+		target.address = (ULONG) info.Memory;
+		target.bytesPerRow = (ULONG) info.BytesPerRow;
+		target.format = (ULONG) info.RGBFormat;
+		target.bitmapWidth = p96GetBitMapAttr(bitmap, P96BMA_WIDTH);
+		target.bitmapHeight = p96GetBitMapAttr(bitmap, P96BMA_HEIGHT);
+		target.left = left;
+		target.top = top;
+		target.width = width;
+		target.height = height;
+		swapBuffersTo(&target);
+		if (wait) finishFrame();
+		p96UnlockBitMap(bitmap, lock);
+	}
+	else swapBuffersTo(NULL);
+	if (layer) UnlockLayerRom(layer);
 }
 
 void swapBuffers(void) {

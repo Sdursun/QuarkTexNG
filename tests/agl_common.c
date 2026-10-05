@@ -47,6 +47,7 @@ int main(void) {
 				AmigaMesaSwapBuffers((const void *) context);
 				Delay(5);
 			}
+			report_shown(test_name, window);
 		}
 		else fail("test_setup", 0);
 		test_cleanup();

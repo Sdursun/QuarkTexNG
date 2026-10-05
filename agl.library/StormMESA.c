@@ -46,6 +46,7 @@ struct AglContext {
 	ULONG host;
 	struct Window *window;
 	int fullscreen;
+	int offscreen; /* frames go into the window's Picasso96 bitmap (phase 8) */
 	int left, top, width, height;
 };
 
@@ -61,7 +62,15 @@ struct amigamesa_context *AmigaMesaCreateContext(struct TagItem *tagList __asm("
 	window = (struct Window*) GetTagData(AMA_Window, NULL, tagList);
 	agl->window = window;
 	agl->fullscreen = GetTagData(AMA_Fullscreen, 0, tagList);
-	if (agl->fullscreen) agl->host = createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height, 0);
+	/* On a Picasso96 bitmap the host draws offscreen and swapping writes the
+	 * frame into the window (gl/gl.h), so it shows in WinUAE's fullscreen as
+	 * well; else (planar screens) into a host window over the Amiga one. */
+	agl->offscreen = presentable(window->RPort->BitMap);
+	if (agl->offscreen) {
+		agl->host = createContext(0, 0, window->Width - (window->BorderLeft + window->BorderRight),
+			window->Height - (window->BorderTop + window->BorderBottom), QT_CONTEXT_OFFSCREEN);
+	}
+	else if (agl->fullscreen) agl->host = createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height, 0);
 	else agl->host = createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
 			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom), 0);
 	if (!agl->host) {
@@ -142,7 +151,8 @@ void AmigaMesaSwapBuffers(struct amigamesa_context *amesa __asm("a0")) {
 		agl->height = window->Height - (window->BorderTop + window->BorderBottom);
 		moveWindow(agl->left, agl->top, agl->width, agl->height);
 	}
-	swapBuffers();
+	if (agl->offscreen) presentInto(window->RPort->BitMap, window->WLayer, agl->left, agl->top, agl->width, agl->height, 1);
+	else swapBuffers();
 }
 void AmigaMesaSetOneColor(struct amigamesa_context *c __asm("a0"), int index __asm("d0"), float r __asm("fp0"), float g __asm("fp1"), float b __asm("fp2")) {LOG}
 void AmigaMesaSetRast(struct amigamesa_context *c __asm("a0"), struct TagItem* tagList __asm("a1")) {LOG}

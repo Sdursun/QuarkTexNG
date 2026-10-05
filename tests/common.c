@@ -76,6 +76,7 @@ int main(void) {
 				ClipBlit(window->RPort, 0, 0, window->RPort, 0, 0, 1, 1, 0xC0);
 				Delay(5);
 			}
+			report_shown(test_name, window);
 		}
 		else fail("test_setup", 0);
 		test_cleanup();

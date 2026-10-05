@@ -30,6 +30,16 @@ void swapBuffersTo(const QtTarget *target);
  * between the next frame's commands; finishFrame has it written now (before
  * waiting for input, when no commands would follow). */
 void finishFrame(void);
+/* Whether the host can write frames into the bitmap: Picasso96's, of a format
+ * RGBFB_R8G8B8 to RGBFB_B5G5R5PC (host/present.h). */
+struct BitMap;
+struct Layer;
+int presentable(struct BitMap *bitmap);
+/* Has the host write the frame into the rectangle of the bitmap, which it
+ * locks, and the layer (if any) drawing there. wait: it is written before
+ * presentInto returns (else as soon as the GPU has it, see finishFrame), for
+ * applications that may stop drawing after any frame (agl, Warp3D). */
+void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height, int wait);
 void logString(char *c);
 extern int qt_fpu_extended; /* as in gl/gl.h */
 ULONG *qt_reserve(ULONG words);

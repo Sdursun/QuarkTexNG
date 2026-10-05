@@ -66,15 +66,6 @@ static struct BitMap *targetBitMap(QtMglContext *c) {
 	return c->window ? c->window->RPort->BitMap : c->bitmap;
 }
 
-/* Whether the host can write frames into the bitmap: Picasso96's, in one of
- * the formats RGBFB_R8G8B8 to RGBFB_B5G5R5PC (host/present.h). */
-static BOOL presentable(struct BitMap *bitmap) {
-	ULONG format;
-	if (!P96Base || !bitmap || !p96GetBitMapAttr(bitmap, P96BMA_ISP96)) return FALSE;
-	format = p96GetBitMapAttr(bitmap, P96BMA_RGBFORMAT);
-	return format >= RGBFB_R8G8B8 && format <= RGBFB_B5G5R5PC;
-}
-
 /* The host context; the context becomes the current one. */
 static void *attach(QtMglContext *c) {
 	c->offscreen = presentable(targetBitMap(c));
@@ -274,27 +265,8 @@ void mgl_MGLDeleteContext(GLcontext context) {
 /* Writes the frame into the bitmap, locked, over the window's inner area
  * (the window's layer locked as well, so nothing draws there meanwhile). */
 static void presentFrame(QtMglContext *c) {
-	struct BitMap *bitmap = targetBitMap(c);
-	struct RenderInfo info;
-	QtTarget target;
-	LONG lock;
-	if (c->window) LockLayerRom(c->window->WLayer);
-	lock = p96LockBitMap(bitmap, (UBYTE *) &info, sizeof(info));
-	if (lock) {
-		target.address = (ULONG) info.Memory;
-		target.bytesPerRow = (ULONG) info.BytesPerRow;
-		target.format = (ULONG) info.RGBFormat;
-		target.bitmapWidth = p96GetBitMapAttr(bitmap, P96BMA_WIDTH);
-		target.bitmapHeight = p96GetBitMapAttr(bitmap, P96BMA_HEIGHT);
-		target.left = c->window ? c->left : 0;
-		target.top = c->window ? c->top : 0;
-		target.width = c->width;
-		target.height = c->height;
-		swapBuffersTo(&target);
-		p96UnlockBitMap(bitmap, lock);
-	}
-	else swapBuffersTo(NULL);
-	if (c->window) UnlockLayerRom(c->window->WLayer);
+	if (c->window) presentInto(targetBitMap(c), c->window->WLayer, c->left, c->top, c->width, c->height, 0);
+	else presentInto(c->bitmap, NULL, 0, 0, c->width, c->height, 0);
 }
 
 /* glFinish completes the presentation too: an offscreen frame is in display
