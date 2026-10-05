@@ -165,3 +165,45 @@ memory, converts them from big-endian and draws them with OpenGL's own vertex
 arrays. The call is synchronous, as the application may change its arrays as
 soon as it returns. glArrayElement, called between glBegin and glEnd, still
 goes through the 68k.
+
+## Stage 3: the rest of the table (done)
+
+No stub is left in the dispatch table.
+
+- **GL_ARB_multitexture**, two units. glActiveTextureARB and
+  glMultiTexCoord2fARB are host commands (`QT_MGL_ACTIVE_TEXTURE`,
+  `QT_MGL_MULTI_TEX_COORD`), executed with OpenGL 1.3's functions; texture
+  coordinate arrays are kept per unit and `QT_MGL_DRAW` carries both. The
+  extension string names it as MiniGL does, `GL_MGL_ARB_multitexture`; Quake 3
+  engine games look for `GL_ARB_multitexture` with strstr, find it, and draw
+  lightmaps in the same pass (RTCW 208 and JK2 188 buffers per frame before,
+  172 and 116 after).
+- **Paletted textures** (`GL_EXT_color_table`, `GL_EXT_shared_texture_palette`)
+  as MiniGL has them: one shared palette, set with glColorTable (RGB or RGBA,
+  up to 256 entries), applied when a `GL_COLOR_INDEX` image is loaded. The
+  68k expands the indices into RGBA for glTexImage2D and glTexSubImage2D,
+  with the unpack alignment; changing the palette later does not change
+  loaded textures, as in MiniGL. `GL_SHARED_TEXTURE_PALETTE_EXT` is only
+  kept for glIsEnabled; the host driver has no such state.
+- **glBlendEquation** and **glBlendFuncSeparate**: host commands with the
+  OpenGL 1.2 and 1.4 functions (MiniGL's SDK defines the equations with their
+  OpenGL values).
+- **glInterleavedArrays**: OpenGL 1.1's 14 formats set up the vertex, colour
+  and texture coordinate arrays; normals are skipped, as MiniGL has no normal
+  array.
+- **glEdgeFlagPointer**, **glIndexPointer**: accepted and ignored. Edge flags
+  only matter to polygons drawn as lines or points and colour indices only in
+  colour index mode, which MiniGL does not have.
+
+MiniGL's packed pixel types are translated where OpenGL has them
+(`MGL_UNSIGNED_SHORT_5_6_5`, `MGL_UNSIGNED_SHORT_4_4_4_4`); `GL_MGL_packed_pixels`
+is not named in the extension string, since `MGL_UBYTE_ARGB` has no OpenGL
+counterpart.
+
+`tests/m01_minigl.c` checks all of it through the shared library interface,
+with MiniGL's numbers for the constants, reading its pixels back: palette
+entries with padded index rows, interleaved arrays, a subtracting blend
+equation, two modulated units fed from arrays of each unit. It is built by
+`./build.sh tests` when `MINIGL_SDK` is set and run with `tests/run-app.ps1`;
+it prints PASS or FAIL per check (into `app.log`). The library of stage 4
+fails all of them.

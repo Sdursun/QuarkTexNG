@@ -154,6 +154,16 @@ GLvoid stub_glMultiTexCoord2f(GLenum unit, GLfloat s, GLfloat t) {
 	r << unit << s << t;
 }
 
+GLvoid stub_glBlendEquation(GLenum mode) {
+	Record r("BlendEquation");
+	r << mode;
+}
+
+GLvoid stub_glBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha) {
+	Record r("BlendFuncSeparate");
+	r << srcRGB << dstRGB << srcAlpha << dstAlpha;
+}
+
 // --- Host side ---------------------------------------------------------------
 
 static int reports;
@@ -606,6 +616,16 @@ int main() {
 		records.clear();
 		qt_flush();
 		check(joined() == "ActiveTexture(33985) MultiTexCoord2f(33985,0.5,0.25)", "QT_MGL_ACTIVE_TEXTURE: " + joined());
+	}
+
+	// glBlendEquation and glBlendFuncSeparate.
+	{
+		const ULONG words[] = {(static_cast<ULONG>(QT_MGL_BLEND_EQUATION) << 16) | QT_MGL_BLEND_EQUATION_WORDS, 0x800A,
+			(static_cast<ULONG>(QT_MGL_BLEND_FUNC_SEPARATE) << 16) | QT_MGL_BLEND_FUNC_SEPARATE_WORDS, 0x302, 0x303, 1, 0};
+		memcpy(qt_reserve(sizeof(words) / 4), words, sizeof(words));
+		records.clear();
+		qt_flush();
+		check(joined() == "BlendEquation(32778) BlendFuncSeparate(770,771,1,0)", "QT_MGL_BLEND_*: " + joined());
 	}
 
 	check(reports == 0, std::to_string(reports) + " bad commands reported");

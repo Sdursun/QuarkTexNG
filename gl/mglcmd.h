@@ -29,4 +29,11 @@
 #define QT_MGL_MULTI_TEX_COORD_WORDS 4
 #define QT_MGL_TEXTURE_UNITS 2
 
+/* glBlendEquation: mode. glBlendFuncSeparate: source and destination factor
+ * of the colour, then of alpha. (OpenGL 1.2 and 1.4.) */
+#define QT_MGL_BLEND_EQUATION 0x9003
+#define QT_MGL_BLEND_EQUATION_WORDS 2
+#define QT_MGL_BLEND_FUNC_SEPARATE 0x9004
+#define QT_MGL_BLEND_FUNC_SEPARATE_WORDS 5
+
 #endif

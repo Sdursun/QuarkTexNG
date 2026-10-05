@@ -68,6 +68,20 @@ An agl test is `tests/aNN_name.c` with the same four parts (see
 `agl.library/agl_lib.fd`. It passes floats and doubles in fp0-fp7 as StormMESA
 does, which the `inline/macros.h` LP macros cannot.
 
+## minigl.library checks
+
+`mNN_*` programs check QuarkTex's minigl.library (phase 7). 0.53 had no such
+library, so they are not compared with reference frames: each reads its own
+pixels back and prints PASS or FAIL per check. They are built when MiniGL's
+SDK headers are available (`MINIGL_SDK=<sdk>/dev/include ./build.sh tests`)
+and run like an application:
+
+```powershell
+& ./tests/run-app.ps1 -VolumeDir <directory with m01_minigl> -Volume MTest -Command m01_minigl `
+	-ExtraLibs @((Resolve-Path build\amiga\minigl.library).Path) -Label m01
+Get-Content build/apps/m01/qttest/capture/app.log
+```
+
 ## Known bugs
 
 The bugs of 0.53 known so far are fixed (phase 5, see

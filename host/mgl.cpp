@@ -6,8 +6,9 @@
 // own vertex arrays, so the 68k does not touch them vertex by vertex (it did
 // until phase 7 stage 4, sending them as immediate mode).
 //
-// GL_ARB_multitexture: the OpenGL 1.3 functions are looked up when first
-// used, in the context that executes the command.
+// GL_ARB_multitexture, glBlendEquation and glBlendFuncSeparate: the
+// functions past OpenGL 1.1 are looked up when first used, in the context
+// that executes the command (QT_GL13, whatever their version).
 //
 // The unit test (tests/host) includes this file with QT_TEST defined and
 // QT_GL and QT_GL13 pointing to recording stubs.
@@ -31,23 +32,34 @@ namespace mgl {
 	namespace gl13 {
 		typedef void (APIENTRY* UnitFunction)(GLenum unit);
 		typedef void (APIENTRY* TexCoordFunction)(GLenum unit, GLfloat s, GLfloat t);
-		UnitFunction activeTexture, clientActiveTexture;
+		typedef void (APIENTRY* FactorsFunction)(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);
+		UnitFunction activeTexture, clientActiveTexture, blendEquation;
 		TexCoordFunction multiTexCoord2f;
+		FactorsFunction blendFuncSeparate;
 
-		bool load() {
-			static bool loaded = false;
-			if (!loaded) {
-				loaded = true;
-				activeTexture = reinterpret_cast<UnitFunction>(reinterpret_cast<void*>(wglGetProcAddress("glActiveTexture")));
-				clientActiveTexture = reinterpret_cast<UnitFunction>(reinterpret_cast<void*>(wglGetProcAddress("glClientActiveTexture")));
-				multiTexCoord2f = reinterpret_cast<TexCoordFunction>(reinterpret_cast<void*>(wglGetProcAddress("glMultiTexCoord2f")));
-			}
-			return activeTexture && clientActiveTexture && multiTexCoord2f;
+		template <typename T> T lookUp(const char* name) {
+			return reinterpret_cast<T>(reinterpret_cast<void*>(wglGetProcAddress(name)));
 		}
 
-		void ActiveTexture(GLenum unit) { if (load()) activeTexture(unit); }
-		void ClientActiveTexture(GLenum unit) { if (load()) clientActiveTexture(unit); }
-		void MultiTexCoord2f(GLenum unit, GLfloat s, GLfloat t) { if (load()) multiTexCoord2f(unit, s, t); }
+		void load() {
+			static bool loaded = false;
+			if (loaded) return;
+			loaded = true;
+			activeTexture = lookUp<UnitFunction>("glActiveTexture");
+			clientActiveTexture = lookUp<UnitFunction>("glClientActiveTexture");
+			multiTexCoord2f = lookUp<TexCoordFunction>("glMultiTexCoord2f");
+			blendEquation = lookUp<UnitFunction>("glBlendEquation");
+			blendFuncSeparate = lookUp<FactorsFunction>("glBlendFuncSeparate");
+		}
+
+		void ActiveTexture(GLenum unit) { load(); if (activeTexture) activeTexture(unit); }
+		void ClientActiveTexture(GLenum unit) { load(); if (clientActiveTexture) clientActiveTexture(unit); }
+		void MultiTexCoord2f(GLenum unit, GLfloat s, GLfloat t) { load(); if (multiTexCoord2f) multiTexCoord2f(unit, s, t); }
+		void BlendEquation(GLenum mode) { load(); if (blendEquation) blendEquation(mode); }
+		void BlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha) {
+			load();
+			if (blendFuncSeparate) blendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+		}
 	}
 #endif
 
@@ -198,6 +210,14 @@ bool qt_mgl_decode(const Command& c, int32_t& result) {
 	case QT_MGL_MULTI_TEX_COORD:
 		if (c.words != QT_MGL_MULTI_TEX_COORD_WORDS) return false;
 		if (mgl::validUnit(c.u(1))) QT_GL13(MultiTexCoord2f)(c.u(1), c.f(2), c.f(3));
+		return true;
+	case QT_MGL_BLEND_EQUATION:
+		if (c.words != QT_MGL_BLEND_EQUATION_WORDS) return false;
+		QT_GL13(BlendEquation)(c.u(1));
+		return true;
+	case QT_MGL_BLEND_FUNC_SEPARATE:
+		if (c.words != QT_MGL_BLEND_FUNC_SEPARATE_WORDS) return false;
+		QT_GL13(BlendFuncSeparate)(c.u(1), c.u(2), c.u(3), c.u(4));
 		return true;
 	}
 	return false;

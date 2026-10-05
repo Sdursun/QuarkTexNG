@@ -196,19 +196,42 @@ void mgl_GLRotatefEXTs(GLcontext context, GLfloat sin_an, GLfloat cos_an, const 
 
 /* --- State ----------------------------------------------------------------- */
 
+/* GL_SHARED_TEXTURE_PALETTE_EXT: the only palette is the shared one, applied
+ * when a texture is loaded (see glColorTable), so the state is only kept. */
+static GLboolean sharedPalette;
+
 /* glEnable/glDisable go through MGLSetState. MiniGL's own capabilities
  * (MGL_PERSPECTIVE_MAPPING, MGL_Z_OFFSET, ...) have no OpenGL meaning. */
 void mgl_MGLSetState(GLcontext context, GLenum cap, GLboolean state) {
 	unsigned int gl = mgl_enum(cap);
 	if ((gl & QT_MGL_ONLY) == QT_MGL_ONLY) return;
-	if (state) _glEnable(gl);
+	if (gl == QGL_SHARED_TEXTURE_PALETTE_EXT) sharedPalette = state ? GL_TRUE : GL_FALSE;
+	else if (state) _glEnable(gl);
 	else _glDisable(gl);
 }
 
 GLboolean mgl_GLIsEnabled(GLcontext context, GLenum cap) {
 	unsigned int gl = mgl_enum(cap);
 	if ((gl & QT_MGL_ONLY) == QT_MGL_ONLY) return GL_FALSE;
+	if (gl == QGL_SHARED_TEXTURE_PALETTE_EXT) return sharedPalette;
 	return _glIsEnabled(gl) ? GL_TRUE : GL_FALSE;
+}
+
+/* OpenGL 1.2's glBlendEquation and 1.4's glBlendFuncSeparate, which the
+ * OpenGL 1.1 command set lacks. */
+void mgl_GLBlendEquation(GLcontext context, GLenum mode) {
+	ULONG *w = qt_reserve(QT_MGL_BLEND_EQUATION_WORDS);
+	w[0] = ((ULONG) QT_MGL_BLEND_EQUATION << 16) | QT_MGL_BLEND_EQUATION_WORDS;
+	w[1] = mgl_enum(mode);
+}
+
+void mgl_GLBlendFuncSeparate(GLcontext context, GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha) {
+	ULONG *w = qt_reserve(QT_MGL_BLEND_FUNC_SEPARATE_WORDS);
+	w[0] = ((ULONG) QT_MGL_BLEND_FUNC_SEPARATE << 16) | QT_MGL_BLEND_FUNC_SEPARATE_WORDS;
+	w[1] = mgl_enum(srcRGB);
+	w[2] = mgl_enum(dstRGB);
+	w[3] = mgl_enum(srcAlpha);
+	w[4] = mgl_enum(dstAlpha);
 }
 
 GLenum mgl_GLGetError(GLcontext context) {
@@ -225,9 +248,12 @@ void mgl_GLTexParameteri(GLcontext context, GLenum target, GLenum pname, GLint p
 
 /* The host's swap byte modes are the inverse of the application's (see
  * attach in context.c). */
+static int unpackAlignment = 4; /* for colour index images, expanded here */
+
 void mgl_GLPixelStorei(GLcontext context, GLenum pname, GLint param) {
 	unsigned int gl = mgl_enum(pname);
 	if (gl == QGL_UNPACK_SWAP_BYTES || gl == QGL_PACK_SWAP_BYTES) param = !param;
+	if (gl == QGL_UNPACK_ALIGNMENT && (param == 1 || param == 2 || param == 4 || param == 8)) unpackAlignment = param;
 	_glPixelStorei(gl, param);
 }
 
@@ -337,7 +363,8 @@ static const char renderer[] = "QuarkTex minigl.library (host OpenGL)";
 static const char version[] = "1.2";
 /* MiniGL's name for GL_ARB_multitexture, which applications looking for
  * "GL_ARB_multitexture" in the string find as well. */
-static const char extensions[] = "GL_MGL_ARB_multitexture GL_EXT_compiled_vertex_array";
+static const char extensions[] = "GL_MGL_ARB_multitexture GL_EXT_compiled_vertex_array GL_EXT_color_table "
+	"GL_EXT_shared_texture_palette";
 
 const GLubyte *mgl_GLGetString(GLcontext context, GLenum name) {
 	switch (mgl_enum(name)) {
@@ -351,11 +378,77 @@ const GLubyte *mgl_GLGetString(GLcontext context, GLenum name) {
 
 /* --- Textures --------------------------------------------------------------- */
 
+/*
+ * Paletted textures as MiniGL has them (GL_EXT_color_table,
+ * GL_EXT_shared_texture_palette): one shared palette, set with glColorTable
+ * and applied when a GL_COLOR_INDEX image is loaded, which is expanded here
+ * into RGBA. Changing the palette does not change textures already loaded.
+ */
+static UBYTE palette[256][4];
+static BOOL paletteAlpha;
+
+void mgl_GLColorTable(GLcontext context, GLenum target, GLenum internalformat, GLint width, GLenum format, GLenum type, GLvoid *data) {
+	unsigned int f = mgl_enum(format);
+	int components = f == QGL_RGBA ? 4 : f == QGL_RGB ? 3 : 0, i, k;
+	const UBYTE *p = (const UBYTE *) data;
+	if (!components || mgl_enum(type) != QGL_UNSIGNED_BYTE || !p || width < 1) {
+		mgl_unknown("GLColorTable");
+		return;
+	}
+	if (width > 256) width = 256;
+	for (i = 0; i < width; ++i, p += components) {
+		for (k = 0; k < 3; ++k) palette[i][k] = p[k];
+		palette[i][3] = components == 4 ? p[3] : 255;
+	}
+	paletteAlpha = components == 4;
+}
+
+/* A width x height image of colour indices (unsigned bytes, rows aligned to
+ * the unpack alignment) as RGBA, in a buffer for FreeVec; NULL if there is
+ * no memory. */
+static UBYTE *indicesToRgba(const UBYTE *indices, int width, int height) {
+	int row = (width + unpackAlignment - 1) & ~(unpackAlignment - 1), x, y;
+	UBYTE *rgba = (UBYTE *) AllocVec(width * height * 4, MEMF_ANY), *d = rgba;
+	if (!rgba) return NULL;
+	for (y = 0; y < height; ++y) {
+		const UBYTE *s = indices + y * row;
+		for (x = 0; x < width; ++x, d += 4) {
+			const UBYTE *c = palette[s[x]];
+			d[0] = c[0]; d[1] = c[1]; d[2] = c[2]; d[3] = c[3];
+		}
+	}
+	return rgba;
+}
+
 /* internalformat is a number of components (1 to 4) or a format. */
 void mgl_GLTexImage2D(GLcontext context, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
 		GLint border, GLenum format, GLenum type, const GLvoid *pixels) {
 	int components = internalformat >= 1 && internalformat <= 4 ? internalformat : (int) mgl_enum((unsigned int) internalformat);
+	if (mgl_enum(format) == QGL_COLOR_INDEX) {
+		UBYTE *rgba = pixels ? indicesToRgba((const UBYTE *) pixels, width, height) : NULL;
+		if (pixels && !rgba) return;
+		_glTexImage2D(mgl_enum(target), level, paletteAlpha ? QGL_RGBA : QGL_RGB, width, height, border, QGL_RGBA, QGL_UNSIGNED_BYTE, rgba);
+		if (rgba) FreeVec(rgba);
+		return;
+	}
 	_glTexImage2D(mgl_enum(target), level, components, width, height, border, mgl_enum(format), mgl_enum(type), (void *) pixels);
+}
+
+void mgl_GLTexSubImage2D(GLcontext context, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height,
+		GLenum format, GLenum type, const GLvoid *pixels) {
+	unsigned int t = mgl_enum(target), f = mgl_enum(format), ty = mgl_enum(type);
+	if ((t & QT_MGL_ONLY) == QT_MGL_ONLY || (f & QT_MGL_ONLY) == QT_MGL_ONLY || (ty & QT_MGL_ONLY) == QT_MGL_ONLY) {
+		mgl_unknown("GLTexSubImage2D");
+		return;
+	}
+	if (f == QGL_COLOR_INDEX) {
+		UBYTE *rgba = pixels ? indicesToRgba((const UBYTE *) pixels, width, height) : NULL;
+		if (!rgba) return;
+		_glTexSubImage2D(t, level, xoffset, yoffset, width, height, QGL_RGBA, QGL_UNSIGNED_BYTE, rgba);
+		FreeVec(rgba);
+		return;
+	}
+	_glTexSubImage2D(t, level, xoffset, yoffset, width, height, f, ty, (void *) pixels);
 }
 
 /* The host writes the names in its byte order. */
@@ -394,11 +487,6 @@ GLboolean mgl_GLAreTexturesResident(GLcontext context, GLsizei n, const GLuint *
 	int i;
 	for (i = 0; i < n; ++i) residences[i] = GL_TRUE;
 	return GL_TRUE;
-}
-
-/* Paletted textures (GL_EXT_color_table) are not offered. */
-void mgl_GLColorTable(GLcontext context, GLenum target, GLenum internalformat, GLint width, GLenum format, GLenum type, GLvoid *data) {
-	mgl_missing("GLColorTable");
 }
 
 /* --- Vertex arrays (read on the 68k) ----------------------------------------- */
@@ -474,6 +562,47 @@ void mgl_GLDisableClientState(GLcontext context, GLenum cap) {
 	Array *a = clientArray(cap);
 	if (a) a->enabled = FALSE;
 }
+
+/*
+ * glInterleavedArrays: OpenGL 1.1's table of formats (GL_V2F 0x2A20 to
+ * GL_T4F_C4F_N3F_V4F 0x2A2D), as texture coordinate, colour and vertex sizes
+ * and offsets in bytes. Normals are skipped: MiniGL has no normal array.
+ */
+static const struct {
+	UBYTE texCoords, colors, colorBytes, colorOffset, vertices, vertexOffset, size;
+} interleaved[14] = {
+	{0, 0, 0, 0, 2, 0, 8}, {0, 0, 0, 0, 3, 0, 12},
+	{0, 4, 1, 0, 2, 4, 12}, {0, 4, 1, 0, 3, 4, 16}, {0, 3, 0, 0, 3, 12, 24},
+	{0, 0, 0, 0, 3, 12, 24}, {0, 4, 0, 0, 3, 28, 40},
+	{2, 0, 0, 0, 3, 8, 20}, {4, 0, 0, 0, 4, 16, 32},
+	{2, 4, 1, 8, 3, 12, 24}, {2, 3, 0, 8, 3, 20, 32}, {2, 0, 0, 0, 3, 20, 32},
+	{2, 4, 0, 8, 3, 36, 48}, {4, 4, 0, 16, 4, 44, 60}
+};
+
+void mgl_GLInterleavedArrays(GLcontext context, GLenum format, GLsizei stride, const GLvoid *pointer) {
+	unsigned int f = mgl_enum(format) - 0x2A20;
+	const UBYTE *p = (const UBYTE *) pointer;
+	if (f >= 14) {
+		mgl_unknown("GLInterleavedArrays");
+		return;
+	}
+	if (!stride) stride = interleaved[f].size;
+	setArray(&vertices, interleaved[f].vertices, QGL_FLOAT, stride, p + interleaved[f].vertexOffset);
+	vertices.enabled = TRUE;
+	colors.enabled = interleaved[f].colors != 0;
+	if (colors.enabled) {
+		setArray(&colors, interleaved[f].colors, interleaved[f].colorBytes ? QGL_UNSIGNED_BYTE : QGL_FLOAT, stride,
+			p + interleaved[f].colorOffset);
+	}
+	texCoords[clientUnit].enabled = interleaved[f].texCoords != 0;
+	if (texCoords[clientUnit].enabled) setArray(&texCoords[clientUnit], interleaved[f].texCoords, QGL_FLOAT, stride, p);
+}
+
+/* Edge flags only matter to polygons drawn as lines or points, and colour
+ * indices only to colour index mode, which MiniGL does not have; glEdgeFlag
+ * is passed on, these arrays are not. */
+void mgl_GLEdgeFlagPointer(GLcontext context, GLsizei stride, const GLvoid *pointer) {}
+void mgl_GLIndexPointer(GLcontext context, GLenum type, GLsizei stride, const GLvoid *pointer) {}
 
 /* Component k of element i as a float. */
 static GLfloat component(const Array *a, int i, int k) {
