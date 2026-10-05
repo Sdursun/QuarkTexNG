@@ -10,6 +10,11 @@ void *malloc(size_t size) {
 	return AllocVec(size, MEMF_ANY);
 }
 
+/* GCC turns malloc followed by memset to 0 into calloc. */
+void *calloc(size_t count, size_t size) {
+	return AllocVec(count * size, MEMF_ANY | MEMF_CLEAR);
+}
+
 void free(void *ptr) {
 	if (ptr) FreeVec(ptr);
 }

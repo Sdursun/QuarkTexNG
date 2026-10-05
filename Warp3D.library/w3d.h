@@ -2,6 +2,7 @@
 #define UAE_W3D
 
 #include <stdlib.h>
+#include <string.h>
 #include <exec/libraries.h>
 #include <proto/asl.h>
 
@@ -19,6 +20,13 @@ typedef struct QtContext {
 	int fullscreen;
 	int left, top, width, height;
 	struct Node *textures;  /* allocated W3D_Textures (Texture.c) */
+	/* Phase 8: on a Picasso96 bitmap the host draws offscreen and the frame
+	 * is written into Amiga display memory (Context.c, w3d_present): into the
+	 * window, or in fullscreen into the draw region's bitmap at its y offset.
+	 * dirty: something was drawn since the frame was last written. */
+	int offscreen, dirty;
+	struct BitMap *bitmap;
+	int yoffset;
 } QtContext;
 
 #define QT(context) ((QtContext*) (context))
@@ -32,6 +40,9 @@ static inline void w3d_select(W3D_Context *context) {
  * words in the command buffer and returns where the arguments go. */
 static inline ULONG *w3d_command(W3D_Context *context, ULONG opcode, ULONG words) {
 	ULONG *w;
+	if (opcode == QT_W3D_DRAW_BEGIN || opcode == QT_W3D_DRAW || opcode == QT_W3D_DRAW_ARRAY || opcode == QT_W3D_CLEAR) {
+		QT(context)->dirty = 1;
+	}
 	w3d_select(context);
 	w = qt_reserve(words + 1);
 	w[0] = (opcode << 16) | (words + 1);
@@ -59,6 +70,12 @@ typedef struct {
  * or given by an array of pointers. */
 void drawPrimitive(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex* v, int count);
 void drawPrimitiveList(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex** v, int count);
+
+/* Writes an offscreen context's frame into display memory if something was
+ * drawn since it was last written (Context.c). */
+void w3d_present(QtContext *qt);
+/* Fills the W3D_Context fields describing the draw region (Context.c). */
+void w3d_describe(W3D_Context *context, struct BitMap *bitmap, int yoffset);
 
 /* Texture.c */
 ULONG W3D_FreeAllTexObj(__REGA0(W3D_Context *context));

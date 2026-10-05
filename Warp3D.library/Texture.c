@@ -26,6 +26,14 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 	W3D_Texture *tex;
 	LOG;
 	tex = (W3D_Texture*) malloc(sizeof(W3D_Texture));
+	if (!tex) {
+		if (error) *error = W3D_NOMEMORY;
+		return NULL;
+	}
+	/* All of it: the fields below were set one by one, but mipmaps[0-15]
+	 * kept what malloc left (and mipmaps[16] was written past the array).
+	 * Applications and MiniGL may read them. */
+	memset(tex, 0, sizeof(W3D_Texture));
 
 	if (!QT(context)->textures) {
 		QT(context)->textures = (struct Node*) tex;
@@ -46,7 +54,6 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 	tex->reserved2 = W3D_TRUE;
 	tex->mipmapmask = 0;
 	tex->texsource = NULL;
-	tex->mipmaps[16] = NULL;
 	tex->texfmtsrc = 0;
 	tex->palette = NULL;
 	tex->texdata = NULL;

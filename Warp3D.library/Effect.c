@@ -24,17 +24,31 @@ ULONG W3D_SetBlendMode(__REGA0(W3D_Context *context), __REGD0(ULONG srcfunc), __
 	w[1] = dstfunc;
 	return W3D_SUCCESS;
 }
+/* A new draw region: an offscreen context's frame drawn so far goes into the
+ * old one (Context.c), the next into this one; a host window context
+ * presents, as in 0.53. */
 ULONG W3D_SetDrawRegion(__REGA0(W3D_Context *context), __REGA1(struct BitMap *bm), __REGD1(int yoffset), __REGA2(W3D_Scissor *scissor)) {
+	QtContext *qt = QT(context);
 	LOG;
-	if (QT(context)->fullscreen) {
+	if (qt->offscreen) {
+		w3d_present(qt);
+		if (!qt->window && presentable(bm)) {
+			qt->bitmap = bm;
+			qt->yoffset = yoffset;
+		}
+	}
+	else if (qt->fullscreen) {
 		w3d_select(context);
 		swapBuffers();
 	}
+	w3d_describe(context, bm, yoffset);
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetDrawRegionWBM(__REGA0(W3D_Context *context), __REGA1(W3D_Bitmap *bm), __REGA2(W3D_Scissor *scissor)) {
+	QtContext *qt = QT(context);
 	LOG;
-	if (QT(context)->fullscreen) {
+	if (qt->offscreen) w3d_present(qt);
+	else if (qt->fullscreen) {
 		w3d_select(context);
 		swapBuffers();
 	}
@@ -104,8 +118,10 @@ void W3D_SetScissor(__REGA0(W3D_Context *context), __REGA1(W3D_Scissor *scissor)
 	w[3] = scissor->height;
 }
 
+/* The frame is complete: an offscreen context's goes into display memory. */
 void W3D_FlushFrame(__REGA0(W3D_Context *context)) {
 	LOG;
 	w3d_select(context);
 	_glFinish();
+	w3d_present(QT(context));
 }

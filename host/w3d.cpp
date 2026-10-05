@@ -80,7 +80,15 @@ namespace {
 		uint32_t state;
 		bool textured;
 		float width, height; // of the texture
+		// Lines go through pixel centres, as points do: a line at y lights row
+		// y. At whole coordinates the row was the driver's choice, and the
+		// window and framebuffer object of the same driver chose differently.
+		float lineOffset;
 	} draw;
+
+	float lineOffset(GLenum primitive) {
+		return primitive == GL_LINES || primitive == GL_LINE_LOOP || primitive == GL_LINE_STRIP ? 0.5f : 0.0f;
+	}
 
 	// One W3D_Vertex starting at word i (Warp3D.h: x, y, z (double), w, u, v,
 	// tex3d, color r g b a, spec r g b, l). Same as w3d.c drawVertex in 0.53.
@@ -93,13 +101,14 @@ namespace {
 		if (draw.state & W3D_GOURAUD) QT_GL(Color4f)(c.f(i + 8), c.f(i + 9), c.f(i + 10), c.f(i + 11));
 		// Fog needs the depth too (0.53 only sent it with the z-buffer). Without
 		// either, z may be unset and must not clip the vertex away.
-		if (draw.state & (W3D_ZBUFFER | W3D_FOGGING)) QT_GL(Vertex3f)(c.f(i), c.f(i + 1), static_cast<float>(c.d(i + 2)));
-		else QT_GL(Vertex2f)(c.f(i), c.f(i + 1));
+		if (draw.state & (W3D_ZBUFFER | W3D_FOGGING)) QT_GL(Vertex3f)(c.f(i) + draw.lineOffset, c.f(i + 1) + draw.lineOffset, static_cast<float>(c.d(i + 2)));
+		else QT_GL(Vertex2f)(c.f(i) + draw.lineOffset, c.f(i + 1) + draw.lineOffset);
 	}
 
 	// Words 1-6 of DRAW_BEGIN and DRAW: primitive, state, textured, texture
 	// name, width, height.
 	void beginDraw(const Command& c) {
+		draw.lineOffset = lineOffset(c.u(1));
 		draw.state = c.u(2);
 		draw.textured = c.u(3) != 0;
 		draw.width = static_cast<float>(static_cast<int32_t>(c.u(5)));
@@ -234,13 +243,13 @@ namespace {
 		uint32_t p = a.vertex + i * a.vertexStride;
 		switch (a.vertexMode) {
 		case W3D_VERTEX_F_F_F:
-			QT_GL(Vertex3f)(readFloat(c, p), readFloat(c, p + 4), readFloat(c, p + 8));
+			QT_GL(Vertex3f)(readFloat(c, p) + draw.lineOffset, readFloat(c, p + 4) + draw.lineOffset, readFloat(c, p + 8));
 			break;
 		case W3D_VERTEX_F_F_D: // x and y as floats, z as the double at offset 8
-			QT_GL(Vertex3f)(readFloat(c, p), readFloat(c, p + 4), static_cast<float>(readDouble(c, p + 8)));
+			QT_GL(Vertex3f)(readFloat(c, p) + draw.lineOffset, readFloat(c, p + 4) + draw.lineOffset, static_cast<float>(readDouble(c, p + 8)));
 			break;
 		case W3D_VERTEX_D_D_D:
-			QT_GL(Vertex3f)(static_cast<float>(readDouble(c, p)), static_cast<float>(readDouble(c, p + 8)),
+			QT_GL(Vertex3f)(static_cast<float>(readDouble(c, p)) + draw.lineOffset, static_cast<float>(readDouble(c, p + 8)) + draw.lineOffset,
 				static_cast<float>(readDouble(c, p + 16)));
 			break;
 		}
@@ -251,6 +260,7 @@ namespace {
 		uint32_t indexType = c.u(18), indices = c.u(19), first = c.u(20), count = c.u(21);
 		GLenum primitive;
 		if (!lookup(primitives, c.u(1), primitive)) return true; // 0.53 read past its table
+		draw.lineOffset = lineOffset(primitive);
 		draw.state = c.u(2);
 		draw.textured = c.u(3) != 0;
 		draw.width = static_cast<float>(static_cast<int32_t>(c.u(5)));
