@@ -487,11 +487,34 @@ void mgl_GLArrayElement(GLcontext context, GLint i) {
 	element(i);
 }
 
+/* glDrawArrays and glDrawElements: the host reads the arrays from Amiga
+ * memory (QT_MGL_DRAW, host/mgl.cpp). Synchronous, as the application may
+ * change the arrays once the call returns. */
+static ULONG *arrayWords(ULONG *w, const Array *a) {
+	w[0] = a->enabled && a->pointer;
+	w[1] = a->size;
+	w[2] = a->type;
+	w[3] = a->stride;
+	w[4] = (ULONG) a->pointer;
+	return w + 5;
+}
+
+static void drawHost(GLenum mode, GLint first, GLsizei count, unsigned int indexType, const GLvoid *indices) {
+	ULONG *w;
+	if (count <= 0 || !vertices.enabled || !vertices.pointer) return;
+	w = qt_reserve(QT_MGL_DRAW_WORDS);
+	w[0] = ((ULONG) QT_MGL_DRAW << 16) | QT_MGL_DRAW_WORDS;
+	w[1] = mgl_enum(mode);
+	w[2] = first;
+	w[3] = count;
+	w[4] = indexType;
+	w[5] = (ULONG) indices;
+	arrayWords(arrayWords(arrayWords(w + 6, &vertices), &colors), &texCoords);
+	qt_flush();
+}
+
 void mgl_GLDrawArrays(GLcontext context, GLenum mode, GLint first, GLsizei count) {
-	int i;
-	_glBegin(mgl_enum(mode));
-	for (i = first; i < first + count; ++i) element(i);
-	_glEnd();
+	drawHost(mode, first, count, 0, NULL);
 }
 
 void mgl_GLMultiDrawArrays(GLcontext context, GLenum mode, const GLint *first, const GLsizei *count, GLsizei primcount) {
@@ -501,14 +524,8 @@ void mgl_GLMultiDrawArrays(GLcontext context, GLenum mode, const GLint *first, c
 
 void mgl_GLDrawElements(GLcontext context, GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
 	unsigned int t = mgl_enum(type);
-	int n;
-	_glBegin(mgl_enum(mode));
-	for (n = 0; n < count; ++n) {
-		if (t == QGL_UNSIGNED_BYTE) element(((const UBYTE *) indices)[n]);
-		else if (t == QGL_UNSIGNED_SHORT) element(((const UWORD *) indices)[n]);
-		else element(((const ULONG *) indices)[n]);
-	}
-	_glEnd();
+	if (t != QGL_UNSIGNED_BYTE && t != QGL_UNSIGNED_SHORT) t = QGL_UNSIGNED_INT;
+	if (indices) drawHost(mode, 0, count, t, indices);
 }
 
 /* GL_EXT_compiled_vertex_array: nothing to compile here. */

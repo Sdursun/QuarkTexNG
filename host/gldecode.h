@@ -75,6 +75,10 @@ void qt_report(const char* message);
 // Returns false for an unknown opcode or a wrong word count.
 bool qt_w3d_decode(const Command& c, int32_t& result);
 
+// Executes a command of QuarkTex's minigl.library (opcode QT_MGL_FIRST and
+// up, host/mgl.cpp). Returns false for an unknown opcode or a wrong word count.
+bool qt_mgl_decode(const Command& c, int32_t& result);
+
 // Draws what the Warp3D commands have batched (ffp::flush), before an OpenGL
 // command runs.
 void qt_w3d_sync();

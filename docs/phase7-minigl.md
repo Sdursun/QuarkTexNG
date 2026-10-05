@@ -139,4 +139,29 @@ a 1024 x 768 window. The host window now has the screen's size at the top
 left.
 
 Hurrican's missing parts through MiniGL Classic (its vertex arrays, phase 6)
-do not occur here: this library reads the application's arrays itself.
+do not occur here: this library passes the application's arrays on as they
+are (stage 4).
+
+## Stage 4: vertex arrays on the host (done)
+
+Measured first: the host logs a profile every 300 frames with
+`QUARKTEX_PROFILE` (`tests/run-app.ps1 -Profile`): frame rate, and per frame
+the time the host spent executing commands (with buffers and bytes), in
+SwapBuffers, and elsewhere, which is the 68k. RTCW's 58 fps were its own
+frame cap; with `+set com_maxfps 0` on escape1:
+
+| | fps | executing | commands per frame | 68k per frame |
+| --- | --- | --- | --- | --- |
+| MiniGL Classic and Warp3D | 157 | 0.79 ms | 147 KB | 5.4 ms |
+| this library, arrays as immediate mode from the 68k | 111 | 1.08 ms | 1.37 MB | 7.7 ms |
+| this library, arrays read by the host | 188 | 0.81 ms | 23 KB | 4.3 ms |
+
+The host was never the bottleneck: the 68k was, converting every element of
+the arrays into glColor/glTexCoord/glVertex commands. glDrawArrays and
+glDrawElements now send one command, `QT_MGL_DRAW` (`gl/mglcmd.h`), with the
+mode, the indices and each enabled array's size, type, stride and address;
+the host (`host/mgl.cpp`) reads the elements the call reaches from Amiga
+memory, converts them from big-endian and draws them with OpenGL's own vertex
+arrays. The call is synchronous, as the application may change its arrays as
+soon as it returns. glArrayElement, called between glBegin and glEnd, still
+goes through the 68k.

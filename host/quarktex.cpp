@@ -90,7 +90,14 @@ namespace {
 		LONGLONG ticks;
 		unsigned long calls;
 		unsigned long long bytes;
+		// Every reportFrames buffer swaps: the wall clock time, the time
+		// executing command buffers and in SwapBuffers; the rest is the
+		// emulated 68k's.
+		LONGLONG periodStart, periodTicks, swapTicks;
+		unsigned long periodCalls;
+		unsigned long long periodBytes;
 	};
+	const unsigned long reportFrames = 300;
 
 	struct Context {
 		uint32_t id;
@@ -288,6 +295,9 @@ QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
 	int32_t result = qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
 	QueryPerformanceCounter(&end);
 	c->profile.ticks += end.QuadPart - start.QuadPart;
+	c->profile.periodTicks += end.QuadPart - start.QuadPart;
+	++c->profile.periodCalls;
+	c->profile.periodBytes += static_cast<uint32_t>(uni->d1);
 	++c->profile.calls;
 	c->profile.bytes += static_cast<uint32_t>(uni->d1);
 	return result;
@@ -420,8 +430,34 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 	Context* c = find(uni->d1);
 	if (!c || !activate(c)) return 0;
 	ffp::flush();
-	if (!captureDir.empty() && c->swaps++ % captureEvery == 0) captureFrame(c);
+	if (!captureDir.empty() && c->swaps % captureEvery == 0) captureFrame(c);
+	++c->swaps;
+	LARGE_INTEGER before, after;
+	if (c->profile.on) QueryPerformanceCounter(&before);
 	SwapBuffers(c->deviceContext);
+	if (c->profile.on) {
+		QueryPerformanceCounter(&after);
+		Profile& p = c->profile;
+		p.swapTicks += after.QuadPart - before.QuadPart;
+		if (!p.periodStart) p.periodStart = after.QuadPart;
+		else if (c->swaps % reportFrames == 0) {
+			LARGE_INTEGER frequency;
+			QueryPerformanceFrequency(&frequency);
+			double f = static_cast<double>(frequency.QuadPart), wall = (after.QuadPart - p.periodStart) / f;
+			char line[240];
+			snprintf(line, sizeof(line), "Profile %s: frames %lu-%lu: %.1f fps; per frame %.2f ms wall, %.2f ms executing "
+				"(%lu buffers, %llu bytes), %.2f ms in SwapBuffers, %.2f ms elsewhere (68k)",
+				c->label.empty() ? "context" : c->label.c_str(), c->swaps - reportFrames, c->swaps, reportFrames / wall,
+				wall * 1000 / reportFrames, p.periodTicks / f * 1000 / reportFrames, p.periodCalls / reportFrames,
+				p.periodBytes / reportFrames, p.swapTicks / f * 1000 / reportFrames,
+				(wall - (p.periodTicks + p.swapTicks) / f) * 1000 / reportFrames);
+			logString(line);
+			p.periodStart = after.QuadPart;
+			p.periodTicks = p.swapTicks = 0;
+			p.periodCalls = 0;
+			p.periodBytes = 0;
+		}
+	}
 
 	GLenum code = glGetError();
 	while (code != GL_NO_ERROR) {

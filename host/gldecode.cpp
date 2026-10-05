@@ -13,6 +13,7 @@
 #include <cstdio>
 #include "gldecode.h"
 #include "w3dcmd.h"
+#include "mglcmd.h"
 
 namespace {
 	int32_t qt_bad_command(const Command& c) {
@@ -121,11 +122,14 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		c.words = header & 0xFFFF;
 		if (c.words == 0 || offset + 4 * c.words > bytes) return qt_bad_command(c);
 		result = 0;
-		if ((header >> 16) < QT_W3D_FIRST) qt_w3d_sync();
-		switch (header >> 16) {
+		uint32_t opcode = header >> 16;
+		if (opcode < QT_W3D_FIRST || opcode >= QT_MGL_FIRST) qt_w3d_sync();
+		switch (opcode) {
 #include "gldecode.auto.inc"
 		default:
-			if ((header >> 16) < QT_W3D_FIRST || !qt_w3d_decode(c, result)) return qt_bad_command(c);
+			if (opcode >= QT_MGL_FIRST) {
+				if (!qt_mgl_decode(c, result)) return qt_bad_command(c);
+			} else if (opcode < QT_W3D_FIRST || !qt_w3d_decode(c, result)) return qt_bad_command(c);
 			break;
 		}
 		// Tracing: which OpenGL command an error comes from (opcode = line in

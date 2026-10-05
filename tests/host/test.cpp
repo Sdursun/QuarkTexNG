@@ -147,6 +147,7 @@ void qt_report(const char* message) {
 
 #include "../../host/gldecode.cpp"
 #include "../../host/w3d.cpp"
+#include "../../host/mgl.cpp"
 
 // --- 68k side ----------------------------------------------------------------
 
@@ -537,6 +538,41 @@ int main() {
 		}
 		check(joined() == "ReadPixels(3,4,2,1,6402,5126,@?)" && z[0] == -1.0 && z[1] == -1.0,
 			"QT_W3D_READ_Z: " + joined() + " " + std::to_string(z[0]) + " " + std::to_string(z[1]));
+	}
+
+	// minigl.library's glDrawElements: big-endian float vertices (size 3,
+	// stride 16) and unsigned byte colours, unsigned short indices; the host
+	// converts the elements the indices reach and draws them.
+	{
+		const float xyz[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+		for (int i = 0; i < 3; ++i)
+			for (int k = 0; k < 3; ++k) {
+				uint32_t big = qt_swap32(qt_f2l(xyz[i][k]));
+				memcpy(&arena[0x16000 + 16 * i + 4 * k], &big, 4);
+			}
+		for (int i = 0; i < 12; ++i) arena[0x16100 + i] = static_cast<uint8_t>(10 + i);
+		const uint8_t indices[] = {0, 2, 0, 1, 0, 0};
+		memcpy(&arena[0x16200], indices, sizeof(indices));
+		ULONG* w = qt_reserve(QT_MGL_DRAW_WORDS);
+		const ULONG words[QT_MGL_DRAW_WORDS] = {(static_cast<ULONG>(QT_MGL_DRAW) << 16) | QT_MGL_DRAW_WORDS,
+			GL_TRIANGLES, 0, 3, GL_UNSIGNED_SHORT, 0x16200,
+			1, 3, GL_FLOAT, 16, 0x16000,
+			1, 4, GL_UNSIGNED_BYTE, 4, 0x16100,
+			0, 2, GL_FLOAT, 8, 0};
+		memcpy(w, words, sizeof(words));
+		records.clear();
+		qt_flush();
+		check(joined() == "PushClientAttrib(2) EnableClientState(32884) VertexPointer(3,5126,0,@?) EnableClientState(32886) "
+			"ColorPointer(4,5121,0,@?) DisableClientState(32888) DisableClientState(32885) DisableClientState(32887) "
+			"DisableClientState(32889) DrawElements(4,3,5125,@?) PopClientAttrib()", "QT_MGL_DRAW: " + joined());
+
+		Command c = {buffer8, 0, resolve};
+		using namespace mgl;
+		Array vertices = {true, 3, GL_FLOAT, 16, 0x16000}, colours = {true, 4, GL_UNSIGNED_BYTE, 4, 0x16100};
+		Converted v, col;
+		bool ok = convert(c, vertices, 3, v) && convert(c, colours, 3, col);
+		check(ok && v.floats.size() == 9 && v.floats[0] == 1 && v.floats[4] == 5 && v.floats[8] == 9
+			&& col.bytes.size() == 12 && col.bytes[0] == 10 && col.bytes[11] == 21, "QT_MGL_DRAW conversion");
 	}
 
 	check(reports == 0, std::to_string(reports) + " bad commands reported");

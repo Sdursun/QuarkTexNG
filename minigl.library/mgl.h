@@ -11,6 +11,7 @@
 #include <libraries/minigl_dispatch.h>
 #include <intuition/intuition.h>
 #include "qgl.auto.h"
+#include "mglcmd.h"
 
 /* gl/gl.c (host contexts and the command buffer). */
 void glInit(void);
@@ -21,6 +22,7 @@ void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);
 void logString(char *c);
+ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
 #define QT_CONTEXT_PLAIN 2 /* as in gl/gl.h */
 

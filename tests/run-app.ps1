@@ -38,6 +38,9 @@ param(
 	# (QUARKTEX_TRACE_FRAME), into QuarkTexLog.txt.
 	[switch]$Trace,
 	[int]$TraceFrame = -1,
+	# Log frame rate and where the time of a frame goes, every 300 frames
+	# (QUARKTEX_PROFILE).
+	[switch]$Profile,
 	[string]$Settings = (Join-Path $PSScriptRoot 'settings.local.psd1')
 )
 
@@ -93,6 +96,7 @@ Write-Host "== $Label`: $Command in $where, $Emulator, $TimeoutSec s, every $Cap
 $env:QUARKTEX_CAPTURE_DIR = Join-Path $qttest 'capture'
 $env:QUARKTEX_CAPTURE_EVERY = "$CaptureEvery"
 if ($Trace) { $env:QUARKTEX_TRACE = '1' }
+if ($Profile) { $env:QUARKTEX_PROFILE = '1' }
 if ($TraceFrame -ge 0) { $env:QUARKTEX_TRACE_FRAME = "$TraceFrame" }
 # The host writes its log only when it has something to say: an old one
 # must not be taken for this run's.
@@ -103,7 +107,7 @@ if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 	Write-Host "   stopped after $TimeoutSec s"
 }
 Remove-Item Env:QUARKTEX_CAPTURE_DIR, Env:QUARKTEX_CAPTURE_EVERY
-Remove-Item Env:QUARKTEX_TRACE, Env:QUARKTEX_TRACE_FRAME -ErrorAction SilentlyContinue
+Remove-Item Env:QUARKTEX_TRACE, Env:QUARKTEX_TRACE_FRAME, Env:QUARKTEX_PROFILE -ErrorAction SilentlyContinue
 $hostLog = Join-Path $uae 'QuarkTexLog.txt'
 if (Test-Path $hostLog) { Copy-Item $hostLog (Join-Path $qttest 'capture') -Force }
 Get-ChildItem (Join-Path $qttest 'capture') | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host

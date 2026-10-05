@@ -95,7 +95,7 @@ $(AGL_DIR)/libc_shim.o: amiga/libc_shim.c | $(AGL_DIR)
 # --- minigl.library (MiniGL's shared library interface) ---------------------
 # The *.auto.* files come from minigl.library/mglgen.py (run by build.sh).
 
-MINIGL_CFLAGS = $(CFLAGS) -Iminigl.library/sdk-shim -I$(MINIGL_SDK) -I$(MINIGL_DIR) -Iminigl.library -DMGL_QUARKTEX_BACKEND_FLAGS=$(MINIGL_FLAGS)
+MINIGL_CFLAGS = $(CFLAGS) -Iminigl.library/sdk-shim -I$(MINIGL_SDK) -I$(MINIGL_DIR) -Iminigl.library -Igl -DMGL_QUARKTEX_BACKEND_FLAGS=$(MINIGL_FLAGS)
 MINIGL_GENERATED = $(MINIGL_DIR)/qgl.auto.h $(MINIGL_DIR)/dispatch.auto.c $(MINIGL_DIR)/mglenum.auto.c
 
 $(BUILD)/minigl.library: $(MINIGL_OBJ)
