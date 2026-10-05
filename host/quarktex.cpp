@@ -17,9 +17,10 @@
 #include "uni.h"
 #include "gldecode.h"
 #include "ffp.h"
+#include "present.h"
 
 // Must match QT_PROTOCOL_VERSION in gl/gl.c.
-#define QT_PROTOCOL_VERSION 8
+#define QT_PROTOCOL_VERSION 9
 
 extern "C" {
 	__declspec(dllexport) uni_resolve_function uni_resolve = 0;
@@ -34,6 +35,10 @@ namespace {
 	// QT_CONTEXT_PLAIN: a compatibility context without the 0.53 model view
 	// matrix, with a 24-bit depth buffer (minigl.library).
 	const int32_t contextPlain = 2;
+	// QT_CONTEXT_OFFSCREEN: draws into a framebuffer object, presented into the
+	// Amiga bitmap that qt_swap_buffers names (present.h); its window stays
+	// hidden.
+	const int32_t contextOffscreen = 4;
 
 	LRESULT CALLBACK windowFunc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 		switch (message) {
@@ -105,6 +110,8 @@ namespace {
 		HDC deviceContext;
 		HGLRC gl;
 		ffp::Context* ffp; // Warp3D (OpenGL 3.3 core) only
+		bool offscreen;
+		present::Framebuffer framebuffer; // offscreen only
 		std::string label; // frame capture
 		int frames;
 		unsigned long swaps;
@@ -204,7 +211,7 @@ namespace {
 			glPushAttrib(GL_PIXEL_MODE_BIT);
 		}
 		for (int i = 0; i < 5; ++i) glPixelStorei(packs[i], packValues[i]);
-		glReadBuffer(GL_BACK);
+		glReadBuffer(c->offscreen ? 0x8CE0 /* GL_COLOR_ATTACHMENT0 */ : GL_BACK);
 		// Bottom-up BGR rows padded to 4 bytes are exactly what BMP stores.
 		glReadPixels(0, 0, width, height, GL_BGR_EXT, GL_UNSIGNED_BYTE, &pixels[0]);
 		if (core) {
@@ -244,6 +251,7 @@ namespace {
 		if (c->gl) {
 			if (wglMakeCurrent(c->deviceContext, c->gl)) {
 				if (c->ffp) ffp::destroy(c->ffp);
+				present::destroy(c->framebuffer);
 				ffp::makeCurrent(0);
 			}
 			wglMakeCurrent(0, 0);
@@ -350,7 +358,9 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	}
 
 	Context* c = new Context();
-	if (!(c->window = CreateWindowExA(0, "QuartexNG", "", WS_CHILD | WS_VISIBLE, left, top, width, height, amigaWindow, 0, 0, 0))) {
+	c->offscreen = (uni->d5 & contextOffscreen) != 0;
+	DWORD style = c->offscreen ? WS_CHILD : WS_CHILD | WS_VISIBLE;
+	if (!(c->window = CreateWindowExA(0, "QuartexNG", "", style, left, top, width, height, amigaWindow, 0, 0, 0))) {
 		logString("Warning: Could not create Window");
 		if (!classUsers) UnregisterClassA("QuartexNG", instance);
 		delete c;
@@ -381,6 +391,11 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	if (!wglMakeCurrent(c->deviceContext, c->gl)) { logString("Warning: Could not activate the rendering context"); destroy(c); return 0; }
 	active = c;
 	ffp::makeCurrent(0);
+	if (c->offscreen && !present::resize(c->framebuffer, width, height)) {
+		logString("Warning: Could not create a framebuffer object");
+		destroy(c);
+		return 0;
+	}
 
 	if (core) {
 		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); destroy(c); return 0; }
@@ -421,11 +436,18 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 // d1 = left, d2 = top, d3 = width, d4 = height, d5 = context
 QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
 	Context* c = find(uni->d5);
-	if (c) MoveWindow(c->window, uni->d1, uni->d2, uni->d3, uni->d4, FALSE);
+	if (!c) return 0;
+	MoveWindow(c->window, uni->d1, uni->d2, uni->d3, uni->d4, FALSE);
+	// An offscreen context's picture takes the new size.
+	if (c->offscreen && (c->framebuffer.width != uni->d3 || c->framebuffer.height != uni->d4) && activate(c)) {
+		ffp::flush();
+		present::resize(c->framebuffer, uni->d3, uni->d4);
+	}
 	return 0;
 }
 
-// d1 = context
+// d1 = context; a1 = the QtTarget an offscreen context's picture goes to
+// (gl/gl.h), 0 for none.
 QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 	Context* c = find(uni->d1);
 	if (!c || !activate(c)) return 0;
@@ -434,7 +456,18 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 	++c->swaps;
 	LARGE_INTEGER before, after;
 	if (c->profile.on) QueryPerformanceCounter(&before);
-	SwapBuffers(c->deviceContext);
+	if (!c->offscreen) SwapBuffers(c->deviceContext);
+	else if (uni->a1) {
+		const uint8_t* words = amiga<const uint8_t>(uni->a1);
+		uint32_t w[9];
+		for (int i = 0; i < 9; ++i) {
+			memcpy(&w[i], words + 4 * i, 4);
+			w[i] = qt_swap32(w[i]);
+		}
+		present::Target t = {w[0], w[1], w[2], w[3], w[4], static_cast<int32_t>(w[5]), static_cast<int32_t>(w[6]),
+			static_cast<int32_t>(w[7]), static_cast<int32_t>(w[8])};
+		present::copy(c->framebuffer, t, uni_resolve, c->ffp != 0);
+	}
 	if (c->profile.on) {
 		QueryPerformanceCounter(&after);
 		Profile& p = c->profile;
@@ -446,7 +479,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 			double f = static_cast<double>(frequency.QuadPart), wall = (after.QuadPart - p.periodStart) / f;
 			char line[240];
 			snprintf(line, sizeof(line), "Profile %s: frames %lu-%lu: %.1f fps; per frame %.2f ms wall, %.2f ms executing "
-				"(%lu buffers, %llu bytes), %.2f ms in SwapBuffers, %.2f ms elsewhere (68k)",
+				"(%lu buffers, %llu bytes), %.2f ms presenting, %.2f ms elsewhere (68k)",
 				c->label.empty() ? "context" : c->label.c_str(), c->swaps - reportFrames, c->swaps, reportFrames / wall,
 				wall * 1000 / reportFrames, p.periodTicks / f * 1000 / reportFrames, p.periodCalls / reportFrames,
 				p.periodBytes / reportFrames, p.swapTicks / f * 1000 / reportFrames,

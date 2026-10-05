@@ -32,10 +32,22 @@ ULONG createContext(int left, int top, int width, int height, int flags);
 /* An OpenGL compatibility context as OpenGL makes it: no QuarkTex 0.53 model
  * view matrix, and a 24-bit depth buffer (minigl.library). */
 #define QT_CONTEXT_PLAIN 2
+/* The context draws into a picture of its own (width x height) that
+ * swapBuffersTo writes into Amiga display memory, where the emulator shows it
+ * like any other graphics, in a window or fullscreen; the host window stays
+ * hidden. moveWindow gives the picture a new size. */
+#define QT_CONTEXT_OFFSCREEN 4
 void selectContext(ULONG id);
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);
+/* Where swapBuffersTo writes the picture: a bitmap of a Picasso96 RGBFormat
+ * (RGBFB_R8G8B8 to RGBFB_B5G5R5PC) at address, and the rectangle in it. */
+typedef struct {
+	ULONG address, bytesPerRow, format, bitmapWidth, bitmapHeight;
+	LONG left, top, width, height;
+} QtTarget;
+void swapBuffersTo(const QtTarget *target);
 void logString(char* c);
 
 /* Command buffer (gl/gl.c). qt_reserve returns room for words 32-bit words;

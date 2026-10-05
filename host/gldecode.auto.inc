@@ -265,7 +265,7 @@ case 66: /* DrawArrays */
 	break;
 case 67: /* DrawBuffer */
 	if (c.words != 2) return qt_bad_command(c);
-	QT_GL(DrawBuffer)((GLenum) c.u(1));
+	result = qt_manual_DrawBuffer(c);
 	break;
 case 68: /* DrawElements */
 	if (c.words != 5) return qt_bad_command(c);
@@ -945,7 +945,7 @@ case 236: /* RasterPos4sv */
 	break;
 case 237: /* ReadBuffer */
 	if (c.words != 2) return qt_bad_command(c);
-	QT_GL(ReadBuffer)((GLenum) c.u(1));
+	result = qt_manual_ReadBuffer(c);
 	break;
 case 238: /* ReadPixels */
 	if (c.words != 8) return qt_bad_command(c);

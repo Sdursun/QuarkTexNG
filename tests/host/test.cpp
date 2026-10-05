@@ -176,6 +176,7 @@ void qt_report(const char* message) {
 #include "../../host/gldecode.cpp"
 #include "../../host/w3d.cpp"
 #include "../../host/mgl.cpp"
+#include "../../host/present.h"
 
 // --- 68k side ----------------------------------------------------------------
 
@@ -626,6 +627,49 @@ int main() {
 		records.clear();
 		qt_flush();
 		check(joined() == "BlendEquation(32778) BlendFuncSeparate(770,771,1,0)", "QT_MGL_BLEND_*: " + joined());
+	}
+
+	// glDrawBuffer and glReadBuffer ask for the framebuffer object bound
+	// (none here, so GL_BACK stays GL_BACK).
+	{
+		records.clear();
+		_glDrawBuffer(GL_BACK);
+		_glReadBuffer(GL_FRONT);
+		qt_flush();
+		check(joined() == "GetIntegerv(36006,@?) DrawBuffer(1029) GetIntegerv(36010,@?) ReadBuffer(1028)",
+			"DrawBuffer/ReadBuffer: " + joined());
+	}
+
+	// Presenting into Amiga display memory: one pixel (r 0xF8, g 0xFC, b 0x08)
+	// in each format, then a 2 x 2 picture into a 3 x 2 bitmap at (2, 0),
+	// clipped at the bitmap's right edge, rows turned upright.
+	{
+		const uint8_t bgra[4] = {0x08, 0xFC, 0xF8, 0x7F};
+		struct { uint32_t format; uint8_t bytes[4]; } formats[] = {
+			{present::R8G8B8, {0xF8, 0xFC, 0x08}}, {present::B8G8R8, {0x08, 0xFC, 0xF8}},
+			{present::A8R8G8B8, {0, 0xF8, 0xFC, 0x08}}, {present::A8B8G8R8, {0, 0x08, 0xFC, 0xF8}},
+			{present::R8G8B8A8, {0xF8, 0xFC, 0x08, 0}}, {present::B8G8R8A8, {0x08, 0xFC, 0xF8, 0}},
+			{present::R5G6B5, {0xFF, 0xE1}}, {present::R5G6B5PC, {0xE1, 0xFF}},
+			{present::R5G5B5, {0x7F, 0xE1}}, {present::R5G5B5PC, {0xE1, 0x7F}},
+			{present::B5G6R5PC, {0xFF, 0x0F}}, {present::B5G5R5PC, {0xFF, 0x07}}};
+		for (size_t i = 0; i < sizeof(formats) / sizeof(formats[0]); ++i) {
+			uint8_t out[4] = {0xAA, 0xAA, 0xAA, 0xAA};
+			present::convertRow(bgra, out, 1, formats[i].format);
+			int n = present::bytesPerPixel(formats[i].format);
+			check(n > 0 && memcmp(out, formats[i].bytes, n) == 0, "present format " + std::to_string(formats[i].format));
+		}
+		check(present::bytesPerPixel(1) == 0, "present: CLUT is not written");
+
+		// Bottom-up picture: bottom row red, green; top row blue, white.
+		const uint8_t picture[16] = {0, 0, 255, 0, 0, 255, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0};
+		uint8_t* bitmap = arena + 0x17000;
+		memset(bitmap, 0x55, 3 * 2 * 3);
+		present::Target t = {0x17000, 9, present::R8G8B8, 3, 2, 2, 0, 2, 2};
+		bool ok = present::write(picture, 2, 2, t, resolve);
+		// Row 0 (top): blue at x 2, x 3 clipped; row 1: red at x 2.
+		const uint8_t expected[18] = {0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0, 0, 255,
+			0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 255, 0, 0};
+		check(ok && memcmp(bitmap, expected, 18) == 0, "present::write");
 	}
 
 	check(reports == 0, std::to_string(reports) + " bad commands reported");

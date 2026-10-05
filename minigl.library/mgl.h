@@ -21,17 +21,25 @@ void selectContext(ULONG id);
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);
+typedef struct {
+	ULONG address, bytesPerRow, format, bitmapWidth, bitmapHeight;
+	LONG left, top, width, height;
+} QtTarget; /* as in gl/gl.h */
+void swapBuffersTo(const QtTarget *target);
 void logString(char *c);
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
 #define QT_CONTEXT_PLAIN 2 /* as in gl/gl.h */
+#define QT_CONTEXT_OFFSCREEN 4
 
 /* A context. MiniGL's GLcontext is opaque to applications: they only pass
  * it back, so ours is a different structure. */
 typedef struct QtMglContext {
 	ULONG host;
 	struct Screen *screen;   /* ours, in fullscreen */
-	struct Window *window;
+	struct Window *window;   /* NULL for a bitmap context */
+	struct BitMap *bitmap;   /* a bitmap context's */
+	BOOL offscreen;          /* presented into Amiga display memory */
 	BOOL ownWindow;
 	BOOL fullscreen;
 	int left, top, width, height;

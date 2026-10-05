@@ -111,6 +111,29 @@ namespace {
 	int32_t qt_manual_GetString(const Command&) {
 		return 0;
 	}
+
+	// An offscreen context (QT_CONTEXT_OFFSCREEN) draws into a framebuffer
+	// object, which has no front or back buffer: those names become its
+	// colour buffer, as the application means them.
+	GLenum colourBuffer(GLenum mode, GLenum binding) {
+		GLint framebuffer = 0;
+		switch (mode) {
+		case GL_FRONT: case GL_BACK: case GL_FRONT_AND_BACK: case GL_LEFT: case GL_FRONT_LEFT: case GL_BACK_LEFT:
+			QT_GL(GetIntegerv)(binding, &framebuffer);
+			if (framebuffer) return 0x8CE0; // GL_COLOR_ATTACHMENT0
+		}
+		return mode;
+	}
+
+	int32_t qt_manual_DrawBuffer(const Command& c) {
+		QT_GL(DrawBuffer)(colourBuffer(c.u(1), 0x8CA6 /* GL_DRAW_FRAMEBUFFER_BINDING */));
+		return 0;
+	}
+
+	int32_t qt_manual_ReadBuffer(const Command& c) {
+		QT_GL(ReadBuffer)(colourBuffer(c.u(1), 0x8CAA /* GL_READ_FRAMEBUFFER_BINDING */));
+		return 0;
+	}
 }
 
 int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {

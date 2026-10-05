@@ -18,7 +18,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 8
+#define QT_PROTOCOL_VERSION 9
 
 #define QT_BUFFER_BYTES (256 * 1024)
 
@@ -170,6 +170,11 @@ void freeContext(void) {
 	qt_flush();
 	hostCall(qt_free, qt_context, 0, 0, 0, 0, 0);
 	qt_context = 0;
+}
+
+void swapBuffersTo(const QtTarget *target) {
+	qt_flush();
+	hostCall(qt_swap, qt_context, 0, 0, 0, 0, (ULONG) target);
 }
 
 void swapBuffers(void) {

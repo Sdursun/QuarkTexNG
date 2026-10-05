@@ -72,10 +72,12 @@ namespace {
 	// Implemented by hand in host/gldecode.cpp. The host keeps the Amiga
 	// addresses of the client arrays and the feedback/selection buffers so
 	// that GetPointerv can return them; GetString would return a host pointer.
+	// DrawBuffer and ReadBuffer name the framebuffer object's colour buffer
+	// for the front and back buffers when the context draws offscreen.
 	const std::set<string> manual = {
 		"GetPointerv", "VertexPointer", "NormalPointer", "ColorPointer", "IndexPointer",
 		"TexCoordPointer", "EdgeFlagPointer", "InterleavedArrays", "FeedbackBuffer",
-		"SelectBuffer", "GetString"
+		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer"
 	};
 
 	string trim(const string& s) {

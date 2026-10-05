@@ -6,17 +6,27 @@
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
+#include <proto/picasso96.h>
 
 /*
  * Contexts: a screen and a backdrop window (fullscreen) or a window on the
- * default public screen, or the application's own window; each gets a host
- * OpenGL compatibility context (QT_CONTEXT_PLAIN: no 0.53 model view matrix,
- * a 24-bit depth buffer) covering it. Frames are presented with
- * MGLSwitchDisplay. MiniGL's GLUT-like main loop is there for its demos.
+ * default public screen, the application's own window, or its bitmap; each
+ * gets a host OpenGL compatibility context (QT_CONTEXT_PLAIN: no 0.53 model
+ * view matrix, a 24-bit depth buffer). MGLSwitchDisplay presents a frame.
+ *
+ * On a Picasso96 bitmap of a format the host writes, the context is
+ * offscreen (phase 8): the host draws into a picture of its own and writes
+ * it into the bitmap at each MGLSwitchDisplay, so the emulator shows it like
+ * any other Amiga graphics, also fullscreen. Otherwise (planar or 8-bit
+ * screens) the host draws into a window of its own over the Amiga window, as
+ * before, which only shows when the emulator runs in a window.
+ *
+ * MiniGL's GLUT-like main loop is there for its demos.
  */
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
+struct Library *P96Base;
 
 /* The mglChoose* settings, for the next context. MiniGL's defaults. */
 static GLboolean windowMode = GL_FALSE;
@@ -25,6 +35,7 @@ static int pixelDepth = 16;
 static void openLibraries(void) {
 	if (!IntuitionBase) IntuitionBase = (struct IntuitionBase *) OpenLibrary("intuition.library", 39);
 	if (!GfxBase) GfxBase = (struct GfxBase *) OpenLibrary("graphics.library", 39);
+	if (!P96Base) P96Base = OpenLibrary("Picasso96API.library", 2);
 }
 
 #define QT_IDCMP (IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY | IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE)
@@ -50,13 +61,30 @@ static void destroy(QtMglContext *c) {
 	FreeVec(c);
 }
 
-/* The host context for the window; the context becomes the current one. */
+/* The bitmap a context's frames go to. */
+static struct BitMap *targetBitMap(QtMglContext *c) {
+	return c->window ? c->window->RPort->BitMap : c->bitmap;
+}
+
+/* Whether the host can write frames into the bitmap: Picasso96's, in one of
+ * the formats RGBFB_R8G8B8 to RGBFB_B5G5R5PC (host/present.h). */
+static BOOL presentable(struct BitMap *bitmap) {
+	ULONG format;
+	if (!P96Base || !bitmap || !p96GetBitMapAttr(bitmap, P96BMA_ISP96)) return FALSE;
+	format = p96GetBitMapAttr(bitmap, P96BMA_RGBFORMAT);
+	return format >= RGBFB_R8G8B8 && format <= RGBFB_B5G5R5PC;
+}
+
+/* The host context; the context becomes the current one. */
 static void *attach(QtMglContext *c) {
-	/* In fullscreen, the screen's size at the top left of the display: the
-	 * display mode can be larger than the screen (JK2 got a 640 x 480 screen
-	 * in a 1024 x 768 mode), and the screen shows at its top left. */
-	if (c->fullscreen) c->host = createContext(0, 0, c->width, c->height, QT_CONTEXT_PLAIN);
-	else c->host = createContext(c->left, c->top, c->width, c->height, QT_CONTEXT_PLAIN);
+	c->offscreen = presentable(targetBitMap(c));
+	if (c->offscreen) c->host = createContext(0, 0, c->width, c->height, QT_CONTEXT_PLAIN | QT_CONTEXT_OFFSCREEN);
+	/* A host window in fullscreen: the screen's size at the top left of the
+	 * display, as the display mode can be larger than the screen (JK2 got a
+	 * 640 x 480 screen in a 1024 x 768 mode) and the screen shows at its top
+	 * left. */
+	else if (c->fullscreen) c->host = createContext(0, 0, c->width, c->height, QT_CONTEXT_PLAIN);
+	else if (c->window) c->host = createContext(c->left, c->top, c->width, c->height, QT_CONTEXT_PLAIN);
 	if (!c->host) {
 		destroy(c);
 		return NULL;
@@ -154,14 +182,50 @@ void *mgl_MGLCreateContextFromWindow(struct Window *window) {
 	return attach(c);
 }
 
-/* A bitmap the application presents itself: the host draws into its own
- * window, so there is nothing to draw into. */
+/* A bitmap the application presents itself, which must outlive the context:
+ * MGLSwitchDisplay writes the frame into it. Only a Picasso96 one the host
+ * can write. */
 void *mgl_MGLCreateContextFromBitMap(struct BitMap *bitmap) {
-	return NULL;
+	QtMglContext *c;
+	if (!bitmap || !(c = allocate())) return NULL;
+	if (!presentable(bitmap)) {
+		FreeVec(c);
+		return NULL;
+	}
+	c->bitmap = bitmap;
+	c->width = (int) p96GetBitMapAttr(bitmap, P96BMA_WIDTH);
+	c->height = (int) p96GetBitMapAttr(bitmap, P96BMA_HEIGHT);
+	return attach(c);
 }
 
 void mgl_MGLDeleteContext(GLcontext context) {
 	if (context) destroy(QT_MGL(context));
+}
+
+/* Writes the frame into the bitmap, locked, over the window's inner area
+ * (the window's layer locked as well, so nothing draws there meanwhile). */
+static void presentFrame(QtMglContext *c) {
+	struct BitMap *bitmap = targetBitMap(c);
+	struct RenderInfo info;
+	QtTarget target;
+	LONG lock;
+	if (c->window) LockLayerRom(c->window->WLayer);
+	lock = p96LockBitMap(bitmap, (UBYTE *) &info, sizeof(info));
+	if (lock) {
+		target.address = (ULONG) info.Memory;
+		target.bytesPerRow = (ULONG) info.BytesPerRow;
+		target.format = (ULONG) info.RGBFormat;
+		target.bitmapWidth = p96GetBitMapAttr(bitmap, P96BMA_WIDTH);
+		target.bitmapHeight = p96GetBitMapAttr(bitmap, P96BMA_HEIGHT);
+		target.left = c->window ? c->left : 0;
+		target.top = c->window ? c->top : 0;
+		target.width = c->width;
+		target.height = c->height;
+		swapBuffersTo(&target);
+		p96UnlockBitMap(bitmap, lock);
+	}
+	else swapBuffersTo(NULL);
+	if (c->window) UnlockLayerRom(c->window->WLayer);
 }
 
 /* Presents the frame, following the window if it moved or changed size. */
@@ -169,7 +233,7 @@ void mgl_MGLSwitchDisplay(GLcontext context) {
 	QtMglContext *c = QT_MGL(context);
 	if (!c) return;
 	selectContext(c->host);
-	if (!c->fullscreen) {
+	if (!c->fullscreen && c->window) {
 		struct Window *w = c->window;
 		if (c->left != w->LeftEdge + w->BorderLeft || c->top != w->TopEdge + w->BorderTop
 				|| c->width != w->Width - (w->BorderLeft + w->BorderRight) || c->height != w->Height - (w->BorderTop + w->BorderBottom)) {
@@ -177,7 +241,8 @@ void mgl_MGLSwitchDisplay(GLcontext context) {
 			moveWindow(c->left, c->top, c->width, c->height);
 		}
 	}
-	swapBuffers();
+	if (c->offscreen) presentFrame(c);
+	else swapBuffers();
 }
 
 void mgl_MGLResizeContext(GLcontext context, GLsizei width, GLsizei height) {

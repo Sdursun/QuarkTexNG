@@ -41,6 +41,9 @@ param(
 	# Log frame rate and where the time of a frame goes, every 300 frames
 	# (QUARKTEX_PROFILE).
 	[switch]$Profile,
+	# WinUAE's display mode: 'false' (a window), 'true' (fullscreen) or
+	# 'fullwindow' (a borderless window over the whole screen).
+	[ValidateSet('false', 'true', 'fullwindow')] [string]$Fullscreen = 'false',
 	[string]$Settings = (Join-Path $PSScriptRoot 'settings.local.psd1')
 )
 
@@ -87,7 +90,9 @@ $template = (Get-Content (Join-Path $PSScriptRoot 'winuae\test.uae.in') -Raw).
 	Replace('@JITCACHE@', '16384').
 	Replace('z3mem_size=256', "z3mem_size=$Z3MemMB").
 	Replace('cpu_type=68040', 'cpu_type=68060').Replace('cpu_model=68040', 'cpu_model=68060').
-	Replace('fpu_model=68040', 'fpu_model=68060')
+	Replace('fpu_model=68040', 'fpu_model=68060').
+	Replace('gfx_fullscreen_amiga=false', "gfx_fullscreen_amiga=$Fullscreen").
+	Replace('gfx_fullscreen_picasso=false', "gfx_fullscreen_picasso=$Fullscreen")
 $template += "filesystem2=rw,${Volume}:${Volume}:$VolumeDir,-128`n"
 $config = Join-Path $dir 'app.uae'
 Set-Content -Path $config -Value $template -Encoding ASCII
