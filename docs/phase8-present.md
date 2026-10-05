@@ -124,3 +124,53 @@ traced frame has a NaN.
 not, all libraries log a warning, and minigl.library shows a requester
 before its first screen opens. The test configuration sets
 `fpu_msvc_long_double=true`; the reference tests are unchanged by it.
+
+## agl.library and Warp3D.library
+
+The presenting moved to `gl/gl.c` (`presentable`, `presentInto`), shared by
+the three libraries. agl and Warp3D write each frame before the call
+returns (`wait`): their applications may stop drawing after any frame
+(event-driven StormMESA programs), and no later command would write it.
+
+- **agl.library:** a context on a Picasso96 window is offscreen;
+  `AmigaMesaSwapBuffers` writes the frame into the window.
+- **Warp3D.library, windowed:** the frame goes into the window when the
+  application ClipBlits into it (as before, ClipBlit is patched) or calls
+  `W3D_FlushFrame`.
+- **Warp3D.library, fullscreen** (`W3D_CC_MODEID`): the frame goes into the
+  draw region's bitmap at its y offset when the application shows it.
+  `ChangeScreenBuffer` and `ScrollVPort` are patched to write the frame
+  first and then call the original function (through a trampoline that
+  puts the library base in a6); changing the draw region and
+  `W3D_FlushFrame` write it too. A dirty flag, set by the drawing and
+  clearing commands, keeps a frame from being written twice. The 0.53
+  patches that turned `RectFill`, `EraseRect` and the display functions
+  off stay for the host window path of planar screens only.
+
+Found on the way:
+
+- Since phase 6 the fullscreen branch of `W3D_CreateContext` tested `qt`
+  instead of the fullscreen flag, so fullscreen contexts got no host
+  context and the call failed.
+- `W3D_AllocTexObj` left `mipmaps[0-15]` as malloc left them and wrote
+  `mipmaps[16]`, past the array. The texture is cleared now.
+- The `W3D_Context` fields that describe the draw region (drawregion,
+  width, height, bprow, depth, format, yoffset, scissor, maximum texture
+  sizes) stayed 0; they are filled from the bitmap now, also on
+  `W3D_SetDrawRegion`.
+- Lines go through pixel centres, as points do. At whole coordinates the
+  row a line lit was the driver's choice, and the window and the
+  framebuffer object of the same driver chose differently;
+  `t02_primitives` is a known difference to 0.53 for it.
+
+Checks: every reference test prints what the Amiga display shows at five
+points of its window after the last frame (`report_shown` in
+`tests/window.c`); all 27 match their captured frame. `w01_w3d_fullscreen`
+opens a double-buffered 16-bit screen, draws three frames into alternate
+buffers and flips them, and reads both buffers back: the context describes
+the screen and each buffer holds its frame.
+
+Open: MiniGL Classic (the Warp3D-based minigl.library) in fullscreen
+creates its context and a texture, destroys the context and then crashes
+the system (AN_MemCorrupt). QuartexNG's own minigl.library runs those
+games; MiniGL Classic on QuartexNG's Warp3D is still to be looked into.

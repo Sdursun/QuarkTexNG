@@ -74,6 +74,10 @@ extern struct Library *Warp3DBase;
 	LP2(390, ULONG, W3D_DrawLineStrip, W3D_Context *, context, a0, W3D_Lines *, lines, a1, , Warp3DBase)
 #define W3D_DrawLineLoop(context, lines) \
 	LP2(396, ULONG, W3D_DrawLineLoop, W3D_Context *, context, a0, W3D_Lines *, lines, a1, , Warp3DBase)
+#define W3D_SetDrawRegion(context, bitmap, yoffset, scissor) \
+	LP4(192, ULONG, W3D_SetDrawRegion, W3D_Context *, context, a0, struct BitMap *, bitmap, a1, int, yoffset, d1, W3D_Scissor *, scissor, a2, , Warp3DBase)
+#define W3D_FlushFrame(context) \
+	LP1NR(432, W3D_FlushFrame, W3D_Context *, context, a0, , Warp3DBase)
 #define W3D_ClearDrawRegion(context, color) \
 	LP2(450, ULONG, W3D_ClearDrawRegion, W3D_Context *, context, a0, ULONG, color, d0, , Warp3DBase)
 #define W3D_VertexPointer(context, pointer, stride, mode, flags) \
