@@ -329,7 +329,7 @@ namespace {
 
 	// One colour channel of an ARGB word, as Drawing.c computed it.
 	float channel(uint32_t color, int shift) {
-		return static_cast<float>((color >> shift) & 0xFF) / 256;
+		return static_cast<float>((color >> shift) & 0xFF) / 255; // 0.53 divided by 256
 	}
 }
 
@@ -468,18 +468,14 @@ bool decode(const Command& c, int32_t& result) {
 		return true;
 
 	case QT_W3D_CLEAR: {
-		// Drawing.c: a real clear in fullscreen, a rectangle in the current
-		// state (texturing, blending, ...) in a window.
+		// A clear of the colour buffer whatever the state, in a window too:
+		// the host window is the drawing region. (0.53 drew a rectangle in
+		// the current state in a window, textured, blended, fogged; the
+		// fullscreen flag and the size are no longer needed.)
 		uint32_t color = c.u(1);
 		if (c.words != 5) return false;
-		if (c.u(2)) {
-			QT_GL(ClearColor)(channel(color, 16), channel(color, 8), channel(color, 0), channel(color, 24));
-			QT_GL(Clear)(GL_COLOR_BUFFER_BIT);
-		}
-		else {
-			QT_GL(Color4f)(channel(color, 16), channel(color, 8), channel(color, 0), channel(color, 24));
-			QT_GL(Recti)(0, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4));
-		}
+		QT_GL(ClearColor)(channel(color, 16), channel(color, 8), channel(color, 0), channel(color, 24));
+		QT_GL(Clear)(GL_COLOR_BUFFER_BIT);
 		return true;
 	}
 

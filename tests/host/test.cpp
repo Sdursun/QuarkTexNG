@@ -335,7 +335,8 @@ int main() {
 	qt_flush();
 	check(joined() == "DepthMask(1)", "QT_W3D_SET_STATE ZBUFFERUPDATE: " + joined());
 
-	// W3D_ClearDrawRegion in a window draws a rectangle in the colour.
+	// W3D_ClearDrawRegion clears in the colour, also in a window (0.53 drew a
+	// rectangle in the current state there); channels / 255.
 	records.clear();
 	{
 		ULONG* w = qt_reserve(5);
@@ -346,7 +347,7 @@ int main() {
 		w[4] = 240;
 	}
 	qt_flush();
-	check(joined() == "Color4f(0.125,0.25,0.5,0.99609375) Recti(0,0,320,240)", "QT_W3D_CLEAR: " + joined());
+	check(joined() == "ClearColor(0.125490203,0.250980407,0.501960814,1) Clear(16384)", "QT_W3D_CLEAR: " + joined());
 
 	// W3D_AllocTexObj with an R5G6B5 image at Amiga address 0x14000.
 	records.clear();

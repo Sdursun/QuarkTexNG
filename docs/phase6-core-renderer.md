@@ -218,9 +218,11 @@ Tried with MiniGL Classic 27.0 (a minigl.library on Warp3D):
   regression but a mismatch between this MiniGL path and QuarkTex's
   Warp3D. Open: whether Wazp3D or a real Warp3D driver reads those arrays
   differently.
-- Found on the way: in a window `W3D_ClearDrawRegion` draws a rectangle in
-  the current state (as 0.53 did), so with blending on it does not clear.
-  Real Warp3D clears regardless of the state. Not fixed yet.
+- Found on the way, fixed since: in a window `W3D_ClearDrawRegion` drew a rectangle in
+  the current state (as 0.53 did), so with blending on it did not clear,
+  and divided the colour channels by 256. It is a real clear now, as in
+  Warp3D (test t21_clear; against `clear0` only it changed). Hurrican looks
+  the same with it: its missing parts come from the vertex arrays above.
 
 ## Leaks
 
