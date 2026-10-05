@@ -10,7 +10,9 @@
 #include "ffp.h"
 #define QT_GL(name) ffp::name
 #endif
+#include <cstdio>
 #include <map>
+#include <string>
 #include <vector>
 #include "gldecode.h"
 #include "w3dcmd.h"
@@ -264,6 +266,22 @@ namespace {
 			case W3D_INDEX_ULONG: i = readU32(c, indices + 4 * n); break;
 			default: i = first + n; break;
 			}
+			if (qt_w3d_trace_all && n < 4) {
+				uint32_t v = a.vertex + i * a.vertexStride, t = a.texCoord + i * a.texStride;
+				char line[200];
+				snprintf(line, sizeof(line), "  vertex %u: %g %g %g  uvw %g %g %g  color %08X", i, readFloat(c, v), readFloat(c, v + 4),
+					readFloat(c, v + 8), readFloat(c, t), readFloat(c, t + a.texV), readFloat(c, t + a.texW), readU32(c, a.color + i * a.colorStride));
+				qt_report(line);
+				if (n == 0) { // the first vertex record as words, to see its layout
+					std::string words;
+					for (uint32_t k = 0; k < a.vertexStride && k < 128; k += 4) {
+						char word[12];
+						snprintf(word, sizeof(word), " %08X", readU32(c, v + k));
+						words += word;
+					}
+					qt_report(("  record:" + words).c_str());
+				}
+			}
 			arrayColor(c, a, i);
 			arrayTexCoord(c, a, i);
 			arrayVertex(c, a, i);
@@ -321,7 +339,36 @@ void qt_w3d_sync() {
 #endif
 }
 
+// Tracing for finding out how an application draws (QUARKTEX_TRACE, see
+// host/quarktex.cpp): the texture commands, or all commands, are logged with
+// their first argument words and their result.
+bool qt_w3d_trace_textures = false;
+bool qt_w3d_trace_all = false;
+
+namespace {
+	bool decode(const Command& c, int32_t& result);
+
+	bool textureCommand(uint32_t opcode) {
+		return (opcode >= QT_W3D_TEX_ALLOC && opcode <= QT_W3D_TEX_UPDATE && opcode != QT_W3D_DRAW_ARRAY) || opcode == QT_W3D_CHROMA;
+	}
+
+	void trace(const Command& c, bool ok, int32_t result) {
+		char line[320];
+		int length = snprintf(line, sizeof(line), "W3D %04X:", c.u(0) >> 16);
+		for (uint32_t i = 1; i < c.words && i <= 21 && length < 300; ++i) length += snprintf(line + length, sizeof(line) - length, " %X", c.u(i));
+		snprintf(line + length, sizeof(line) - length, "%s -> %d%s", c.words > 22 ? " ..." : "", result, ok ? "" : " (bad)");
+		qt_report(line);
+	}
+}
+
 bool qt_w3d_decode(const Command& c, int32_t& result) {
+	bool ok = decode(c, result);
+	if (qt_w3d_trace_all || (qt_w3d_trace_textures && textureCommand(c.u(0) >> 16))) trace(c, ok, result);
+	return ok;
+}
+
+namespace {
+bool decode(const Command& c, int32_t& result) {
 	result = 0;
 #ifndef QT_TEST
 	if (!ffp::active()) return false; // a Warp3D command in an agl context
@@ -660,4 +707,5 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 	}
 	}
 	return false;
+}
 }

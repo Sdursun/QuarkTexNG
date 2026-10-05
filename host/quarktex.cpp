@@ -269,9 +269,16 @@ void qt_report(const char* message) {
 
 // a1 = command buffer, d1 = its length in bytes, d2 = context. Returns the
 // result of the last command.
+// QUARKTEX_TRACE=1 logs every Warp3D texture command; QUARKTEX_TRACE_FRAME=n
+// every Warp3D command between the n-th and the next buffer swap of a context.
+namespace {
+	long traceFrame = -1;
+}
+
 QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
 	Context* c = find(uni->d2);
 	if (!c || !activate(c)) return 0;
+	qt_w3d_trace_all = traceFrame >= 0 && c->swaps == static_cast<unsigned long>(traceFrame);
 	if (!c->profile.on) return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
 	LARGE_INTEGER start, end;
 	QueryPerformanceCounter(&start);
@@ -388,6 +395,10 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 		captureEvery = every && atol(every) > 0 ? static_cast<unsigned long>(atol(every)) : 1;
 	}
 	c->profile.on = getenv("QUARKTEX_PROFILE") != 0;
+	const char* trace = getenv("QUARKTEX_TRACE");
+	qt_w3d_trace_textures = trace && *trace && *trace != '0';
+	const char* frame = getenv("QUARKTEX_TRACE_FRAME");
+	traceFrame = frame && *frame ? atol(frame) : -1;
 	c->id = nextId++;
 	if (!nextId) nextId = 1; // 0 means no context
 	contexts[c->id] = c;

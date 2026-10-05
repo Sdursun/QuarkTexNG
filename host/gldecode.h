@@ -79,4 +79,7 @@ bool qt_w3d_decode(const Command& c, int32_t& result);
 // command runs.
 void qt_w3d_sync();
 
+// Tracing of Warp3D commands into the log (host/w3d.cpp).
+extern bool qt_w3d_trace_textures, qt_w3d_trace_all;
+
 #endif

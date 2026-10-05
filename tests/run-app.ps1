@@ -33,6 +33,11 @@ param(
 	[int]$CaptureEvery = 25,
 	[int]$Z3MemMB = 512,
 	[int]$StackBytes = 2200000,
+	# Log the Warp3D texture commands (QUARKTEX_TRACE), and all Warp3D commands,
+	# with the first vertices of each array, of the given buffer swap
+	# (QUARKTEX_TRACE_FRAME), into QuarkTexLog.txt.
+	[switch]$Trace,
+	[int]$TraceFrame = -1,
 	[string]$Settings = (Join-Path $PSScriptRoot 'settings.local.psd1')
 )
 
@@ -87,12 +92,15 @@ Set-Content -Path $config -Value $template -Encoding ASCII
 Write-Host "== $Label`: $Command in $where, $Emulator, $TimeoutSec s, every $CaptureEvery. frame"
 $env:QUARKTEX_CAPTURE_DIR = Join-Path $qttest 'capture'
 $env:QUARKTEX_CAPTURE_EVERY = "$CaptureEvery"
+if ($Trace) { $env:QUARKTEX_TRACE = '1' }
+if ($TraceFrame -ge 0) { $env:QUARKTEX_TRACE_FRAME = "$TraceFrame" }
 $process = Start-Process (Join-Path $uae $Emulator) -ArgumentList '-f', "`"$config`"" -WorkingDirectory $uae -PassThru
 if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 	Stop-Process $process -Force
 	Write-Host "   stopped after $TimeoutSec s"
 }
 Remove-Item Env:QUARKTEX_CAPTURE_DIR, Env:QUARKTEX_CAPTURE_EVERY
+Remove-Item Env:QUARKTEX_TRACE, Env:QUARKTEX_TRACE_FRAME -ErrorAction SilentlyContinue
 $hostLog = Join-Path $uae 'QuarkTexLog.txt'
 if (Test-Path $hostLog) { Copy-Item $hostLog (Join-Path $qttest 'capture') -Force }
 Get-ChildItem (Join-Path $qttest 'capture') | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
