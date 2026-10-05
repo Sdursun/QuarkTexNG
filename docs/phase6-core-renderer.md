@@ -206,9 +206,21 @@ Tried with MiniGL Classic 27.0 (a minigl.library on Warp3D):
 - OpenLara MiniGL 1.7 (Tomb Raider): the intro video with subtitles and the
   main menu draw. The 3D objects on the menu ring (the passport) look dark
   and untextured; not explained yet.
-- Hurrican (classic MiniGL build): the cracktro runs; its logo is not drawn.
-  In the first runs the game stopped after it, because its copy's paths
-  were too long (above); not retried since.
+- Hurrican (classic MiniGL build), run from a drawer of a volume (it refuses
+  the root): all textures load and it plays its demo level; HUD, dialogue
+  boxes and part of the level tiles draw. Missing: the cracktro's logo and
+  stars, the intro pictures, the level backgrounds. The trace
+  (`-TraceFrame`) shows why: for those draws MiniGL Classic hands Warp3D a
+  vertex array whose positions (`MGLVertex.bx..bw`) are not filled in (NaN);
+  the screen coordinates are in the vertices' `W3D_Vertex` part. The
+  `W3D_Context` layout is the same as in MiniGL's Warp3D.h (checked field by
+  field), and QuarkTex 0.53 shows the same picture, so this is not a phase 6
+  regression but a mismatch between this MiniGL path and QuarkTex's
+  Warp3D. Open: whether Wazp3D or a real Warp3D driver reads those arrays
+  differently.
+- Found on the way: in a window `W3D_ClearDrawRegion` draws a rectangle in
+  the current state (as 0.53 did), so with blending on it does not clear.
+  Real Warp3D clears regardless of the state. Not fixed yet.
 
 ## Leaks
 
