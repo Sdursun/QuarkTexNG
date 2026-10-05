@@ -99,9 +99,27 @@ static void *attach(QtMglContext *c) {
 	return c;
 }
 
+/* An emulated FPU without 80-bit precision makes games compute wrong values
+ * (gl/gl.c): said once, on the default public screen, before the game's
+ * screen opens over it. */
+static void warnAboutFpu(void) {
+	static BOOL warned;
+	struct EasyStruct request = {sizeof(struct EasyStruct), 0, (UBYTE *) "QuartexNG",
+		(UBYTE *) "The emulated FPU computes with 64 bits,\n"
+		"not with the 80 bits of a real 68k FPU.\n"
+		"Games compute wrong values: JK2's and RTCW's\n"
+		"weapons vanish, for example.\n\n"
+		"In WinUAE: Settings, CPU and FPU,\n"
+		"FPU: Host (80-bit).", (UBYTE *) "OK"};
+	if (warned || qt_fpu_extended) return;
+	warned = TRUE;
+	EasyRequestArgs(NULL, &request, NULL, NULL);
+}
+
 static QtMglContext *allocate(void) {
 	openLibraries();
 	if (!IntuitionBase || !GfxBase) return NULL;
+	warnAboutFpu();
 	return (QtMglContext *) AllocVec(sizeof(QtMglContext), MEMF_ANY | MEMF_CLEAR);
 }
 

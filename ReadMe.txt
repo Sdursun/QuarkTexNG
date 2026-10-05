@@ -18,6 +18,12 @@ Installing
 - Copy Warp3D.library, agl.library (for StormMESA) and minigl.library (for
   MiniGL) to LIBS: in AmigaOS.
 - Enable native code in WinUAE (native_code=true in the configuration).
+- Required: set WinUAE's FPU to 80-bit precision. Settings, CPU and FPU,
+  FPU: "Host (80-bit)" (fpu_msvc_long_double=true in the configuration).
+  With the default 64 bits games compute wrong values that a real 68k FPU
+  does not: in JK2 the first person weapon never shows, in RTCW it vanishes
+  during play. minigl.library tells so in a requester, all three libraries
+  in QuartexNGLog.txt.
 
 QuartexNG works in 32-bit (winuae.exe) and 64-bit (winuae64.exe) WinUAE; each
 loads the DLL for its own architecture.

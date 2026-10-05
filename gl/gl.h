@@ -53,6 +53,9 @@ void swapBuffersTo(const QtTarget *target);
  * waiting for input, when no commands would follow). */
 void finishFrame(void);
 void logString(char* c);
+/* 0 if the FPU does not compute with 80-bit extended precision (an emulator
+ * set to 64 bits): glInit logs a warning. */
+extern int qt_fpu_extended;
 
 /* Command buffer (gl/gl.c). qt_reserve returns room for words 32-bit words;
  * qt_flush executes the buffer on the host and returns the last result. */

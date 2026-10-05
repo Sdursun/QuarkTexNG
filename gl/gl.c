@@ -132,10 +132,32 @@ static inline ULONG qt_dlo(double d) {
 
 /* --- Library life cycle and context ------------------------------------- */
 
+/*
+ * Whether the FPU computes with the 68881's 80-bit extended precision, as a
+ * real one does. WinUAE emulates it with 64-bit doubles unless its CPU and FPU
+ * page says "Host (80-bit)" or "Softfloat (80-bit)"; then intermediate
+ * results the games count on overflow: JK2's and RTCW's first person weapons
+ * got matrices of NaNs and vanished. 1 + 2^-60 differs from 1 only with the
+ * 64-bit mantissa of extended precision (checked in WinUAE: 0 with its
+ * default, 1 with Host (80-bit), also with the JIT FPU, and Softfloat).
+ */
+int qt_fpu_extended = 1;
+
+static int fpuExtended(void) {
+	volatile long double one = 1.0L, step = 8.673617379884035472e-19L; /* 2^-60 */
+	long double sum = one + step;
+	return sum != one;
+}
+
 void glInit(void) {
 	openHost();
 	if (qt_execute) qt_buffer = AllocVec(QT_BUFFER_BYTES, MEMF_ANY);
 	qt_used = 0;
+	qt_fpu_extended = fpuExtended();
+	if (!qt_fpu_extended) {
+		logString("Warning: the emulated FPU computes with 64 bits, not the 68k's 80. Games compute wrong values "
+			"(JK2's and RTCW's weapons vanish). In WinUAE: CPU and FPU, FPU: Host (80-bit).");
+	}
 }
 
 void glExit(void) {

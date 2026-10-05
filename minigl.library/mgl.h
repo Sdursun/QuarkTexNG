@@ -31,6 +31,7 @@ void swapBuffersTo(const QtTarget *target);
  * waiting for input, when no commands would follow). */
 void finishFrame(void);
 void logString(char *c);
+extern int qt_fpu_extended; /* as in gl/gl.h */
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
 #define QT_CONTEXT_PLAIN 2 /* as in gl/gl.h */

@@ -106,3 +106,21 @@ screen), m01 320 x 240. The host log names the screen and its mode
 
 `tests/run-app.ps1 -UaeOptions` adds WinUAE configuration lines, for
 example `gfx_width_fullscreen=800` as in a user's configuration.
+
+## The emulated FPU's precision
+
+JK2's first person weapon never showed and RTCW's vanished during play,
+while both show on a real Amiga. The traced frame (`-TraceFrame`) showed the
+weapon's parts drawn with a model view matrix of NaNs and infinities, and a
+HUD element with NaN coordinates, computed by the game without any GL query.
+WinUAE emulates the 68k FPU with 64-bit doubles by default; the games count
+on the 80 bits of a real 68881/68040/68060. With CPU and FPU, FPU: "Host
+(80-bit)" (`fpu_msvc_long_double=true`) the weapon shows and no matrix of the
+traced frame has a NaN.
+
+`gl/gl.c` checks at library initialisation whether 1 + 2^-60 differs from 1
+(only with the 64-bit mantissa of extended precision; in WinUAE 0 by default,
+1 with "Host (80-bit)", with the JIT FPU as well, and with Softfloat). If
+not, all libraries log a warning, and minigl.library shows a requester
+before its first screen opens. The test configuration sets
+`fpu_msvc_long_double=true`; the reference tests are unchanged by it.
