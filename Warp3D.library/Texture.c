@@ -10,7 +10,6 @@ struct Node {
 };
 */
 
-struct Node* firstTex = NULL;
 
 /* Stored in the Texture structure and passed to the host as they are. The
  * texture formats are mapped on the host (host/w3d.cpp). */
@@ -18,8 +17,8 @@ long filter[] = {0, GL_NEAREST, GL_LINEAR, GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST
 long wrap[] = {0, GL_REPEAT, GL_CLAMP };
 
 /* Deletes the OpenGL texture on the host. */
-static void freeTexture(W3D_Texture *texture) {
-	ULONG *w = w3d_command(QT_W3D_TEX_FREE, 1);
+static void freeTexture(W3D_Context *context, W3D_Texture *texture) {
+	ULONG *w = w3d_command(context, QT_W3D_TEX_FREE, 1);
 	w[0] = ((Texture*) texture->driver)->glID;
 }
 
@@ -28,16 +27,16 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 	LOG;
 	tex = (W3D_Texture*) malloc(sizeof(W3D_Texture));
 
-	if (!firstTex) {
-		firstTex = (struct Node*) tex;
+	if (!QT(context)->textures) {
+		QT(context)->textures = (struct Node*) tex;
 		tex->link.ln_Pred = NULL;
 		tex->link.ln_Succ = NULL;
 	}
 	else {
 		tex->link.ln_Pred = NULL;
-		tex->link.ln_Succ = firstTex;
-		firstTex->ln_Pred = &tex->link;
-		firstTex = &tex->link;
+		tex->link.ln_Succ = QT(context)->textures;
+		QT(context)->textures->ln_Pred = &tex->link;
+		QT(context)->textures = &tex->link;
 	}
 	tex->resident = W3D_TRUE;
 	tex->mipmap = W3D_FALSE;
@@ -89,7 +88,7 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 	((Texture*) tex->driver)->bordercolor.r = 0; ((Texture*) tex->driver)->bordercolor.g = 0; ((Texture*) tex->driver)->bordercolor.b = 0; ((Texture*) tex->driver)->bordercolor.a = 0;
 	/* The host creates the texture and returns its OpenGL name (host/w3d.cpp). */
 	{
-		ULONG *w = w3d_command(QT_W3D_TEX_ALLOC, 5);
+		ULONG *w = w3d_command(context, QT_W3D_TEX_ALLOC, 5);
 		w[0] = tex->texfmtsrc;
 		w[1] = tex->texwidth;
 		w[2] = tex->texheight;
@@ -103,13 +102,13 @@ W3D_Texture *W3D_AllocTexObj(__REGA0(W3D_Context *context), __REGA1(ULONG *error
 
 void W3D_FreeTexObj(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture)) {
 	LOG;
-	if (texture->link.ln_Pred == NULL) { firstTex = texture->link.ln_Succ; if (firstTex != NULL) firstTex->ln_Pred = NULL; }
+	if (texture->link.ln_Pred == NULL) { QT(context)->textures = texture->link.ln_Succ; if (QT(context)->textures != NULL) QT(context)->textures->ln_Pred = NULL; }
 	if (texture->link.ln_Succ == NULL && texture->link.ln_Pred != NULL) texture->link.ln_Pred->ln_Succ = NULL;
 	if (texture->link.ln_Pred != NULL && texture->link.ln_Succ != NULL) {
 		(texture->link.ln_Pred)->ln_Succ = texture->link.ln_Succ;
 		(texture->link.ln_Succ)->ln_Pred = texture->link.ln_Pred;
 	}
-	freeTexture(texture);
+	freeTexture(context, texture);
 	free(texture->driver);
 	free(texture);
 }
@@ -129,7 +128,7 @@ ULONG W3D_SetFilter(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture)
 	LOG;
 	((Texture*) texture->driver)->MinFilter = filter[MinFilter];
 	((Texture*) texture->driver)->MagFilter = filter[MagFilter];
-	w = w3d_command(QT_W3D_TEX_FILTER, 3);
+	w = w3d_command(context, QT_W3D_TEX_FILTER, 3);
 	w[0] = ((Texture*) texture->driver)->glID;
 	w[1] = ((Texture*) texture->driver)->MinFilter;
 	w[2] = ((Texture*) texture->driver)->MagFilter;
@@ -148,7 +147,7 @@ ULONG W3D_SetTexEnv(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture)
 	LOG;
 	t->envparam = envparam;
 	t->envcolor = *envcolor;
-	w = w3d_command(QT_W3D_TEX_ENV, 6);
+	w = w3d_command(context, QT_W3D_TEX_ENV, 6);
 	w[0] = t->glID;
 	w[1] = envparam;
 	w[2] = f2l(t->envcolor.r);
@@ -165,7 +164,7 @@ ULONG W3D_SetWrapMode(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *textur
 	t->s_mode = wrap[s_mode];
 	t->t_mode = wrap[t_mode];
 	t->bordercolor = *bordercolor;
-	w = w3d_command(QT_W3D_TEX_WRAP, 7);
+	w = w3d_command(context, QT_W3D_TEX_WRAP, 7);
 	w[0] = t->glID;
 	w[1] = t->s_mode;
 	w[2] = t->t_mode;
@@ -178,8 +177,8 @@ ULONG W3D_SetWrapMode(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *textur
 
 /* The host reads the image right away (synchronous command). bytesPerRow 0
  * means rows of width pixels without gaps. */
-static void updateTexture(W3D_Texture *texture, void *image, ULONG x, ULONG y, ULONG width, ULONG height, ULONG bytesPerRow) {
-	ULONG *w = w3d_command(QT_W3D_TEX_UPDATE, 9);
+static void updateTexture(W3D_Context *context, W3D_Texture *texture, void *image, ULONG x, ULONG y, ULONG width, ULONG height, ULONG bytesPerRow) {
+	ULONG *w = w3d_command(context, QT_W3D_TEX_UPDATE, 9);
 	w[0] = ((Texture*) texture->driver)->glID;
 	w[1] = texture->texfmtsrc;
 	w[2] = x;
@@ -196,7 +195,7 @@ ULONG W3D_UpdateTexImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *tex
 	LOG;
 	texture->texsource = teximage;
 	if (palette) texture->palette = palette;
-	updateTexture(texture, teximage, 0, 0, texture->texwidth, texture->texheight, 0);
+	updateTexture(context, texture, teximage, 0, 0, texture->texwidth, texture->texheight, 0);
 	return W3D_SUCCESS;
 }
 
@@ -205,7 +204,7 @@ ULONG W3D_UpdateTexImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *tex
 ULONG W3D_UpdateTexSubImage(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *texture), __REGA2(void *teximage), __REGD1(ULONG level), __REGA3(ULONG *palette), __REGA4(W3D_Scissor* scissor), __REGD0(ULONG srcbpr)) {
 	LOG;
 	if (palette) texture->palette = palette;
-	updateTexture(texture, teximage, scissor->left, scissor->top, scissor->width, scissor->height, srcbpr);
+	updateTexture(context, texture, teximage, scissor->left, scissor->top, scissor->width, scissor->height, srcbpr);
 	return W3D_SUCCESS;
 }
 
@@ -219,13 +218,13 @@ ULONG W3D_UploadTexture(__REGA0(W3D_Context *context), __REGA1(W3D_Texture *text
 ULONG W3D_FreeAllTexObj(__REGA0(W3D_Context *context)) {
 	W3D_Texture *n, *next;
 	LOG;
-	for (n = (W3D_Texture*) firstTex; n != NULL; n = next) {
+	for (n = (W3D_Texture*) QT(context)->textures; n != NULL; n = next) {
 		next = (W3D_Texture*) n->link.ln_Succ;
-		freeTexture(n);
+		freeTexture(context, n);
 		free(n->driver);
 		free(n);
 	}
-	firstTex = NULL;
+	QT(context)->textures = NULL;
 	return W3D_SUCCESS;
 }
 
@@ -235,7 +234,7 @@ ULONG W3D_SetChromaTestBounds(__REGA0(W3D_Context *context), __REGA1(W3D_Texture
 	ULONG *w;
 	LOG;
 	if (!texture || mode < W3D_CHROMATEST_NONE || mode > W3D_CHROMATEST_EXCLUSIVE) return W3D_ILLEGALINPUT;
-	w = w3d_command(QT_W3D_CHROMA, 4);
+	w = w3d_command(context, QT_W3D_CHROMA, 4);
 	w[0] = ((Texture*) texture->driver)->glID;
 	w[1] = rgba_lower;
 	w[2] = rgba_upper;

@@ -1,12 +1,17 @@
 // QuarkTex host library. The emulator loads it through uaenative.library
 // (native_code=true) as quarktex-windows-x86.dll or quarktex-windows-x86-64.dll
 // and the 68k side calls the qt_* functions below.
+//
+// Every Warp3D or agl context the Amiga side creates gets its own child
+// window of the emulator window, OpenGL context and (for Warp3D) ffp.h state,
+// named by the id qt_create_context returns; the other calls pass that id.
 #include "gl3.h"
 #include <GL/glu.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 #include "uni.h"
@@ -14,7 +19,7 @@
 #include "ffp.h"
 
 // Must match QT_PROTOCOL_VERSION in gl/gl.c.
-#define QT_PROTOCOL_VERSION 7
+#define QT_PROTOCOL_VERSION 8
 
 extern "C" {
 	__declspec(dllexport) uni_resolve_function uni_resolve = 0;
@@ -22,12 +27,7 @@ extern "C" {
 
 namespace {
 	HINSTANCE instance = 0;
-	HWND amigaWindow = 0;
-	HWND windowHandle = 0;
-	HDC deviceContext = 0;
-	HGLRC glContext = 0;
-	bool coreProfile = false; // Warp3D: OpenGL 3.3 core and the ffp.h emulation
-	bool registered = false;
+	int classUsers = 0; // windows of the "QuarkTex" class
 
 	// qt_create_context flags, as QT_CONTEXT_CORE in gl/gl.h.
 	const int32_t contextCore = 1;
@@ -79,43 +79,96 @@ namespace {
 		if (!out) out = new std::ofstream("QuarkTexLog.txt");
 		*out << c << std::endl;
 	}
+
+	// Time spent executing command buffers, logged per context when the
+	// environment variable QUARKTEX_PROFILE is set.
+	struct Profile {
+		bool on;
+		LONGLONG ticks;
+		unsigned long calls;
+		unsigned long long bytes;
+	};
+
+	struct Context {
+		uint32_t id;
+		HWND window;
+		HDC deviceContext;
+		HGLRC gl;
+		ffp::Context* ffp; // Warp3D (OpenGL 3.3 core) only
+		std::string label; // frame capture
+		int frames;
+		Profile profile;
+	};
+
+	std::map<uint32_t, Context*> contexts;
+	uint32_t nextId = 1;
+	Context* active = 0; // whose OpenGL context is current
+
+	Context* find(int32_t id) {
+		std::map<uint32_t, Context*>::const_iterator i = contexts.find(static_cast<uint32_t>(id));
+		return i == contexts.end() ? 0 : i->second;
+	}
+
+	// Makes the context's OpenGL context (and ffp state) current.
+	bool activate(Context* c) {
+		if (c == active) return true;
+		if (!wglMakeCurrent(c->deviceContext, c->gl)) {
+			logString("Warning: Could not activate a rendering context");
+			return false;
+		}
+		active = c;
+		ffp::makeCurrent(c->ffp);
+		return true;
+	}
+
+	void logProfile(const Context* c) {
+		if (!c->profile.on || !c->profile.calls) return;
+		LARGE_INTEGER frequency;
+		QueryPerformanceFrequency(&frequency);
+		char line[160];
+		snprintf(line, sizeof(line), "Profile %s: %lu buffers, %llu bytes, %.3f s executing",
+			c->label.empty() ? "context" : c->label.c_str(), c->profile.calls, c->profile.bytes,
+			static_cast<double>(c->profile.ticks) / frequency.QuadPart);
+		logString(line);
+	}
 }
 
 // Frame capture for the reference tests in tests/. Off unless the environment
 // variable QUARKTEX_CAPTURE_DIR names a directory: every swap then writes
 // <label>_<frame>.bmp there. The label is the first line of label.txt in that
-// directory when the context is created (the test programs write it).
+// directory when the context is created (the test programs write it); a
+// second context created while one with that label exists gets <label>-2,
+// and so on.
 namespace {
 	std::string captureDir;
-	std::string captureLabel;
 	int captureContexts = 0;
-	int captureFrames = 0;
 
-	void startCapture() {
-		const char* dir = getenv("QUARKTEX_CAPTURE_DIR");
-		captureDir = dir ? dir : "";
-		if (captureDir.empty()) return;
-		++captureContexts;
-		captureFrames = 0;
-
-		std::string line;
+	std::string captureLabel() {
+		std::string line, label;
 		std::ifstream labelFile((captureDir + "\\label.txt").c_str());
 		if (labelFile) std::getline(labelFile, line);
-		captureLabel.clear();
 		for (size_t i = 0; i < line.size(); ++i) {
 			char c = line[i];
-			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') captureLabel += c;
+			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') label += c;
 		}
-		if (captureLabel.empty()) {
-			char name[32];
+		char name[32];
+		if (label.empty()) {
 			sprintf(name, "context%02d", captureContexts);
-			captureLabel = name;
+			return name;
 		}
+		int same = 0;
+		for (std::map<uint32_t, Context*>::const_iterator i = contexts.begin(); i != contexts.end(); ++i) {
+			const std::string& other = i->second->label;
+			if (other == label || (other.compare(0, label.size() + 1, label + "-") == 0)) ++same;
+		}
+		if (!same) return label;
+		sprintf(name, "-%d", same + 1);
+		return label + name;
 	}
 
-	void captureFrame() {
+	void captureFrame(Context* c) {
 		RECT rect;
-		if (!GetClientRect(windowHandle, &rect)) return;
+		if (!GetClientRect(c->window, &rect)) return;
 		int width = rect.right - rect.left;
 		int height = rect.bottom - rect.top;
 		if (width <= 0 || height <= 0) return;
@@ -129,7 +182,8 @@ namespace {
 		const GLenum packs[] = {GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_ROWS, GL_PACK_SKIP_PIXELS, GL_PACK_SWAP_BYTES};
 		const GLint packValues[] = {4, 0, 0, 0, GL_FALSE};
 		GLint saved[5], readBuffer = GL_BACK;
-		if (coreProfile) {
+		bool core = c->ffp != 0;
+		if (core) {
 			for (int i = 0; i < 5; ++i) glGetIntegerv(packs[i], &saved[i]);
 			glGetIntegerv(GL_READ_BUFFER, &readBuffer);
 		}
@@ -141,7 +195,7 @@ namespace {
 		glReadBuffer(GL_BACK);
 		// Bottom-up BGR rows padded to 4 bytes are exactly what BMP stores.
 		glReadPixels(0, 0, width, height, GL_BGR_EXT, GL_UNSIGNED_BYTE, &pixels[0]);
-		if (coreProfile) {
+		if (core) {
 			for (int i = 0; i < 5; ++i) glPixelStorei(packs[i], saved[i]);
 			glReadBuffer(static_cast<GLenum>(readBuffer));
 		}
@@ -166,11 +220,30 @@ namespace {
 		info.biSizeImage = static_cast<DWORD>(pixels.size());
 
 		char name[32];
-		sprintf(name, "_%03d.bmp", captureFrames++);
-		std::ofstream bmp((captureDir + "\\" + captureLabel + name).c_str(), std::ios::binary);
+		sprintf(name, "_%03d.bmp", c->frames++);
+		std::ofstream bmp((captureDir + "\\" + c->label + name).c_str(), std::ios::binary);
 		bmp.write(reinterpret_cast<const char*>(&file), sizeof(file));
 		bmp.write(reinterpret_cast<const char*>(&info), sizeof(info));
 		bmp.write(reinterpret_cast<const char*>(&pixels[0]), pixels.size());
+	}
+
+	// Releases what create got so far; c is not in contexts yet or any more.
+	void destroy(Context* c) {
+		if (c->gl) {
+			if (wglMakeCurrent(c->deviceContext, c->gl)) {
+				if (c->ffp) ffp::destroy(c->ffp);
+				ffp::makeCurrent(0);
+			}
+			wglMakeCurrent(0, 0);
+			wglDeleteContext(c->gl);
+			active = 0;
+		}
+		if (c->deviceContext) ReleaseDC(c->window, c->deviceContext);
+		if (c->window) {
+			DestroyWindow(c->window);
+			if (--classUsers == 0) UnregisterClassA("QuarkTex", instance);
+		}
+		delete c;
 	}
 }
 
@@ -192,84 +265,41 @@ void qt_report(const char* message) {
 	logString(message);
 }
 
-// a1 = command buffer, d1 = its length in bytes. Returns the result of the
-// last command.
-// Time spent executing command buffers, logged per context when the
-// environment variable QUARKTEX_PROFILE is set.
-namespace {
-	struct Profile {
-		bool on;
-		LONGLONG ticks;
-		unsigned long calls;
-		unsigned long long bytes;
-	} profile;
-
-	void startProfile() {
-		profile.on = getenv("QUARKTEX_PROFILE") != 0;
-		profile.ticks = 0;
-		profile.calls = 0;
-		profile.bytes = 0;
-	}
-
-	void logProfile() {
-		if (!profile.on || !profile.calls) return;
-		LARGE_INTEGER frequency;
-		QueryPerformanceFrequency(&frequency);
-		char line[160];
-		snprintf(line, sizeof(line), "Profile %s: %lu buffers, %llu bytes, %.3f s executing",
-			captureLabel.empty() ? "context" : captureLabel.c_str(), profile.calls, profile.bytes,
-			static_cast<double>(profile.ticks) / frequency.QuadPart);
-		logString(line);
-	}
-}
-
+// a1 = command buffer, d1 = its length in bytes, d2 = context. Returns the
+// result of the last command.
 QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
-	if (!glContext) return 0;
-	if (!profile.on) return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
+	Context* c = find(uni->d2);
+	if (!c || !activate(c)) return 0;
+	if (!c->profile.on) return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
 	LARGE_INTEGER start, end;
 	QueryPerformanceCounter(&start);
 	int32_t result = qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
 	QueryPerformanceCounter(&end);
-	profile.ticks += end.QuadPart - start.QuadPart;
-	++profile.calls;
-	profile.bytes += static_cast<uint32_t>(uni->d1);
+	c->profile.ticks += end.QuadPart - start.QuadPart;
+	++c->profile.calls;
+	c->profile.bytes += static_cast<uint32_t>(uni->d1);
 	return result;
 }
 
-QT_EXPORT int32_t __cdecl qt_free_context(struct uni*) {
-	logProfile();
-	if (glContext) {
-		if (coreProfile) ffp::shutdown();
-		coreProfile = false;
-		wglMakeCurrent(0, 0);
-		wglDeleteContext(glContext);
-		glContext = 0;
-	}
-	if (deviceContext) {
-		ReleaseDC(windowHandle, deviceContext);
-		deviceContext = 0;
-	}
-	if (windowHandle) {
-		DestroyWindow(windowHandle);
-		windowHandle = 0;
-	}
-
-	UnregisterClassA("QuarkTex", instance);
-	registered = false;
+// d1 = context
+QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
+	Context* c = find(uni->d1);
+	if (!c) return 0;
+	logProfile(c);
+	contexts.erase(c->id);
+	destroy(c);
 	return 0;
 }
 
 // d1 = left, d2 = top, d3 = width, d4 = height of the drawing area inside the
 // Amiga display; width 0 means the whole display. d5 = flags (contextCore).
-// Returns 1 on success.
+// Returns the new context's id, 0 on failure.
 QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	int left = uni->d1, top = uni->d2, width = uni->d3, height = uni->d4;
 	bool core = (uni->d5 & contextCore) != 0;
 
 	if (!instance) instance = GetModuleHandleA(0);
-	if (registered) UnregisterClassA("QuarkTex", instance);
-
-	amigaWindow = findAmigaWindow();
+	HWND amigaWindow = findAmigaWindow();
 	if (!amigaWindow) { logString("Warning: Could not find the emulator window"); return 0; }
 
 	RECT rect;
@@ -285,20 +315,27 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 		top += rect.top;
 	}
 
-	WNDCLASSA wc;
-	memset(&wc, 0, sizeof(WNDCLASSA));
-	wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-	wc.lpfnWndProc = windowFunc;
-	wc.hInstance = instance;
-	wc.hIcon = LoadIcon(0, IDI_APPLICATION);
-	wc.hCursor = LoadCursor(0, IDC_ARROW);
-	wc.lpszClassName = "QuarkTex";
+	if (!classUsers) {
+		WNDCLASSA wc;
+		memset(&wc, 0, sizeof(WNDCLASSA));
+		wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+		wc.lpfnWndProc = windowFunc;
+		wc.hInstance = instance;
+		wc.hIcon = LoadIcon(0, IDI_APPLICATION);
+		wc.hCursor = LoadCursor(0, IDC_ARROW);
+		wc.lpszClassName = "QuarkTex";
+		if (!RegisterClassA(&wc)) { logString("Warning: Could not register Window Class"); return 0; }
+	}
 
-	if (!RegisterClassA(&wc)) { logString("Warning: Could not register Window Class"); return 0; }
-	registered = true;
-
-	if (!(windowHandle = CreateWindowExA(0, "QuarkTex", "", WS_CHILD | WS_VISIBLE, left, top, width, height, amigaWindow, 0, 0, 0))) logString("Warning: Could not create Window");
-	if (!(deviceContext = GetDC(windowHandle))) { logString("Warning: Could not get Device Context"); return 0; }
+	Context* c = new Context();
+	if (!(c->window = CreateWindowExA(0, "QuarkTex", "", WS_CHILD | WS_VISIBLE, left, top, width, height, amigaWindow, 0, 0, 0))) {
+		logString("Warning: Could not create Window");
+		if (!classUsers) UnregisterClassA("QuarkTex", instance);
+		delete c;
+		return 0;
+	}
+	++classUsers;
+	if (!(c->deviceContext = GetDC(c->window))) { logString("Warning: Could not get Device Context"); destroy(c); return 0; }
 
 	PIXELFORMATDESCRIPTOR pfd;
 	memset(&pfd, 0, sizeof(PIXELFORMATDESCRIPTOR));
@@ -311,19 +348,21 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	pfd.cDepthBits = 16;
 	pfd.cStencilBits = 8;
 	int pixelformat;
-	if ((pixelformat = ChoosePixelFormat(deviceContext, &pfd)) == 0) { logString("Warning: Could not choose pixel format"); return 0; }
-	if (!SetPixelFormat(deviceContext, pixelformat, &pfd)) { logString("Warning: Could not set pixel format"); return 0; }
+	if ((pixelformat = ChoosePixelFormat(c->deviceContext, &pfd)) == 0) { logString("Warning: Could not choose pixel format"); destroy(c); return 0; }
+	if (!SetPixelFormat(c->deviceContext, pixelformat, &pfd)) { logString("Warning: Could not set pixel format"); destroy(c); return 0; }
 
-	if (!(glContext = core ? gl3::createCoreContext(deviceContext) : wglCreateContext(deviceContext))) {
+	if (!(c->gl = core ? gl3::createCoreContext(c->deviceContext) : wglCreateContext(c->deviceContext))) {
 		logString(core ? "Warning: Could not create an OpenGL 3.3 core rendering context" : "Warning: Could not create rendering context");
+		destroy(c);
 		return 0;
 	}
-	if (!(wglMakeCurrent(deviceContext, glContext))) { logString("Warning: Could not activate the rendering context"); return 0; }
+	if (!wglMakeCurrent(c->deviceContext, c->gl)) { logString("Warning: Could not activate the rendering context"); destroy(c); return 0; }
+	active = c;
+	ffp::makeCurrent(0);
 
 	if (core) {
-		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); return 0; }
-		if (!ffp::init(width, height)) return 0;
-		coreProfile = true;
+		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); destroy(c); return 0; }
+		if (!(c->ffp = ffp::create(width, height))) { destroy(c); return 0; }
 		static bool logged = false;
 		if (!logged) {
 			logged = true;
@@ -338,21 +377,33 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 		glTranslatef(-(static_cast<float>(width) / 2.0f), -(static_cast<float>(height) / 2.0f), 0.0f);
 	}
 
-	startCapture();
-	startProfile();
-	return 1;
+	const char* dir = getenv("QUARKTEX_CAPTURE_DIR");
+	captureDir = dir ? dir : "";
+	if (!captureDir.empty()) {
+		++captureContexts;
+		c->label = captureLabel();
+	}
+	c->profile.on = getenv("QUARKTEX_PROFILE") != 0;
+	c->id = nextId++;
+	if (!nextId) nextId = 1; // 0 means no context
+	contexts[c->id] = c;
+	return static_cast<int32_t>(c->id);
 }
 
-// d1 = left, d2 = top, d3 = width, d4 = height
+// d1 = left, d2 = top, d3 = width, d4 = height, d5 = context
 QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
-	MoveWindow(windowHandle, uni->d1, uni->d2, uni->d3, uni->d4, FALSE);
+	Context* c = find(uni->d5);
+	if (c) MoveWindow(c->window, uni->d1, uni->d2, uni->d3, uni->d4, FALSE);
 	return 0;
 }
 
-QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni*) {
-	if (coreProfile) ffp::flush();
-	if (!captureDir.empty()) captureFrame();
-	SwapBuffers(deviceContext);
+// d1 = context
+QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
+	Context* c = find(uni->d1);
+	if (!c || !activate(c)) return 0;
+	ffp::flush();
+	if (!captureDir.empty()) captureFrame(c);
+	SwapBuffers(c->deviceContext);
 
 	GLenum code = glGetError();
 	while (code != GL_NO_ERROR) {

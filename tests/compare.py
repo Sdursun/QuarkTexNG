@@ -141,6 +141,11 @@ def main():
                     detail += " - listed as a known difference, but no longer differs"
         else:
             status, detail = "FAIL", "no frame from " + ("the new build" if ref else "the reference")
+            # A test the reference cannot run (it lacks the feature) may be
+            # listed too; a missing frame from the new build always fails.
+            if new and test in known:
+                status = "KNOWN"
+                detail += " - known difference: " + known[test]
         failures += status == "FAIL"
         rows.append((test, status, detail, images))
         print("%-20s %s  %s" % (test, status, detail))

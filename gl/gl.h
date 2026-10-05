@@ -21,11 +21,15 @@ typedef void GLvoid;
 
 void glInit(void);
 void glExit(void);
-/* 1 on success. flags: QT_CONTEXT_CORE for an OpenGL 3.3 core profile
+/* Host contexts. createContext returns the new context's id (0 on failure)
+ * and selects it. flags: QT_CONTEXT_CORE for an OpenGL 3.3 core profile
  * context (Warp3D, drawn by the host's emulation), 0 for a compatibility
- * one (agl, which passes OpenGL 1.1 calls on). */
-int createContext(int left, int top, int width, int height, int flags);
+ * one (agl, which passes OpenGL 1.1 calls on). Commands go to the selected
+ * context, as do moveWindow, swapBuffers and freeContext (which leaves none
+ * selected); selectContext flushes the buffer when it switches. */
+ULONG createContext(int left, int top, int width, int height, int flags);
 #define QT_CONTEXT_CORE 1
+void selectContext(ULONG id);
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);

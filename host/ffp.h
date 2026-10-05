@@ -10,11 +10,18 @@
 #include "gl3.h"
 
 namespace ffp {
-	// With the context current. width and height are those of the drawing
-	// area, as the 0.53 model view matrix used them. False on failure,
-	// logged.
-	bool init(int width, int height);
-	void shutdown();
+	// The emulation's objects and state for one OpenGL context. create needs
+	// that context current and makes the new state current; width and height
+	// are those of the drawing area, as the 0.53 model view matrix used them.
+	// 0 on failure, logged. destroy needs the OpenGL context current too.
+	// After switching OpenGL contexts, makeCurrent switches the state (0 for
+	// a context without emulation); the functions below work on the current
+	// one, and only flush may be called without one (active).
+	struct Context;
+	Context* create(int width, int height);
+	void destroy(Context* context);
+	void makeCurrent(Context* context);
+	bool active();
 
 	// Separate triangles, lines and points are batched until the state
 	// changes; flush draws them. Every function below that is not immediate

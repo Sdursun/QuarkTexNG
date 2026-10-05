@@ -38,7 +38,7 @@ ULONG W3D_BindTexture(__REGA0(W3D_Context* context), __REGD0(ULONG tmu), __REGA1
  */
 static void drawArray(W3D_Context* context, ULONG primitive, ULONG indexType, void *indices, ULONG first, ULONG count) {
 	W3D_Texture *tex = (context->state & W3D_TEXMAPPING) ? context->CurrentTex[0] : NULL;
-	ULONG *w = w3d_command(QT_W3D_DRAW_ARRAY, 21);
+	ULONG *w = w3d_command(context, QT_W3D_DRAW_ARRAY, 21);
 	w[0] = primitive;
 	w[1] = context->state;
 	w[2] = tex != NULL;
@@ -80,5 +80,6 @@ GLenum face[] = { GL_CW, GL_CCW };
 
 void W3D_SetFrontFace(__REGA0(W3D_Context* context), __REGD0(ULONG direction)) {
 	LOG;
+	w3d_select(context);
 	_glFrontFace(face[direction]);
 }

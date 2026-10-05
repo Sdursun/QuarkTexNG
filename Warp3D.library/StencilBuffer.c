@@ -24,13 +24,13 @@ ULONG W3D_ClearStencilBuffer(__REGA0(W3D_Context *context), __REGA1(ULONG *clear
 	ULONG *w;
 	LOG;
 	if (!context->stbufferalloc) return W3D_NOSTENCILBUFFER;
-	w = w3d_command(QT_W3D_STENCIL_CLEAR, 1);
+	w = w3d_command(context, QT_W3D_STENCIL_CLEAR, 1);
 	w[0] = clearvalue ? *clearvalue : 0;
 	return W3D_SUCCESS;
 }
 
-static void writeStencil(ULONG x, ULONG y, ULONG width, ULONG height, ULONG bytes, void *data, UBYTE *mask) {
-	ULONG *w = w3d_command(QT_W3D_WRITE_STENCIL, 7);
+static void writeStencil(W3D_Context *context, ULONG x, ULONG y, ULONG width, ULONG height, ULONG bytes, void *data, UBYTE *mask) {
+	ULONG *w = w3d_command(context, QT_W3D_WRITE_STENCIL, 7);
 	w[0] = x;
 	w[1] = y;
 	w[2] = width;
@@ -46,14 +46,14 @@ ULONG W3D_FillStencilBuffer(__REGA0(W3D_Context *context), __REGD0(ULONG x), __R
 	LOG;
 	if (!context->stbufferalloc) return W3D_NOSTENCILBUFFER;
 	if ((depth != 8 && depth != 16 && depth != 32) || !data) return W3D_ILLEGALINPUT;
-	writeStencil(x, y, width, height, depth / 8, data, NULL);
+	writeStencil(context, x, y, width, height, depth / 8, data, NULL);
 	return W3D_SUCCESS;
 }
 
 ULONG W3D_WriteStencilSpan(__REGA0(W3D_Context *context), __REGD0(ULONG x), __REGD1(ULONG y), __REGD2(ULONG n), __REGA1(ULONG *st), __REGA2(UBYTE *mask)) {
 	LOG;
 	if (!context->stbufferalloc) return W3D_NOSTENCILBUFFER;
-	writeStencil(x, y, n, 1, 4, st, mask);
+	writeStencil(context, x, y, n, 1, 4, st, mask);
 	return W3D_SUCCESS;
 }
 
@@ -65,9 +65,9 @@ ULONG W3D_ReadStencilSpan(__REGA0(W3D_Context *context), __REGD0(ULONG x), __REG
 	ULONG *w;
 	LOG;
 	if (!context->stbufferalloc) return W3D_NOSTENCILBUFFER;
-	w = w3d_command(QT_W3D_READ_STENCIL, 4);
+	w = w3d_command(context, QT_W3D_READ_STENCIL, 4);
 	w[0] = x;
-	w[1] = height - 1 - (long) y;
+	w[1] = QT(context)->height - 1 - (long) y;
 	w[2] = n;
 	w[3] = (ULONG) st;
 	qt_flush();
@@ -82,7 +82,7 @@ ULONG W3D_SetStencilFunc(__REGA0(W3D_Context *context), __REGD0(ULONG func), __R
 	ULONG *w;
 	LOG;
 	if (func < W3D_ST_NEVER || func > W3D_ST_NOTEQUAL) return W3D_UNSUPPORTEDSTTEST;
-	w = w3d_command(QT_W3D_STENCIL_FUNC, 3);
+	w = w3d_command(context, QT_W3D_STENCIL_FUNC, 3);
 	w[0] = func;
 	w[1] = refvalue;
 	w[2] = mask;
@@ -94,7 +94,7 @@ ULONG W3D_SetStencilOp(__REGA0(W3D_Context *context), __REGD0(ULONG sfail), __RE
 	LOG;
 	if (sfail < W3D_ST_KEEP || sfail > W3D_ST_INVERT || dpfail < W3D_ST_KEEP || dpfail > W3D_ST_INVERT
 			|| dppass < W3D_ST_KEEP || dppass > W3D_ST_INVERT) return W3D_UNSUPPORTEDSTTEST;
-	w = w3d_command(QT_W3D_STENCIL_OP, 3);
+	w = w3d_command(context, QT_W3D_STENCIL_OP, 3);
 	w[0] = sfail;
 	w[1] = dpfail;
 	w[2] = dppass;
@@ -104,7 +104,7 @@ ULONG W3D_SetStencilOp(__REGA0(W3D_Context *context), __REGD0(ULONG sfail), __RE
 ULONG W3D_SetWriteMask(__REGA0(W3D_Context *context), __REGD1(ULONG mask)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_STENCIL_MASK, 1);
+	w = w3d_command(context, QT_W3D_STENCIL_MASK, 1);
 	w[0] = mask;
 	return W3D_SUCCESS;
 }

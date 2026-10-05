@@ -18,10 +18,12 @@ void W3D_UnLockHardware(__REGA0(W3D_Context *context)) {
 }
 void W3D_WaitIdle(__REGA0(W3D_Context *context)) {
 	LOG;
+	w3d_select(context);
 	_glFinish();
 }
 ULONG W3D_CheckIdle(__REGA0(W3D_Context *context)) {
 	LOG;
+	w3d_select(context);
 	_glFinish();
 	return W3D_SUCCESS;
 }

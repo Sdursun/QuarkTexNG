@@ -11,7 +11,7 @@ static inline ULONG f2l(float f) {
 ULONG W3D_SetAlphaMode(__REGA0(W3D_Context *context), __REGD1(ULONG mode), __REGA1(W3D_Float *refval)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_ALPHA_MODE, 2);
+	w = w3d_command(context, QT_W3D_ALPHA_MODE, 2);
 	w[0] = mode;
 	w[1] = f2l(*refval);
 	return W3D_SUCCESS;
@@ -19,26 +19,32 @@ ULONG W3D_SetAlphaMode(__REGA0(W3D_Context *context), __REGD1(ULONG mode), __REG
 ULONG W3D_SetBlendMode(__REGA0(W3D_Context *context), __REGD0(ULONG srcfunc), __REGD1(ULONG dstfunc)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_BLEND_MODE, 2);
+	w = w3d_command(context, QT_W3D_BLEND_MODE, 2);
 	w[0] = srcfunc;
 	w[1] = dstfunc;
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetDrawRegion(__REGA0(W3D_Context *context), __REGA1(struct BitMap *bm), __REGD1(int yoffset), __REGA2(W3D_Scissor *scissor)) {
 	LOG;
-	if (fullscreen) swapBuffers();
+	if (QT(context)->fullscreen) {
+		w3d_select(context);
+		swapBuffers();
+	}
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetDrawRegionWBM(__REGA0(W3D_Context *context), __REGA1(W3D_Bitmap *bm), __REGA2(W3D_Scissor *scissor)) {
 	LOG;
-	if (fullscreen) swapBuffers();
+	if (QT(context)->fullscreen) {
+		w3d_select(context);
+		swapBuffers();
+	}
 	return W3D_SUCCESS;
 }
 
 ULONG W3D_SetFogParams(__REGA0(W3D_Context *context), __REGA1(W3D_Fog *fogparams), __REGD1(ULONG fogmode)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_FOG, 7);
+	w = w3d_command(context, QT_W3D_FOG, 7);
 	w[0] = fogmode;
 	w[1] = f2l(fogparams->fog_start);
 	w[2] = f2l(fogparams->fog_end);
@@ -51,14 +57,14 @@ ULONG W3D_SetFogParams(__REGA0(W3D_Context *context), __REGA1(W3D_Fog *fogparams
 ULONG W3D_SetLogicOp(__REGA0(W3D_Context *context), __REGD1(ULONG operation)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_LOGIC_OP, 1);
+	w = w3d_command(context, QT_W3D_LOGIC_OP, 1);
 	w[0] = operation;
 	return W3D_SUCCESS;
 }
 ULONG W3D_SetColorMask(__REGA0(W3D_Context *context), __REGD0(W3D_Bool red), __REGD1(W3D_Bool green), __REGD2(W3D_Bool blue), __REGD3(W3D_Bool alpha)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_COLOR_MASK, 4);
+	w = w3d_command(context, QT_W3D_COLOR_MASK, 4);
 	w[0] = (GLboolean) red;
 	w[1] = (GLboolean) green;
 	w[2] = (GLboolean) blue;
@@ -74,7 +80,7 @@ ULONG W3D_SetPenMask(__REGA0(W3D_Context *context), __REGD1(ULONG pen)) {
 ULONG W3D_SetCurrentColor(__REGA0(W3D_Context *context), __REGA1(W3D_Color *color)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_CURRENT_COLOR, 4);
+	w = w3d_command(context, QT_W3D_CURRENT_COLOR, 4);
 	w[0] = f2l(color->r);
 	w[1] = f2l(color->g);
 	w[2] = f2l(color->b);
@@ -91,14 +97,15 @@ ULONG W3D_SetCurrentPen(__REGA0(W3D_Context *context), __REGD1(ULONG pen)) {
 void W3D_SetScissor(__REGA0(W3D_Context *context), __REGA1(W3D_Scissor *scissor)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_SCISSOR, 4);
+	w = w3d_command(context, QT_W3D_SCISSOR, 4);
 	w[0] = scissor->left;
-	w[1] = height - (scissor->top + scissor->height);
+	w[1] = QT(context)->height - (scissor->top + scissor->height);
 	w[2] = scissor->width;
 	w[3] = scissor->height;
 }
 
 void W3D_FlushFrame(__REGA0(W3D_Context *context)) {
 	LOG;
+	w3d_select(context);
 	_glFinish();
 }

@@ -12,7 +12,7 @@ ULONG W3D_FreeZBuffer(__REGA0(W3D_Context *context)) {
 
 ULONG W3D_ClearZBuffer(__REGA0(W3D_Context *context), __REGA1(W3D_Double *clearvalue)) {
 	LOG;
-	w3d_command(QT_W3D_CLEAR_Z, 0);
+	w3d_command(context, QT_W3D_CLEAR_Z, 0);
 	return W3D_SUCCESS;
 }
 
@@ -27,9 +27,9 @@ ULONG W3D_ClearZBuffer(__REGA0(W3D_Context *context), __REGA1(W3D_Double *clearv
 ULONG W3D_ReadZSpan(__REGA0(W3D_Context *context), __REGD0(ULONG x), __REGD1(ULONG y), __REGD2(ULONG n), __REGA1(W3D_Double *z)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_READ_Z, 4);
+	w = w3d_command(context, QT_W3D_READ_Z, 4);
 	w[0] = x;
-	w[1] = height - 1 - (long) y;
+	w[1] = QT(context)->height - 1 - (long) y;
 	w[2] = n;
 	w[3] = (ULONG) z;
 	qt_flush();
@@ -43,7 +43,7 @@ ULONG W3D_ReadZPixel(__REGA0(W3D_Context *context), __REGD0(ULONG x), __REGD1(UL
 ULONG W3D_SetZCompareMode(__REGA0(W3D_Context *context), __REGD1(ULONG mode)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_Z_COMPARE, 1);
+	w = w3d_command(context, QT_W3D_Z_COMPARE, 1);
 	w[0] = mode;
 	return W3D_SUCCESS;
 }
@@ -51,7 +51,7 @@ ULONG W3D_SetZCompareMode(__REGA0(W3D_Context *context), __REGD1(ULONG mode)) {
 void W3D_WriteZSpan(__REGA0(W3D_Context *context), __REGD0(ULONG x), __REGD1(ULONG y), __REGD2(ULONG n), __REGA1(W3D_Double *z), __REGA2(UBYTE *mask)) {
 	ULONG *w;
 	LOG;
-	w = w3d_command(QT_W3D_WRITE_Z, 5);
+	w = w3d_command(context, QT_W3D_WRITE_Z, 5);
 	w[0] = x;
 	w[1] = y;
 	w[2] = n;

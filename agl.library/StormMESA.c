@@ -1,5 +1,6 @@
 #include "../gl/gl.h"
 #include <stdlib.h>
+#include <exec/memory.h>
 #include <proto/exec.h>
 #include <proto/utility.h>
 //#include <intuition/intuitionbase.h>
@@ -36,27 +37,46 @@ void initDD(void *  bla){}
 void dispose (struct amigamesa_context *c){}
 void swapBuffer (struct amigamesa_context *c){}
 
-struct Window* window = NULL;
-int left, top, width, height;
-int fullscreen;
+/*
+ * What QuarkTex keeps per context, in amigamesa_context.gl_ctx: the host
+ * context (gl/gl.h) and the window it covers. OpenGL calls go to the context
+ * last made current or created. (0.53 kept one context in globals.)
+ */
+struct AglContext {
+	ULONG host;
+	struct Window *window;
+	int fullscreen;
+	int left, top, width, height;
+};
+
+#define AGL(c) ((struct AglContext*) (c)->gl_ctx)
 
 struct amigamesa_context *AmigaMesaCreateContext(struct TagItem *tagList __asm("a0")) {
 	struct amigamesa_context* context;
+	struct AglContext *agl;
+	struct Window *window;
 	LOG
-	//window = IntuitionBase->ActiveWindow;
+	agl = (struct AglContext*) AllocVec(sizeof(struct AglContext), MEMF_ANY | MEMF_CLEAR);
+	if (!agl) return NULL;
 	window = (struct Window*) GetTagData(AMA_Window, NULL, tagList);
-	fullscreen = GetTagData(AMA_Fullscreen, 0, tagList);
-	if (fullscreen) createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height, 0);
-	else createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
+	agl->window = window;
+	agl->fullscreen = GetTagData(AMA_Fullscreen, 0, tagList);
+	if (agl->fullscreen) agl->host = createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height, 0);
+	else agl->host = createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
 			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom), 0);
+	if (!agl->host) {
+		FreeVec(agl);
+		return NULL;
+	}
 	/* The host turns the bytes of pixel data around (see glPixelStorei). */
 	_glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_TRUE);
 	_glPixelStorei(GL_PACK_SWAP_BYTES, GL_TRUE);
-	left = window->LeftEdge + window->BorderLeft;
-	top = window->TopEdge + window->BorderTop;
-	width = window->Width - (window->BorderLeft + window->BorderRight);
-	height = window->Height - (window->BorderTop + window->BorderBottom);
-	context = (struct amigamesa_context*) malloc(sizeof(struct amigamesa_context));
+	agl->left = window->LeftEdge + window->BorderLeft;
+	agl->top = window->TopEdge + window->BorderTop;
+	agl->width = window->Width - (window->BorderLeft + window->BorderRight);
+	agl->height = window->Height - (window->BorderTop + window->BorderBottom);
+	context = (struct amigamesa_context*) AllocVec(sizeof(struct amigamesa_context), MEMF_ANY | MEMF_CLEAR);
+	context->gl_ctx = agl;
 	context->visual = (struct amigamesa_visual*) malloc(sizeof(struct amigamesa_visual));
 	context->visual->rgb_flag = GetTagData(AMA_RGBMode, GL_TRUE, tagList);
 	context->visual->db_flag = GetTagData(AMA_DoubleBuf, GL_FALSE, tagList);
@@ -78,9 +98,12 @@ struct amigamesa_context *AmigaMesaCreateContext(struct TagItem *tagList __asm("
 }
 void AmigaMesaDestroyContext(struct amigamesa_context *c __asm("a0")) {
 	LOG
+	selectContext(AGL(c)->host);
+	freeContext();
 	free(c->visual);
 	free(c->buffer);
-	freeContext();
+	FreeVec(AGL(c));
+	FreeVec(c); /* 0.53 left it allocated */
 }
 struct amigamesa_visual *AmigaMesaCreateVisual(struct TagItem *tagList __asm("a0")) {
 	struct amigamesa_visual* visual;
@@ -102,16 +125,22 @@ void AmigaMesaDestroyVisual(struct amigamesa_visual *v __asm("a0")) {
 	LOG
 	free(v);
 }
-void AmigaMesaMakeCurrent(struct amigamesa_context *amesa __asm("a0"), struct amigamesa_buffer *b __asm("a1")) {LOG}
-void AmigaMesaSwapBuffers(struct amigamesa_context *amesa __asm("a0")) {
+void AmigaMesaMakeCurrent(struct amigamesa_context *amesa __asm("a0"), struct amigamesa_buffer *b __asm("a1")) {
 	LOG
-	if (!fullscreen && (left != window->LeftEdge + window->BorderLeft || top != window->TopEdge + window->BorderTop ||
-		width != window->Width - (window->BorderLeft + window->BorderRight) || height != window->Height - (window->BorderTop + window->BorderBottom))) {
-		left = window->LeftEdge + window->BorderLeft;
-		top = window->TopEdge + window->BorderTop;
-		width = window->Width - (window->BorderLeft + window->BorderRight);
-		height = window->Height - (window->BorderTop + window->BorderBottom);;
-		moveWindow(left, top, width, height);
+	if (amesa) selectContext(AGL(amesa)->host);
+}
+void AmigaMesaSwapBuffers(struct amigamesa_context *amesa __asm("a0")) {
+	struct AglContext *agl = AGL(amesa);
+	struct Window *window = agl->window;
+	LOG
+	selectContext(agl->host);
+	if (!agl->fullscreen && (agl->left != window->LeftEdge + window->BorderLeft || agl->top != window->TopEdge + window->BorderTop ||
+		agl->width != window->Width - (window->BorderLeft + window->BorderRight) || agl->height != window->Height - (window->BorderTop + window->BorderBottom))) {
+		agl->left = window->LeftEdge + window->BorderLeft;
+		agl->top = window->TopEdge + window->BorderTop;
+		agl->width = window->Width - (window->BorderLeft + window->BorderRight);
+		agl->height = window->Height - (window->BorderTop + window->BorderBottom);
+		moveWindow(agl->left, agl->top, agl->width, agl->height);
 	}
 	swapBuffers();
 }

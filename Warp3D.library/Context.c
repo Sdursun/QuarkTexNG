@@ -1,13 +1,21 @@
 #include "w3d.h"
+#include <exec/memory.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/utility.h>
 #include <intuition/intuitionbase.h>
 
-struct Window* window = NULL;
-int left, top;
-
-//struct Task *task = NULL;
+/*
+ * Contexts. Each one has its own host context (window, OpenGL context,
+ * state); the library keeps them in a list, newest first. Windowed contexts
+ * present their frame when the application ClipBlits into their window,
+ * which QuarkTex catches by patching graphics.library ClipBlit while there
+ * is a windowed context. Fullscreen contexts patch some display functions
+ * instead, while there is one. (0.53 kept one context's window and size in
+ * globals, patched again for every context and swapped on any ClipBlit.)
+ */
+static QtContext *contexts = NULL;
+static int windowed = 0, fullscreens = 0;
 
 typedef ULONG (*osFunc)(VOID);
 
@@ -19,12 +27,26 @@ VOID (*oldRectFill)(__REGA1(struct RastPort *rp), __REGD0(LONG xMin), __REGD1(LO
 ULONG (*oldchangescreenbuffer)(VOID) = NULL;
 ULONG (*oldClipBlit)(VOID) = NULL;
 
-static ULONG W3D_ClipBlit(VOID) {
+/* The windowed context drawing into the destination RastPort; if there is
+ * none, the newest windowed one (0.53 swapped its only context on every
+ * ClipBlit). */
+static ULONG W3D_ClipBlit(__REGA0(struct RastPort *source), __REGA1(struct RastPort *destination)) {
+	QtContext *c, *found = NULL;
 	LOG;
-	if (left != window->LeftEdge + window->BorderLeft || top != window->TopEdge + window->BorderTop) {
-		left = window->LeftEdge + window->BorderLeft;
-		top = window->TopEdge + window->BorderTop;
-		moveWindow(left, top, width, height);
+	for (c = contexts; c; c = c->next) {
+		if (!c->window) continue;
+		if (c->window->RPort == destination) {
+			found = c;
+			break;
+		}
+		if (!found) found = c;
+	}
+	if (!found) return 1;
+	selectContext(found->host);
+	if (found->left != found->window->LeftEdge + found->window->BorderLeft || found->top != found->window->TopEdge + found->window->BorderTop) {
+		found->left = found->window->LeftEdge + found->window->BorderLeft;
+		found->top = found->window->TopEdge + found->window->BorderTop;
+		moveWindow(found->left, found->top, found->width, found->height);
 	}
 	swapBuffers();
 	return 1;
@@ -34,119 +56,105 @@ VOID W3D_RectFill(__REGA1(struct RastPort *rp), __REGD0(LONG xMin), __REGD1(LONG
 	//if (task != FindTask(NULL)) oldRectFill(rp, xMin, yMin, xMax, yMax);
 }
 
-/************************** Context functions ***********************************/
-void W3D_DestroyContext(__REGA0(W3D_Context *context));
-
-W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCTags)) {
-	struct Window* firstWindow;
-	struct BitMap* bitmap;
-	unsigned int bla;
-	void *fake;
-	int modeid;
-	int created;
-	struct DimensionInfo dinfo;
-	W3D_Context *context;
-	LOG;
-	firstWindow = NULL;
-	bitmap = NULL;
-	bla = 4 * 800 * 600;
-	fake = malloc(bla);
-
-	context = (W3D_Context*) malloc(sizeof(W3D_Context));
-	context->driver = NULL; context->gfxdriver = NULL; context->drivertype = 0;
-	context->regbase = NULL; context->vmembase = NULL;
-	context->zbuffer = NULL; context->stencilbuffer = NULL;
-	context->state = 0;
-	context->drawregion = NULL;
-	context->supportedfmt = 0; context->format = 0;
-	context->yoffset = 0; context->bprow = 0;
-	context->width = 0; context->height = 0; context->depth = 0;
-	context->chunky = W3D_FALSE; context->destalpha = W3D_FALSE; context->zbufferalloc = W3D_FALSE;
-	context->stbufferalloc = W3D_FALSE; context->HWlocked = W3D_FALSE; context->w3dbitmap = W3D_FALSE;
-	context->zbufferlost = W3D_FALSE; context->reserved3 = W3D_FALSE;
-	//struct MinList restex;
-	//struct MinList tex;
-	context->maxtexwidth = 0; context->maxtexheight = 0; context->maxtexwidthp = 0; context->maxtexheightp = 0;
-	//W3D_Scissor scissor;
-	//W3D_Fog fog;
-	context->envsupmask = 0; context->queue = (W3D_Queue*) malloc(sizeof(W3D_Queue)); context->drawmem = fake;
-	context->globaltexenvmode = 0;
-	context->globaltexenvcolor[0] = 0.0; context->globaltexenvcolor[1] = 0.0; context->globaltexenvcolor[2] = 0.0; context->globaltexenvcolor[3] = 0.0;
-	context->DriverBase = NULL;
-	context->EnableMask = 0; context->DisableMask = 0;
-	context->CurrentChip = 0; context->DriverVersion = 0;
-	context->VertexPointer = NULL; context->VPStride = 0; context->VPMode = 0; context->VPFlags = 0;
-	context->TexCoordPointer[0] = NULL; context->TPStride[0] = 0; context->CurrentTex[0] = NULL; context->TPVOffs[0] = 0; context->TPWOffs[0] = 0; context->TPFlags[0] = 0;
-	context->ColorPointer = NULL; context->CPStride = 0; context->CPMode = 0; context->CPFlags = 0;
-	context->FrontFaceOrder = 0; context->specialbuffer = 0;
-
-	for (; CCTags->ti_Tag != TAG_DONE; ++CCTags) { if (CCTags->ti_Tag == W3D_CC_MODEID) { fullscreen = 1; modeid = CCTags->ti_Data; } }
-
-	if (fullscreen) {
+static void patch(QtContext *c) {
+	if (c->fullscreen) {
+		if (fullscreens++) return;
 		oldscrollvport = SetFunction((struct Library *)GfxBase, -588, blub);
 		olderaserect = SetFunction((struct Library *)GfxBase, -810, blub);
 		oldRectFill = SetFunction((struct Library *)GfxBase, -306, (osFunc) W3D_RectFill);
 		oldchangescreenbuffer = SetFunction((struct Library *)IntuitionBase, -780, blub);
 	}
-	else oldClipBlit = SetFunction((struct Library *) GfxBase, -552, W3D_ClipBlit);
-
-	//bitmap = GetTagData(W3D_CC_BITMAP, NULL, CCTags);
-	if (!fullscreen) {
-		window = firstWindow = IntuitionBase->ActiveWindow;
-		/*if (window != NULL && bitmap != window->RPort->BitMap) {
-			logString((char*) (memoffset + (int)("Oh no")));
-			window = window->NextWindow;
-			while (bitmap != window->RPort->BitMap && window != NULL && window != firstWindow) window = window->NextWindow;
-		}*/
-		created = createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
-			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom), QT_CONTEXT_CORE);
-		left = window->LeftEdge + window->BorderLeft;
-		top = window->TopEdge + window->BorderTop;
-		width = window->Width - (window->BorderLeft + window->BorderRight);
-		height = window->Height - (window->BorderTop + window->BorderBottom);
-	}
-	else {
-		created = createContext(0, 0, 0, 0, QT_CONTEXT_CORE);
-		GetDisplayInfoData(NULL, (UBYTE*)&dinfo, sizeof(dinfo), DTAG_DIMS, modeid);
-		left = 0;
-		top = 0;
-		width = dinfo.Nominal.MaxX-dinfo.Nominal.MinX+1;
-		height = dinfo.Nominal.MaxY-dinfo.Nominal.MinY+1;
-	}
-
-	/* No host library (native_code off, DLL missing or wrong version). */
-	if (!created) {
-		W3D_DestroyContext(context);
-		if (error) *error = W3D_NODRIVER;
-		return NULL;
-	}
-
-	//task = FindTask(NULL);
-
-	//default states
-	context->state |= W3D_AUTOTEXMANAGEMENT;
-	context->state |= W3D_TEXMAPPING;
-	context->state |= W3D_GOURAUD;
-	w3d_command(QT_W3D_INIT_CONTEXT, 0);
-	context->state |= W3D_ZBUFFERUPDATE; //qlDepthMask(GL_FALSE);
-	
-	if (error) *error = W3D_SUCCESS;
-	return context;
+	else if (!windowed++) oldClipBlit = SetFunction((struct Library *) GfxBase, -552, (osFunc) W3D_ClipBlit);
 }
 
-void W3D_DestroyContext(__REGA0(W3D_Context *context)) {
-	LOG;
-	if (fullscreen) {
+static void unpatch(QtContext *c) {
+	if (c->fullscreen) {
+		if (--fullscreens) return;
 		SetFunction((struct Library *)GfxBase, -588, oldscrollvport);
 		SetFunction((struct Library *)GfxBase, -810, olderaserect);
 		SetFunction((struct Library *)GfxBase, -306, (osFunc) oldRectFill);
 		SetFunction((struct Library *)IntuitionBase, -780, oldchangescreenbuffer);
 	}
-	else SetFunction((struct Library *) GfxBase, -552, oldClipBlit);
+	else if (!--windowed) SetFunction((struct Library *) GfxBase, -552, oldClipBlit);
+}
+
+/************************** Context functions ***********************************/
+
+W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCTags)) {
+	int modeid = 0;
+	struct DimensionInfo dinfo;
+	QtContext *qt;
+	W3D_Context *context;
+	LOG;
+
+	qt = (QtContext*) AllocVec(sizeof(QtContext), MEMF_ANY | MEMF_CLEAR);
+	if (!qt) {
+		if (error) *error = W3D_NOMEMORY;
+		return NULL;
+	}
+	context = &qt->context;
+	context->queue = (W3D_Queue*) malloc(sizeof(W3D_Queue));
+	context->drawmem = malloc(4 * 800 * 600);
+	context->globaltexenvcolor[0] = 0.0; context->globaltexenvcolor[1] = 0.0; context->globaltexenvcolor[2] = 0.0; context->globaltexenvcolor[3] = 0.0;
+
+	for (; CCTags->ti_Tag != TAG_DONE; ++CCTags) { if (CCTags->ti_Tag == W3D_CC_MODEID) { qt->fullscreen = 1; modeid = CCTags->ti_Data; } }
+
+	if (!qt->fullscreen) {
+		/* The window is not passed (W3D_CC_BITMAP is the screen's on RTG):
+		 * the active one. */
+		struct Window *window = IntuitionBase->ActiveWindow;
+		qt->window = window;
+		qt->left = window->LeftEdge + window->BorderLeft;
+		qt->top = window->TopEdge + window->BorderTop;
+		qt->width = window->Width - (window->BorderLeft + window->BorderRight);
+		qt->height = window->Height - (window->BorderTop + window->BorderBottom);
+		qt->host = createContext(qt->left, qt->top, qt->width, qt->height, QT_CONTEXT_CORE);
+	}
+	if (!qt) {
+		qt->host = createContext(0, 0, 0, 0, QT_CONTEXT_CORE);
+		GetDisplayInfoData(NULL, (UBYTE*)&dinfo, sizeof(dinfo), DTAG_DIMS, modeid);
+		qt->width = dinfo.Nominal.MaxX-dinfo.Nominal.MinX+1;
+		qt->height = dinfo.Nominal.MaxY-dinfo.Nominal.MinY+1;
+	}
+
+	/* No host library (native_code off, DLL missing or wrong version). */
+	if (!qt->host) {
+		free(context->drawmem);
+		free(context->queue);
+		FreeVec(qt);
+		if (error) *error = W3D_NODRIVER;
+		return NULL;
+	}
+	patch(qt);
+	qt->next = contexts;
+	contexts = qt;
+
+	//default states
+	context->state |= W3D_AUTOTEXMANAGEMENT;
+	context->state |= W3D_TEXMAPPING;
+	context->state |= W3D_GOURAUD;
+	w3d_command(context, QT_W3D_INIT_CONTEXT, 0);
+	context->state |= W3D_ZBUFFERUPDATE; //qlDepthMask(GL_FALSE);
+
+	if (error) *error = W3D_SUCCESS;
+	return context;
+}
+
+void W3D_DestroyContext(__REGA0(W3D_Context *context)) {
+	QtContext **link;
+	LOG;
+	for (link = &contexts; *link; link = &(*link)->next) {
+		if (*link == QT(context)) {
+			*link = QT(context)->next;
+			break;
+		}
+	}
+	unpatch(QT(context));
+	w3d_select(context);
+	freeContext();
 	free(context->drawmem);
 	free(context->queue);
-	free(context);
-	freeContext();
+	FreeVec(QT(context));
 }
 ULONG W3D_GetState(__REGA0(W3D_Context *context), __REGD1(ULONG state)) {
 	LOG;
@@ -159,7 +167,7 @@ ULONG W3D_SetState(W3D_Context *context __asm("a0"), ULONG state __asm("d0"), UL
 	LOG;
 	if (action == W3D_ENABLE) context->state |= state;
 	else context->state &= ~state;
-	w = w3d_command(QT_W3D_SET_STATE, 2);
+	w = w3d_command(context, QT_W3D_SET_STATE, 2);
 	w[0] = state;
 	w[1] = action == W3D_ENABLE ? W3D_ENABLE : W3D_DISABLE;
 	return W3D_SUCCESS;

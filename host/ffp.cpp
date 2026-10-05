@@ -147,6 +147,11 @@ namespace {
 		bool chromaTest; // Warp3D's, see ChromaTest in ffp.h
 	};
 
+}
+
+// Everything of one OpenGL context: its program and buffer objects and the
+// emulated state.
+struct ffp::Context {
 	GLuint program, depthProgram, vertexArray, vertexBuffer;
 	Uniforms uniforms;
 	GLfloat modelView[16];
@@ -162,6 +167,12 @@ namespace {
 	std::vector<Vertex> vertices;
 	GLuint bound;
 	std::map<GLuint, TextureInfo> textures;
+	std::vector<Vertex> batch; // see flushBatch
+	GLenum batchMode;
+};
+
+namespace {
+	ffp::Context* ctx = 0; // the current one
 
 	GLuint compile(GLenum type, const char* source) {
 		GLuint shader = gl3::CreateShader(type);
@@ -199,9 +210,9 @@ namespace {
 
 	// The bound texture if texturing is on and it is complete, else 0.
 	const TextureInfo* texturing() {
-		if (!state.texture2D || !bound) return 0;
-		std::map<GLuint, TextureInfo>::const_iterator info = textures.find(bound);
-		if (info == textures.end() || !info->second.image || info->second.mipmapFilter) return 0;
+		if (!ctx->state.texture2D || !ctx->bound) return 0;
+		std::map<GLuint, TextureInfo>::const_iterator info = ctx->textures.find(ctx->bound);
+		if (info == ctx->textures.end() || !info->second.image || info->second.mipmapFilter) return 0;
 		return &info->second;
 	}
 
@@ -229,7 +240,7 @@ namespace {
 		if (info) {
 			clampRange(info->clampS, info->magLinear, info->width, values[0], values[2]);
 			clampRange(info->clampT, info->magLinear, info->height, values[1], values[3]);
-			if (state.chromaTest && info->chromaMode) {
+			if (ctx->state.chromaTest && info->chromaMode) {
 				values[4] = static_cast<GLfloat>(info->chromaMode);
 				for (int i = 0; i < 3; ++i) {
 					values[5 + i] = static_cast<GLfloat>(info->chromaLower[i]);
@@ -237,31 +248,31 @@ namespace {
 				}
 			}
 		}
-		if (memcmp(values, textureSent, sizeof(values)) != 0) {
-			gl3::Uniform4f(uniforms.clampRange, values[0], values[1], values[2], values[3]);
-			gl3::Uniform1i(uniforms.chromaMode, static_cast<GLint>(values[4]));
-			gl3::Uniform3f(uniforms.chromaLower, values[5], values[6], values[7]);
-			gl3::Uniform3f(uniforms.chromaUpper, values[8], values[9], values[10]);
-			memcpy(textureSent, values, sizeof(values));
+		if (memcmp(values, ctx->textureSent, sizeof(values)) != 0) {
+			gl3::Uniform4f(ctx->uniforms.clampRange, values[0], values[1], values[2], values[3]);
+			gl3::Uniform1i(ctx->uniforms.chromaMode, static_cast<GLint>(values[4]));
+			gl3::Uniform3f(ctx->uniforms.chromaLower, values[5], values[6], values[7]);
+			gl3::Uniform3f(ctx->uniforms.chromaUpper, values[8], values[9], values[10]);
+			memcpy(ctx->textureSent, values, sizeof(values));
 		}
-		if (!dirty && texture == texturingSent) return;
-		gl3::Uniform1i(uniforms.smoothShading, state.smooth);
-		gl3::Uniform1i(uniforms.texturing, texture);
-		gl3::Uniform1i(uniforms.envMode, state.envMode == GL_REPLACE ? 0 : state.envMode == GL_MODULATE ? 1 : state.envMode == GL_DECAL ? 2 : 3);
-		gl3::Uniform4f(uniforms.envColor, state.envColor[0], state.envColor[1], state.envColor[2], state.envColor[3]);
-		gl3::Uniform1i(uniforms.fogging, state.fog);
-		gl3::Uniform1i(uniforms.fogMode, state.fogMode == GL_LINEAR ? 0 : state.fogMode == GL_EXP ? 1 : 2);
-		gl3::Uniform3f(uniforms.fogParams, state.fogStart, state.fogEnd, state.fogDensity);
-		gl3::Uniform3f(uniforms.fogColor, state.fogColor[0], state.fogColor[1], state.fogColor[2]);
-		gl3::Uniform1i(uniforms.alphaTesting, state.alphaTest);
-		gl3::Uniform1i(uniforms.alphaFunction, static_cast<GLint>(state.alphaFunction - GL_NEVER));
-		gl3::Uniform1f(uniforms.alphaReference, state.alphaReference);
-		dirty = false;
-		texturingSent = texture;
+		if (!ctx->dirty && texture == ctx->texturingSent) return;
+		gl3::Uniform1i(ctx->uniforms.smoothShading, ctx->state.smooth);
+		gl3::Uniform1i(ctx->uniforms.texturing, texture);
+		gl3::Uniform1i(ctx->uniforms.envMode, ctx->state.envMode == GL_REPLACE ? 0 : ctx->state.envMode == GL_MODULATE ? 1 : ctx->state.envMode == GL_DECAL ? 2 : 3);
+		gl3::Uniform4f(ctx->uniforms.envColor, ctx->state.envColor[0], ctx->state.envColor[1], ctx->state.envColor[2], ctx->state.envColor[3]);
+		gl3::Uniform1i(ctx->uniforms.fogging, ctx->state.fog);
+		gl3::Uniform1i(ctx->uniforms.fogMode, ctx->state.fogMode == GL_LINEAR ? 0 : ctx->state.fogMode == GL_EXP ? 1 : 2);
+		gl3::Uniform3f(ctx->uniforms.fogParams, ctx->state.fogStart, ctx->state.fogEnd, ctx->state.fogDensity);
+		gl3::Uniform3f(ctx->uniforms.fogColor, ctx->state.fogColor[0], ctx->state.fogColor[1], ctx->state.fogColor[2]);
+		gl3::Uniform1i(ctx->uniforms.alphaTesting, ctx->state.alphaTest);
+		gl3::Uniform1i(ctx->uniforms.alphaFunction, static_cast<GLint>(ctx->state.alphaFunction - GL_NEVER));
+		gl3::Uniform1f(ctx->uniforms.alphaReference, ctx->state.alphaReference);
+		ctx->dirty = false;
+		ctx->texturingSent = texture;
 	}
 
 	void draw(GLenum mode, const Vertex* data, size_t count) {
-		if (!count || !program) return;
+		if (!count || !ctx->program) return;
 		sendState();
 		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(count * sizeof(Vertex)), data, GL_STREAM_DRAW);
 		glDrawArrays(mode, 0, static_cast<GLsizei>(count));
@@ -270,14 +281,12 @@ namespace {
 	// Separate triangles, lines and points are collected while the state
 	// stays the same and drawn with one call: every function that changes
 	// state or reads the frame buffer calls flushBatch first.
-	std::vector<Vertex> batch;
-	GLenum batchMode;
 	const size_t batchLimit = 65536;
 
 	void flushBatch() {
-		if (batch.empty()) return;
-		draw(batchMode, &batch[0], batch.size());
-		batch.clear();
+		if (!ctx || ctx->batch.empty()) return;
+		draw(ctx->batchMode, &ctx->batch[0], ctx->batch.size());
+		ctx->batch.clear();
 	}
 
 	// Vertices per primitive for the modes that can be batched, else 0.
@@ -286,10 +295,10 @@ namespace {
 	}
 
 	void addVertex(GLfloat x, GLfloat y, GLfloat z) {
-		if (!inside) return;
-		Vertex v = {{x, y, z, 1.0f}, {currentColor[0], currentColor[1], currentColor[2], currentColor[3]},
-			{currentTexCoord[0], currentTexCoord[1], currentTexCoord[2], currentTexCoord[3]}};
-		vertices.push_back(v);
+		if (!ctx->inside) return;
+		Vertex v = {{x, y, z, 1.0f}, {ctx->currentColor[0], ctx->currentColor[1], ctx->currentColor[2], ctx->currentColor[3]},
+			{ctx->currentTexCoord[0], ctx->currentTexCoord[1], ctx->currentTexCoord[2], ctx->currentTexCoord[3]}};
+		ctx->vertices.push_back(v);
 	}
 
 	GLfloat clamp01(GLfloat value) {
@@ -327,14 +336,15 @@ namespace {
 }
 
 namespace ffp {
-	bool init(int width, int height) {
-		program = link(vertexShader, fragmentShader);
-		depthProgram = link(depthVertexShader, depthFragmentShader);
-		if (!program || !depthProgram) {
-			shutdown();
-			return false;
+	Context* create(int width, int height) {
+		ctx = new Context();
+		ctx->program = link(vertexShader, fragmentShader);
+		ctx->depthProgram = link(depthVertexShader, depthFragmentShader);
+		if (!ctx->program || !ctx->depthProgram) {
+			destroy(ctx);
+			return 0;
 		}
-#define QT_UNIFORM(name) uniforms.name = gl3::GetUniformLocation(program, #name);
+#define QT_UNIFORM(name) ctx->uniforms.name = gl3::GetUniformLocation(ctx->program, #name);
 		QT_UNIFORM(modelView) QT_UNIFORM(smoothShading) QT_UNIFORM(texturing) QT_UNIFORM(envMode) QT_UNIFORM(envColor)
 		QT_UNIFORM(fogging) QT_UNIFORM(fogMode) QT_UNIFORM(fogParams) QT_UNIFORM(fogColor) QT_UNIFORM(alphaTesting)
 		QT_UNIFORM(alphaFunction) QT_UNIFORM(alphaReference) QT_UNIFORM(clampRange)
@@ -346,16 +356,16 @@ namespace ffp {
 		GLfloat sx = 2.0f / static_cast<float>(width), sy = -2.0f / static_cast<float>(height);
 		GLfloat tx = -(static_cast<float>(width) / 2.0f), ty = -(static_cast<float>(height) / 2.0f);
 		const GLfloat matrix[16] = {sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, 1, 0, sx * tx, sy * ty, 0, 1};
-		memcpy(modelView, matrix, sizeof(modelView));
-		gl3::UseProgram(depthProgram);
-		gl3::UniformMatrix4fv(gl3::GetUniformLocation(depthProgram, "modelView"), 1, GL_FALSE, modelView);
-		gl3::UseProgram(program);
-		gl3::UniformMatrix4fv(uniforms.modelView, 1, GL_FALSE, modelView);
+		memcpy(ctx->modelView, matrix, sizeof(ctx->modelView));
+		gl3::UseProgram(ctx->depthProgram);
+		gl3::UniformMatrix4fv(gl3::GetUniformLocation(ctx->depthProgram, "modelView"), 1, GL_FALSE, ctx->modelView);
+		gl3::UseProgram(ctx->program);
+		gl3::UniformMatrix4fv(ctx->uniforms.modelView, 1, GL_FALSE, ctx->modelView);
 
-		gl3::GenVertexArrays(1, &vertexArray);
-		gl3::BindVertexArray(vertexArray);
-		gl3::GenBuffers(1, &vertexBuffer);
-		gl3::BindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+		gl3::GenVertexArrays(1, &ctx->vertexArray);
+		gl3::BindVertexArray(ctx->vertexArray);
+		gl3::GenBuffers(1, &ctx->vertexBuffer);
+		gl3::BindBuffer(GL_ARRAY_BUFFER, ctx->vertexBuffer);
 		gl3::VertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, position)));
 		gl3::VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, color)));
 		gl3::VertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, texCoord)));
@@ -365,51 +375,54 @@ namespace ffp {
 
 		State initial = {false, false, false, true, GL_ALWAYS, 0.0f, GL_EXP, 0.0f, 1.0f, 1.0f, {0, 0, 0, 0},
 			GL_MODULATE, {0, 0, 0, 0}, false};
-		state = initial;
-		dirty = true;
-		texturingSent = false;
-		memset(textureSent, 0, sizeof(textureSent)); // not a set sendState sends
+		ctx->state = initial;
+		ctx->dirty = true;
+		ctx->texturingSent = false;
+		memset(ctx->textureSent, 0, sizeof(ctx->textureSent)); // not a set sendState sends
 		const GLfloat white[4] = {1, 1, 1, 1}, origin[4] = {0, 0, 0, 1};
-		memcpy(currentColor, white, sizeof(currentColor));
-		memcpy(currentTexCoord, origin, sizeof(currentTexCoord));
-		inside = false;
-		vertices.clear();
-		batch.clear();
-		bound = 0;
-		textures.clear();
-		return true;
+		memcpy(ctx->currentColor, white, sizeof(ctx->currentColor));
+		memcpy(ctx->currentTexCoord, origin, sizeof(ctx->currentTexCoord));
+		return ctx;
 	}
 
-	void shutdown() {
-		if (vertexBuffer) gl3::DeleteBuffers(1, &vertexBuffer);
-		if (vertexArray) gl3::DeleteVertexArrays(1, &vertexArray);
-		if (program) gl3::DeleteProgram(program);
-		if (depthProgram) gl3::DeleteProgram(depthProgram);
-		vertexBuffer = vertexArray = program = depthProgram = 0;
-		textures.clear();
-		batch.clear();
+	void destroy(Context* c) {
+		ctx = c;
+		if (ctx->vertexBuffer) gl3::DeleteBuffers(1, &ctx->vertexBuffer);
+		if (ctx->vertexArray) gl3::DeleteVertexArrays(1, &ctx->vertexArray);
+		if (ctx->program) gl3::DeleteProgram(ctx->program);
+		if (ctx->depthProgram) gl3::DeleteProgram(ctx->depthProgram);
+		delete c;
+		ctx = 0;
+	}
+
+	void makeCurrent(Context* c) {
+		ctx = c;
+	}
+
+	bool active() {
+		return ctx != 0;
 	}
 
 	void Begin(GLenum mode) {
-		inside = true;
-		primitive = mode;
-		vertices.clear();
+		ctx->inside = true;
+		ctx->primitive = mode;
+		ctx->vertices.clear();
 	}
 
 	void End() {
-		if (!inside) return;
-		inside = false;
-		size_t per = independent(primitive);
+		if (!ctx->inside) return;
+		ctx->inside = false;
+		size_t per = independent(ctx->primitive);
 		if (!per) {
 			flushBatch();
-			if (!vertices.empty()) draw(primitive, &vertices[0], vertices.size());
+			if (!ctx->vertices.empty()) draw(ctx->primitive, &ctx->vertices[0], ctx->vertices.size());
 			return;
 		}
-		if (batchMode != primitive) flushBatch();
-		batchMode = primitive;
+		if (ctx->batchMode != ctx->primitive) flushBatch();
+		ctx->batchMode = ctx->primitive;
 		// Only whole primitives, as OpenGL draws them.
-		batch.insert(batch.end(), vertices.begin(), vertices.end() - vertices.size() % per);
-		if (batch.size() >= batchLimit) flushBatch();
+		ctx->batch.insert(ctx->batch.end(), ctx->vertices.begin(), ctx->vertices.end() - ctx->vertices.size() % per);
+		if (ctx->batch.size() >= batchLimit) flushBatch();
 	}
 
 	void flush() {
@@ -420,20 +433,20 @@ namespace ffp {
 	void Vertex3f(GLfloat x, GLfloat y, GLfloat z) { addVertex(x, y, z); }
 
 	void Color4f(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-		currentColor[0] = r;
-		currentColor[1] = g;
-		currentColor[2] = b;
-		currentColor[3] = a;
+		ctx->currentColor[0] = r;
+		ctx->currentColor[1] = g;
+		ctx->currentColor[2] = b;
+		ctx->currentColor[3] = a;
 	}
 	void Color3f(GLfloat r, GLfloat g, GLfloat b) { Color4f(r, g, b, 1.0f); }
 	void Color4ub(GLubyte r, GLubyte g, GLubyte b, GLubyte a) { Color4f(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f); }
 	void Color3ub(GLubyte r, GLubyte g, GLubyte b) { Color4ub(r, g, b, 255); }
 
 	void TexCoord4f(GLfloat s, GLfloat t, GLfloat r, GLfloat q) {
-		currentTexCoord[0] = s;
-		currentTexCoord[1] = t;
-		currentTexCoord[2] = r;
-		currentTexCoord[3] = q;
+		ctx->currentTexCoord[0] = s;
+		ctx->currentTexCoord[1] = t;
+		ctx->currentTexCoord[2] = r;
+		ctx->currentTexCoord[3] = q;
 	}
 	void TexCoord2f(GLfloat s, GLfloat t) { TexCoord4f(s, t, 0.0f, 1.0f); }
 
@@ -450,9 +463,9 @@ namespace ffp {
 	void Enable(GLenum cap) {
 		flushBatch();
 		switch (cap) {
-		case GL_TEXTURE_2D: state.texture2D = true; dirty = true; break;
-		case GL_FOG: state.fog = true; dirty = true; break;
-		case GL_ALPHA_TEST: state.alphaTest = true; dirty = true; break;
+		case GL_TEXTURE_2D: ctx->state.texture2D = true; ctx->dirty = true; break;
+		case GL_FOG: ctx->state.fog = true; ctx->dirty = true; break;
+		case GL_ALPHA_TEST: ctx->state.alphaTest = true; ctx->dirty = true; break;
 		default: glEnable(cap); break;
 		}
 	}
@@ -460,36 +473,36 @@ namespace ffp {
 	void Disable(GLenum cap) {
 		flushBatch();
 		switch (cap) {
-		case GL_TEXTURE_2D: state.texture2D = false; dirty = true; break;
-		case GL_FOG: state.fog = false; dirty = true; break;
-		case GL_ALPHA_TEST: state.alphaTest = false; dirty = true; break;
+		case GL_TEXTURE_2D: ctx->state.texture2D = false; ctx->dirty = true; break;
+		case GL_FOG: ctx->state.fog = false; ctx->dirty = true; break;
+		case GL_ALPHA_TEST: ctx->state.alphaTest = false; ctx->dirty = true; break;
 		default: glDisable(cap); break;
 		}
 	}
 
 	void ShadeModel(GLenum mode) {
 		flushBatch();
-		state.smooth = mode != GL_FLAT;
-		dirty = true;
+		ctx->state.smooth = mode != GL_FLAT;
+		ctx->dirty = true;
 	}
 
 	void AlphaFunc(GLenum function, GLclampf reference) {
 		flushBatch();
 		if (function < GL_NEVER || function > GL_ALWAYS) return;
-		state.alphaFunction = function;
-		state.alphaReference = clamp01(reference);
-		dirty = true;
+		ctx->state.alphaFunction = function;
+		ctx->state.alphaReference = clamp01(reference);
+		ctx->dirty = true;
 	}
 
 	void Fogf(GLenum pname, GLfloat param) {
 		flushBatch();
 		switch (pname) {
-		case GL_FOG_DENSITY: if (param >= 0.0f) state.fogDensity = param; break;
-		case GL_FOG_START: state.fogStart = param; break;
-		case GL_FOG_END: state.fogEnd = param; break;
+		case GL_FOG_DENSITY: if (param >= 0.0f) ctx->state.fogDensity = param; break;
+		case GL_FOG_START: ctx->state.fogStart = param; break;
+		case GL_FOG_END: ctx->state.fogEnd = param; break;
 		case GL_FOG_MODE: Fogi(pname, static_cast<GLint>(param)); return;
 		}
-		dirty = true;
+		ctx->dirty = true;
 	}
 
 	void Fogi(GLenum pname, GLint param) {
@@ -498,8 +511,8 @@ namespace ffp {
 			Fogf(pname, static_cast<GLfloat>(param));
 			return;
 		}
-		if (param == GL_LINEAR || param == GL_EXP || param == GL_EXP2) state.fogMode = static_cast<GLenum>(param);
-		dirty = true;
+		if (param == GL_LINEAR || param == GL_EXP || param == GL_EXP2) ctx->state.fogMode = static_cast<GLenum>(param);
+		ctx->dirty = true;
 	}
 
 	void Fogfv(GLenum pname, const GLfloat* params) {
@@ -508,15 +521,15 @@ namespace ffp {
 			Fogf(pname, params[0]);
 			return;
 		}
-		for (int i = 0; i < 4; ++i) state.fogColor[i] = clamp01(params[i]);
-		dirty = true;
+		for (int i = 0; i < 4; ++i) ctx->state.fogColor[i] = clamp01(params[i]);
+		ctx->dirty = true;
 	}
 
 	void TexEnvi(GLenum target, GLenum pname, GLint param) {
 		flushBatch();
 		if (target != GL_TEXTURE_ENV || pname != GL_TEXTURE_ENV_MODE) return;
-		if (param == GL_REPLACE || param == GL_MODULATE || param == GL_DECAL || param == GL_BLEND) state.envMode = static_cast<GLenum>(param);
-		dirty = true;
+		if (param == GL_REPLACE || param == GL_MODULATE || param == GL_DECAL || param == GL_BLEND) ctx->state.envMode = static_cast<GLenum>(param);
+		ctx->dirty = true;
 	}
 
 	void TexEnvfv(GLenum target, GLenum pname, const GLfloat* params) {
@@ -527,19 +540,19 @@ namespace ffp {
 			return;
 		}
 		if (pname != GL_TEXTURE_ENV_COLOR) return;
-		for (int i = 0; i < 4; ++i) state.envColor[i] = clamp01(params[i]);
-		dirty = true;
+		for (int i = 0; i < 4; ++i) ctx->state.envColor[i] = clamp01(params[i]);
+		ctx->dirty = true;
 	}
 
 	void ChromaTest(GLboolean enable) {
 		flushBatch();
-		state.chromaTest = enable != GL_FALSE;
+		ctx->state.chromaTest = enable != GL_FALSE;
 	}
 
 	void ChromaBounds(GLuint texture, GLint mode, GLuint lower, GLuint upper) {
 		flushBatch();
-		std::map<GLuint, TextureInfo>::iterator info = textures.find(texture);
-		if (info == textures.end()) return;
+		std::map<GLuint, TextureInfo>::iterator info = ctx->textures.find(texture);
+		if (info == ctx->textures.end()) return;
 		info->second.chromaMode = mode;
 		for (int i = 0; i < 3; ++i) {
 			info->second.chromaLower[i] = static_cast<int>((lower >> (16 - 8 * i)) & 0xFF);
@@ -552,7 +565,7 @@ namespace ffp {
 		for (GLsizei i = 0; i < n; ++i) {
 			// GL_NEAREST_MIPMAP_LINEAR, GL_REPEAT, GL_LINEAR
 			TextureInfo info = {false, true, false, false, true, 0, 0};
-			textures[names[i]] = info;
+			ctx->textures[names[i]] = info;
 		}
 	}
 
@@ -560,15 +573,15 @@ namespace ffp {
 		flushBatch();
 		glDeleteTextures(n, names);
 		for (GLsizei i = 0; i < n; ++i) {
-			textures.erase(names[i]);
-			if (names[i] == bound) bound = 0;
+			ctx->textures.erase(names[i]);
+			if (names[i] == ctx->bound) ctx->bound = 0;
 		}
 	}
 
 	void BindTexture(GLenum target, GLuint texture) {
 		flushBatch();
 		glBindTexture(target, texture);
-		if (target == GL_TEXTURE_2D) bound = texture;
+		if (target == GL_TEXTURE_2D) ctx->bound = texture;
 	}
 
 	void TexParameteri(GLenum target, GLenum pname, GLint param) {
@@ -576,8 +589,8 @@ namespace ffp {
 		bool wrap = pname == GL_TEXTURE_WRAP_S || pname == GL_TEXTURE_WRAP_T;
 		bool clamp = wrap && param == GL_CLAMP;
 		glTexParameteri(target, pname, clamp ? GL_CLAMP_TO_BORDER : param);
-		if (target != GL_TEXTURE_2D || !textures.count(bound)) return;
-		TextureInfo& info = textures[bound];
+		if (target != GL_TEXTURE_2D || !ctx->textures.count(ctx->bound)) return;
+		TextureInfo& info = ctx->textures[ctx->bound];
 		switch (pname) {
 		case GL_TEXTURE_MIN_FILTER: info.mipmapFilter = param != GL_NEAREST && param != GL_LINEAR; break;
 		case GL_TEXTURE_MAG_FILTER: info.magLinear = param == GL_LINEAR; break;
@@ -602,12 +615,12 @@ namespace ffp {
 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_G, swizzle[1]);
 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_B, swizzle[2]);
 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_A, swizzle[3]);
-		if (target == GL_TEXTURE_2D && level == 0 && textures.count(bound)) {
-			TextureInfo& info = textures[bound];
+		if (target == GL_TEXTURE_2D && level == 0 && ctx->textures.count(ctx->bound)) {
+			TextureInfo& info = ctx->textures[ctx->bound];
 			info.image = width > 0 && height > 0;
 			info.width = width;
 			info.height = height;
-			dirty = true;
+			ctx->dirty = true;
 		}
 	}
 
@@ -622,7 +635,7 @@ namespace ffp {
 
 	void DepthPoints(GLsizei count, const GLfloat* xyz) {
 		flushBatch();
-		if (count <= 0 || !program) return;
+		if (count <= 0 || !ctx->program) return;
 		GLboolean colorMask[4], depthMask;
 		GLint depthFunction;
 		GLfloat pointSize;
@@ -642,10 +655,10 @@ namespace ffp {
 		glDepthFunc(GL_ALWAYS);
 		glDepthMask(GL_TRUE);
 		glPointSize(1.0f);
-		gl3::UseProgram(depthProgram);
+		gl3::UseProgram(ctx->depthProgram);
 		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)), &points[0], GL_STREAM_DRAW);
 		glDrawArrays(GL_POINTS, 0, count);
-		gl3::UseProgram(program);
+		gl3::UseProgram(ctx->program);
 
 		glPointSize(pointSize);
 		glDepthMask(depthMask);
@@ -660,7 +673,7 @@ namespace ffp {
 	// written).
 	void StencilPoints(GLsizei count, const GLfloat* xy, const GLuint* values) {
 		flushBatch();
-		if (count <= 0 || !program) return;
+		if (count <= 0 || !ctx->program) return;
 		GLboolean colorMask[4];
 		GLint function, reference, valueMask, sfail, dpfail, dppass;
 		GLfloat pointSize;
@@ -684,14 +697,14 @@ namespace ffp {
 		glEnable(GL_STENCIL_TEST);
 		glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
 		glPointSize(1.0f);
-		gl3::UseProgram(depthProgram);
+		gl3::UseProgram(ctx->depthProgram);
 		gl3::BufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)), &points[0], GL_STREAM_DRAW);
 		for (GLsizei first = 0, end; first < count; first = end) {
 			for (end = first + 1; end < count && values[end] == values[first]; ++end) {}
 			glStencilFunc(GL_ALWAYS, static_cast<GLint>(values[first]), ~0u);
 			glDrawArrays(GL_POINTS, first, end - first);
 		}
-		gl3::UseProgram(program);
+		gl3::UseProgram(ctx->program);
 
 		glPointSize(pointSize);
 		glStencilOp(static_cast<GLenum>(sfail), static_cast<GLenum>(dpfail), static_cast<GLenum>(dppass));

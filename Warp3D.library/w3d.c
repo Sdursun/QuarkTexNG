@@ -17,9 +17,6 @@ struct Library *P96Base;
 char *bp, b;
 int i;
 
-int fullscreen = 0;
-int width = 0;
-int height = 0;
 
 
 void INIT_0_Warp3D(void) {
@@ -95,16 +92,16 @@ static void draw(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Ve
 	int n, i;
 	if (count < 0) count = 0;
 	if (count <= QT_W3D_MAX_VERTICES) {
-		w = drawArguments(w3d_command(QT_W3D_DRAW, 7 + count * QT_W3D_VERTEX_WORDS), context, primitive, tex);
+		w = drawArguments(w3d_command(context, QT_W3D_DRAW, 7 + count * QT_W3D_VERTEX_WORDS), context, primitive, tex);
 		*w++ = count;
 		if (v) qt_copy_vertices(w, v, count);
 		else for (i = 0; i < count; ++i, w += QT_W3D_VERTEX_WORDS) qt_copy_vertices(w, list[i], 1);
 		return;
 	}
-	drawArguments(w3d_command(QT_W3D_DRAW_BEGIN, 6), context, primitive, tex);
+	drawArguments(w3d_command(context, QT_W3D_DRAW_BEGIN, 6), context, primitive, tex);
 	while (count > 0) {
 		n = count < QT_W3D_MAX_VERTICES ? count : QT_W3D_MAX_VERTICES;
-		w = w3d_command(QT_W3D_VERTICES, 1 + n * QT_W3D_VERTEX_WORDS);
+		w = w3d_command(context, QT_W3D_VERTICES, 1 + n * QT_W3D_VERTEX_WORDS);
 		*w++ = n;
 		if (v) {
 			qt_copy_vertices(w, v, n);
@@ -113,7 +110,7 @@ static void draw(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Ve
 		else for (i = 0; i < n; ++i, w += QT_W3D_VERTEX_WORDS) qt_copy_vertices(w, *list++, 1);
 		count -= n;
 	}
-	w3d_command(QT_W3D_DRAW_END, 0);
+	w3d_command(context, QT_W3D_DRAW_END, 0);
 }
 
 void drawPrimitive(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex* v, int count) {

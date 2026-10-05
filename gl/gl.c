@@ -18,7 +18,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 7
+#define QT_PROTOCOL_VERSION 8
 
 #define QT_BUFFER_BYTES (256 * 1024)
 
@@ -60,8 +60,8 @@ static ULONG hostFunction(const char *name) {
 	return UNI_VALID(handle) ? handle : 0;
 }
 
-static ULONG hostCall(ULONG func, ULONG d1, ULONG d2, ULONG d3, ULONG d4, ULONG a1) {
-	ULONG regs[12] = {d1, d2, d3, d4, 0, 0, 0, a1};
+static ULONG hostCall(ULONG func, ULONG d1, ULONG d2, ULONG d3, ULONG d4, ULONG d5, ULONG a1) {
+	ULONG regs[12] = {d1, d2, d3, d4, d5, 0, 0, a1};
 	return func ? qt_uni_call(qt_UniBase, func, regs) : 0;
 }
 
@@ -76,7 +76,7 @@ static void openHost(void) {
 		return;
 	}
 	version = hostFunction("qt_protocol_version");
-	if (!version || hostCall(version, 0, 0, 0, 0, 0) != QT_PROTOCOL_VERSION) return;
+	if (!version || hostCall(version, 0, 0, 0, 0, 0, 0) != QT_PROTOCOL_VERSION) return;
 	qt_execute = hostFunction("qt_execute");
 	qt_create = hostFunction("qt_create_context");
 	qt_move = hostFunction("qt_move_window");
@@ -90,13 +90,14 @@ static void openHost(void) {
 static ULONG *qt_buffer;
 static ULONG qt_used;
 static ULONG qt_scratch[32]; /* takes the commands while there is no buffer */
+static ULONG qt_context; /* host id of the context the buffer is for, 0 = none */
 
 /* Executes the buffered commands; returns the result of the last one. */
 ULONG qt_flush(void) {
 	ULONG bytes = qt_used * 4;
 	qt_used = 0;
 	if (!bytes || !qt_buffer) return 0;
-	return hostCall(qt_execute, bytes, 0, 0, 0, (ULONG) qt_buffer);
+	return hostCall(qt_execute, bytes, qt_context, 0, 0, 0, (ULONG) qt_buffer);
 }
 
 ULONG *qt_reserve(ULONG words) {
@@ -146,31 +147,39 @@ void glExit(void) {
 	qt_UniBase = NULL;
 }
 
-int createContext(int left, int top, int width, int height, int flags) {
-	ULONG regs[12] = {left, top, width, height, flags, 0, 0, 0};
-	qt_flush();
+ULONG createContext(int left, int top, int width, int height, int flags) {
+	ULONG id;
 	if (!qt_buffer || !qt_create) return 0;
-	return (int) qt_uni_call(qt_UniBase, qt_create, regs);
+	id = hostCall(qt_create, left, top, width, height, flags, 0);
+	if (id) selectContext(id);
+	return id;
+}
+
+void selectContext(ULONG id) {
+	if (id == qt_context) return;
+	qt_flush();
+	qt_context = id;
 }
 
 void moveWindow(int left, int top, int width, int height) {
 	qt_flush();
-	hostCall(qt_move, left, top, width, height, 0);
+	hostCall(qt_move, left, top, width, height, qt_context, 0);
 }
 
 void freeContext(void) {
 	qt_flush();
-	hostCall(qt_free, 0, 0, 0, 0, 0);
+	hostCall(qt_free, qt_context, 0, 0, 0, 0, 0);
+	qt_context = 0;
 }
 
 void swapBuffers(void) {
 	qt_flush();
-	hostCall(qt_swap, 0, 0, 0, 0, 0);
+	hostCall(qt_swap, qt_context, 0, 0, 0, 0, 0);
 }
 
 /* c is an Amiga address. */
 void logString(char* c) {
-	hostCall(qt_log, 0, 0, 0, 0, (ULONG) c);
+	hostCall(qt_log, 0, 0, 0, 0, 0, (ULONG) c);
 }
 
 #include "glencode.auto.c"

@@ -2,7 +2,7 @@
 
 Status: in progress (2026-10-05). Warp3D draws on an OpenGL 3.3 core
 profile context, pixel for pixel as the fixed-function renderer of phase 5;
-the stencil buffer and the chroma test work.
+the stencil buffer, the chroma test and several contexts at once work.
 
 ## Contexts
 
@@ -110,6 +110,45 @@ OpenGL never had one; the shader does it now:
 Test: t16_chroma (new); against the snapshot before (`chroma0`) only it
 changed.
 
+## Several contexts (roadmap item 5)
+
+0.53 and the host up to here had one context: one host window, OpenGL
+context and emulation state, and on the Amiga side one window, position and
+size in globals of each library. A second `W3D_CreateContext` replaced the
+first on the 0.53 host (both drew into one OpenGL context with one state);
+on the phase 6 host it failed, because the window class was registered
+again while the first window still used it. Warp3D.library also chained its
+ClipBlit patch onto itself for every context.
+
+Now (protocol version 8):
+
+- `qt_create_context` returns an id; `qt_execute` (d2), `qt_move_window`
+  (d5), `qt_swap_buffers` and `qt_free_context` (d1) take it. The host keeps
+  a window, an OpenGL context, an `ffp::Context`, a capture label and a
+  profile per id and makes the OpenGL context and the emulation state
+  current when the id changes (`activate`). The window class is registered
+  while there is a window.
+- gl/gl.c sends the buffer to the selected context; `selectContext` flushes
+  when it switches, `createContext` selects the new context.
+- Warp3D.library allocates a `QtContext` around each `W3D_Context` (host id,
+  window, position, size, fullscreen, texture list); every command selects
+  its context (`w3d_command(context, ...)`). The ClipBlit patch is installed
+  with the first windowed context and removed with the last; it presents the
+  context whose window the ClipBlit draws into, else the newest one, as 0.53
+  presented its only context on any ClipBlit. The fullscreen patches are
+  counted the same way. (0.53 also never reset its fullscreen flag, so after
+  one fullscreen context every later one was taken as fullscreen.)
+- agl.library keeps its host context and window in `amigamesa_context.gl_ctx`;
+  `AmigaMesaMakeCurrent` selects it. `AmigaMesaDestroyContext` now also frees
+  the context structure, which 0.53 left allocated.
+- Frame capture: a context created while one with the same label exists is
+  captured as `<label>-2` (and so on). compare.py reports a test listed in
+  known-differences.txt as KNOWN also when the reference has no frame for it.
+
+Test: t17_contexts (new): two windows, two Warp3D contexts drawing in turns
+with different blending. Against the snapshot before (`multi0`, where the
+second context could not be created) all other tests are unchanged.
+
 ## Results
 
 All reference tests against the phase 5 snapshot (`run.ps1 -Against fix8`,
@@ -136,5 +175,5 @@ triangles/s.
   (CLUT, R5G6B5, ...). Today CHUNKY textures are converted to RGBA on the
   CPU and the 16-bit formats are uploaded with packed types; both work, so
   this is an optimisation, not a fix.
-- Roadmap item 5, still open: several contexts at once (the
-  host has one context and the emulation one state), leaks.
+- Roadmap item 5, still open: leaks; also `W3D_Query`, which answers
+  "fully supported" to nearly every query.

@@ -9,10 +9,31 @@
 #include "../gl/gl.h"
 #include "../gl/w3dcmd.h"
 
-/* Starts a Warp3D command with the given number of argument words in the
- * command buffer and returns where the arguments go. */
-static inline ULONG *w3d_command(ULONG opcode, ULONG words) {
-	ULONG *w = qt_reserve(words + 1);
+/* What QuarkTex keeps per context. W3D_CreateContext allocates it; the
+ * application sees its first member. */
+typedef struct QtContext {
+	W3D_Context context;
+	struct QtContext *next; /* the library's contexts (Context.c) */
+	ULONG host;             /* host context id (gl/gl.h) */
+	struct Window *window;  /* NULL in fullscreen */
+	int fullscreen;
+	int left, top, width, height;
+	struct Node *textures;  /* allocated W3D_Textures (Texture.c) */
+} QtContext;
+
+#define QT(context) ((QtContext*) (context))
+
+/* Sends what follows to the context's host context. */
+static inline void w3d_select(W3D_Context *context) {
+	selectContext(QT(context)->host);
+}
+
+/* Starts a Warp3D command for the context with the given number of argument
+ * words in the command buffer and returns where the arguments go. */
+static inline ULONG *w3d_command(W3D_Context *context, ULONG opcode, ULONG words) {
+	ULONG *w;
+	w3d_select(context);
+	w = qt_reserve(words + 1);
 	w[0] = (opcode << 16) | (words + 1);
 	return w + 1;
 }
@@ -49,7 +70,5 @@ extern struct Library *P96Base;
 extern char *bp, b;
 extern int i;
 
-extern int fullscreen;
-extern int width, height;
 
 #endif

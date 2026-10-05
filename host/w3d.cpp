@@ -316,6 +316,9 @@ void qt_w3d_sync() {
 
 bool qt_w3d_decode(const Command& c, int32_t& result) {
 	result = 0;
+#ifndef QT_TEST
+	if (!ffp::active()) return false; // a Warp3D command in an agl context
+#endif
 	switch (c.u(0) >> 16) {
 	case QT_W3D_INIT_CONTEXT:
 		if (c.words != 1) return false;
