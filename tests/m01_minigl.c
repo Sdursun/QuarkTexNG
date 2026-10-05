@@ -13,15 +13,21 @@
  *  - two texture units modulated, coordinates from arrays of each unit:
  *    (255, 128, 0) x (128, 255, 255) = (128, 128, 0).
  *
+ * After the last frame glFinish has it written into the display (phase 8),
+ * and the same points are checked there, through Picasso96.
+ *
  * Built only when MiniGL's SDK headers are there (tests/Makefile).
  */
 #include <libraries/minigl_dispatch.h>
 #include <proto/exec.h>
+#include <proto/Picasso96.h>
+#include <intuition/intuition.h>
 #include <stdio.h>
 
 #define GL_COLOR_INDEX8_EXT 0x80E5 /* as applications define it */
 
 struct Library *MiniGLBase;
+struct Library *P96Base;
 const MGLDispatchTable *MiniGLDispatch;
 
 /* What libminigl.a does: the library's one entry, LVO -30. */
@@ -33,6 +39,26 @@ static const MGLDispatchTable *getDispatch(struct Library *base) {
 }
 
 static int failures;
+
+/* What the Amiga display shows at (x, y) of the picture (from the bottom, as
+ * glReadPixels): the frame written into display memory (phase 8). 15- and
+ * 16-bit screens round the channels, hence the wider tolerance. */
+static void expectShown(const char *what, int x, int y, int r, int g, int b) {
+	struct Window *w = (struct Window *) mglGetWindowHandle();
+	ULONG argb;
+	int pr, pg, pb, ok;
+	if (!P96Base || !w) {
+		printf("m01: SKIP shown %s: no Picasso96 window\n", what);
+		return;
+	}
+	argb = p96ReadPixel(w->RPort, (UWORD) (x + w->BorderLeft), (UWORD) (239 - y + w->BorderTop));
+	pr = (argb >> 16) & 0xFF;
+	pg = (argb >> 8) & 0xFF;
+	pb = argb & 0xFF;
+	ok = pr >= r - 8 && pr <= r + 8 && pg >= g - 8 && pg <= g + 8 && pb >= b - 8 && pb <= b + 8;
+	if (!ok) ++failures;
+	printf("m01: %s shown %s: (%d, %d, %d), expected (%d, %d, %d)\n", ok ? "PASS" : "FAIL", what, pr, pg, pb, r, g, b);
+}
 
 static void expect(const char *what, int x, int y, int r, int g, int b) {
 	GLubyte p[4];
@@ -136,6 +162,7 @@ int main(void) {
 	int frame;
 
 	MiniGLBase = OpenLibrary("minigl.library", 14);
+	P96Base = OpenLibrary("Picasso96API.library", 2);
 	if (!MiniGLBase) {
 		printf("m01: FAIL no minigl.library\n");
 		return 20;
@@ -186,8 +213,17 @@ int main(void) {
 		mglSwitchDisplay();
 	}
 
+	/* glFinish has the last frame written into display memory. */
+	glFinish();
+	expectShown("palette index 1", 20, 60, 255, 0, 0);
+	expectShown("palette index 3", 20, 180, 0, 0, 255);
+	expectShown("interleaved arrays", 120, 120, 255, 255, 0);
+	expectShown("blend equation", 200, 120, 191, 191, 191);
+	expectShown("multitexture", 280, 120, 128, 128, 0);
+
 	printf("m01: %s, %d failures\n", failures ? "FAIL" : "PASS", failures);
 	mglDeleteContext();
 	CloseLibrary(MiniGLBase);
+	if (P96Base) CloseLibrary(P96Base);
 	return failures ? 5 : 0;
 }

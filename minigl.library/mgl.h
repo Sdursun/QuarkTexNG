@@ -26,6 +26,10 @@ typedef struct {
 	LONG left, top, width, height;
 } QtTarget; /* as in gl/gl.h */
 void swapBuffersTo(const QtTarget *target);
+/* The host writes an offscreen picture as soon as the GPU has finished it,
+ * between the next frame's commands; finishFrame has it written now (before
+ * waiting for input, when no commands would follow). */
+void finishFrame(void);
 void logString(char *c);
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);

@@ -50,7 +50,7 @@ static struct Library *qt_UniBase;
 
 #define UNI_VALID(handle) (((handle) & 0x80000000) != 0)
 
-static ULONG qt_host, qt_execute, qt_create, qt_move, qt_free, qt_swap, qt_log;
+static ULONG qt_host, qt_execute, qt_create, qt_move, qt_free, qt_swap, qt_log, qt_finish;
 long memoffset;
 char *bp, b;
 int i;
@@ -83,6 +83,7 @@ static void openHost(void) {
 	qt_free = hostFunction("qt_free_context");
 	qt_swap = hostFunction("qt_swap_buffers");
 	qt_log = hostFunction("qt_log");
+	qt_finish = hostFunction("qt_finish_frame");
 }
 
 /* --- Command buffer ------------------------------------------------------ */
@@ -143,7 +144,7 @@ void glExit(void) {
 	if (qt_host) uni_close_library(qt_host);
 	if (qt_UniBase) CloseLibrary(qt_UniBase);
 	qt_buffer = NULL;
-	qt_host = qt_execute = qt_create = qt_move = qt_free = qt_swap = qt_log = 0;
+	qt_host = qt_execute = qt_create = qt_move = qt_free = qt_swap = qt_log = qt_finish = 0;
 	qt_UniBase = NULL;
 }
 
@@ -180,6 +181,11 @@ void swapBuffersTo(const QtTarget *target) {
 void swapBuffers(void) {
 	qt_flush();
 	hostCall(qt_swap, qt_context, 0, 0, 0, 0, 0);
+}
+
+void finishFrame(void) {
+	qt_flush();
+	hostCall(qt_finish, qt_context, 0, 0, 0, 0, 0);
 }
 
 /* c is an Amiga address. */

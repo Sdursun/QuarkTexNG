@@ -228,6 +228,14 @@ static void presentFrame(QtMglContext *c) {
 	if (c->window) UnlockLayerRom(c->window->WLayer);
 }
 
+/* glFinish completes the presentation too: an offscreen frame is in display
+ * memory when it returns. */
+void mgl_GLFinish(GLcontext context) {
+	QtMglContext *c = QT_MGL(context);
+	_glFinish();
+	if (c && c->offscreen) finishFrame();
+}
+
 /* Presents the frame, following the window if it moved or changed size. */
 void mgl_MGLSwitchDisplay(GLcontext context) {
 	QtMglContext *c = QT_MGL(context);
@@ -391,6 +399,13 @@ void mgl_MGLMainLoop(GLcontext context) {
 		}
 		if (!c->running) break;
 		if (c->idle) c->idle();
-		else WaitPort(c->window->UserPort);
+		else {
+			/* Nothing follows until an event: the last frame now. */
+			if (c->offscreen) {
+				selectContext(c->host);
+				finishFrame();
+			}
+			WaitPort(c->window->UserPort);
+		}
 	}
 }

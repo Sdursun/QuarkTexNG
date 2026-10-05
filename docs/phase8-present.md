@@ -55,8 +55,38 @@ changes size gives the picture its new size. `mglCreateContextFromBitMap`,
 which returned NULL, works now for such a bitmap: frames go into it at
 `MGLSwitchDisplay`.
 
-## Cost
+## Cost, and reading back without waiting
 
-Reading the picture back and writing it costs RTCW at 640 x 480, uncapped,
-about 2.7 ms a frame: 188 fps before, about 118 now. Capped at its usual 60
-fps there is no difference to see.
+Measured on RTCW at 640 x 480, uncapped (`-Profile` logs the parts): the
+first, synchronous version cost 2.7 ms a frame, 188 fps before phase 8 and
+118 after. Of those 2.7 ms, 1.3 went into waiting for the GPU to finish the
+frame (a `glFinish` before `glReadPixels` took them), 1.0 into the transfer
+and 0.7 into converting and writing.
+
+- **Asynchronous read back.** At the swap `glReadPixels` goes into one of
+  two pixel buffers with a fence after it, and the swap returns. The picture
+  is written as soon as the fence has passed: checked without waiting at
+  each of the next frame's command buffers (the GPU is done within a
+  millisecond or two, while the 68k prepares the next frame), at the next
+  swap at the latest. An application that waits for input after a frame
+  would never send those buffers, so `finishFrame` (host
+  `qt_finish_frame`) writes the pending picture at once: minigl's main loop
+  calls it before it waits, and `glFinish` does as well.
+- **One conversion loop per format**, 32-bit formats as one load, shift or
+  byte swap and store: 0.7 ms became 0.25.
+
+Now the swap takes 0.08 ms and writing 0.25: RTCW runs at 170 fps, bound by
+the 68k.
+
+## Checks
+
+- `tests/host` checks the conversion into all twelve formats, clipping at
+  the bitmap's edge and the upright rows, and that `glDrawBuffer`/
+  `glReadBuffer` look at the framebuffer binding.
+- `m01_minigl` reads back, after `glFinish`, what the Amiga display shows
+  (`p96ReadPixel` on its window): the same points as in the picture, in a
+  window and in fullscreen.
+- Screenshots of the real screen during RTCW, JK2, OpenLara and Hurrican
+  in exclusive fullscreen show the games.
+- A minigl.library of protocol 8 with this host gets no context (and the
+  other way round): the libraries and DLLs go together.

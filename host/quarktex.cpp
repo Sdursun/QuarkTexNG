@@ -296,6 +296,8 @@ namespace {
 QT_EXPORT int32_t __cdecl qt_execute(struct uni* uni) {
 	Context* c = find(uni->d2);
 	if (!c || !activate(c)) return 0;
+	// An offscreen context's last picture is written as soon as the GPU has it.
+	if (c->offscreen) present::poll(c->framebuffer, uni_resolve, false);
 	qt_w3d_trace_all = traceFrame >= 0 && c->swaps == static_cast<unsigned long>(traceFrame);
 	if (!c->profile.on) return qt_decode(amiga<const uint8_t>(uni->a1), static_cast<uint32_t>(uni->d1), uni_resolve);
 	LARGE_INTEGER start, end;
@@ -391,7 +393,8 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	if (!wglMakeCurrent(c->deviceContext, c->gl)) { logString("Warning: Could not activate the rendering context"); destroy(c); return 0; }
 	active = c;
 	ffp::makeCurrent(0);
-	if (c->offscreen && !present::resize(c->framebuffer, width, height)) {
+	c->framebuffer.core = core;
+	if (c->offscreen && !present::resize(c->framebuffer, width, height, uni_resolve)) {
 		logString("Warning: Could not create a framebuffer object");
 		destroy(c);
 		return 0;
@@ -441,7 +444,7 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
 	// An offscreen context's picture takes the new size.
 	if (c->offscreen && (c->framebuffer.width != uni->d3 || c->framebuffer.height != uni->d4) && activate(c)) {
 		ffp::flush();
-		present::resize(c->framebuffer, uni->d3, uni->d4);
+		present::resize(c->framebuffer, uni->d3, uni->d4, uni_resolve);
 	}
 	return 0;
 }
@@ -466,7 +469,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 		}
 		present::Target t = {w[0], w[1], w[2], w[3], w[4], static_cast<int32_t>(w[5]), static_cast<int32_t>(w[6]),
 			static_cast<int32_t>(w[7]), static_cast<int32_t>(w[8])};
-		present::copy(c->framebuffer, t, uni_resolve, c->ffp != 0);
+		present::start(c->framebuffer, t, uni_resolve);
 	}
 	if (c->profile.on) {
 		QueryPerformanceCounter(&after);
@@ -479,14 +482,16 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 			double f = static_cast<double>(frequency.QuadPart), wall = (after.QuadPart - p.periodStart) / f;
 			char line[240];
 			snprintf(line, sizeof(line), "Profile %s: frames %lu-%lu: %.1f fps; per frame %.2f ms wall, %.2f ms executing "
-				"(%lu buffers, %llu bytes), %.2f ms presenting, %.2f ms elsewhere (68k)",
+				"(%lu buffers, %llu bytes), %.2f ms presenting (%.2f starting read backs, %.2f writing pictures), %.2f ms elsewhere (68k)",
 				c->label.empty() ? "context" : c->label.c_str(), c->swaps - reportFrames, c->swaps, reportFrames / wall,
 				wall * 1000 / reportFrames, p.periodTicks / f * 1000 / reportFrames, p.periodCalls / reportFrames,
 				p.periodBytes / reportFrames, p.swapTicks / f * 1000 / reportFrames,
+				present::readTicks / f * 1000 / reportFrames, present::writeTicks / f * 1000 / reportFrames,
 				(wall - (p.periodTicks + p.swapTicks) / f) * 1000 / reportFrames);
 			logString(line);
 			p.periodStart = after.QuadPart;
 			p.periodTicks = p.swapTicks = 0;
+			present::readTicks = present::writeTicks = 0;
 			p.periodCalls = 0;
 			p.periodBytes = 0;
 		}
@@ -497,5 +502,14 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 		logString(reinterpret_cast<const char*>(gluErrorString(code)));
 		code = glGetError();
 	}
+	return 0;
+}
+
+// d1 = context. Writes an offscreen context's pending picture now, waiting
+// for the GPU if need be: the 68k side calls it before it waits for input,
+// when no command buffer would come to write it.
+QT_EXPORT int32_t __cdecl qt_finish_frame(struct uni* uni) {
+	Context* c = find(uni->d1);
+	if (c && c->offscreen && activate(c)) present::poll(c->framebuffer, uni_resolve, true);
 	return 0;
 }

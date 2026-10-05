@@ -30,31 +30,60 @@ namespace present {
 
 	// count pixels of B, G, R, A bytes (what glReadPixels gives for GL_BGRA)
 	// into dest in the format. The alpha of the 32-bit formats is unused by
-	// the display; it is written as 0.
+	// the display; it is written as 0. One loop per format: this runs for
+	// every pixel of every frame.
+	inline uint32_t loadPixel(const uint8_t* p) {
+		uint32_t v;
+		memcpy(&v, p, 4); // little-endian host: b | g << 8 | r << 16 | a << 24
+		return v;
+	}
+
+	inline uint32_t swapBytes(uint32_t v) {
+		return (v >> 24) | ((v >> 8) & 0xFF00) | ((v << 8) & 0xFF0000) | (v << 24);
+	}
+
+	// 16 bits from r, g, b (each 0-255) as hi:lo bits per channel.
+	template <int R, int G, int B, bool RedHigh>
+	inline uint16_t pack16(uint32_t p) {
+		uint32_t r = (p >> 16) & 0xFF, g = (p >> 8) & 0xFF, b = p & 0xFF;
+		uint32_t high = RedHigh ? r : b, low = RedHigh ? b : r;
+		return static_cast<uint16_t>(((high >> (8 - R)) << (G + B)) | ((g >> (8 - G)) << B) | (low >> (8 - B)));
+	}
+
+	template <int G, bool RedHigh, bool BigEndian>
+	inline void convert16(const uint8_t* bgra, uint8_t* dest, int count) {
+		for (int i = 0; i < count; ++i, bgra += 4, dest += 2) {
+			uint16_t v = pack16<5, G, 5, RedHigh>(loadPixel(bgra));
+			dest[BigEndian ? 0 : 1] = static_cast<uint8_t>(v >> 8);
+			dest[BigEndian ? 1 : 0] = static_cast<uint8_t>(v);
+		}
+	}
+
 	inline void convertRow(const uint8_t* bgra, uint8_t* dest, int count, uint32_t format) {
-		if (format == B8G8R8A8) {
+		switch (format) {
+		case B8G8R8A8: case A8B8G8R8: case R8G8B8A8: case A8R8G8B8:
 			for (int i = 0; i < count; ++i, bgra += 4, dest += 4) {
-				dest[0] = bgra[0]; dest[1] = bgra[1]; dest[2] = bgra[2]; dest[3] = 0;
+				uint32_t p = loadPixel(bgra) & 0x00FFFFFF, v;
+				if (format == B8G8R8A8) v = p;                       // b g r 0
+				else if (format == A8B8G8R8) v = p << 8;             // 0 b g r
+				else if (format == R8G8B8A8) v = swapBytes(p << 8);  // r g b 0
+				else v = swapBytes(p);                                // 0 r g b
+				memcpy(dest, &v, 4);
 			}
 			return;
-		}
-		for (int i = 0; i < count; ++i, bgra += 4) {
-			uint8_t b = bgra[0], g = bgra[1], r = bgra[2];
-			uint16_t v = 0;
-			switch (format) {
-			case R8G8B8: *dest++ = r; *dest++ = g; *dest++ = b; continue;
-			case B8G8R8: *dest++ = b; *dest++ = g; *dest++ = r; continue;
-			case A8R8G8B8: *dest++ = 0; *dest++ = r; *dest++ = g; *dest++ = b; continue;
-			case A8B8G8R8: *dest++ = 0; *dest++ = b; *dest++ = g; *dest++ = r; continue;
-			case R8G8B8A8: *dest++ = r; *dest++ = g; *dest++ = b; *dest++ = 0; continue;
-			case R5G6B5: case R5G6B5PC: v = static_cast<uint16_t>(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)); break;
-			case R5G5B5: case R5G5B5PC: v = static_cast<uint16_t>(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)); break;
-			case B5G6R5PC: v = static_cast<uint16_t>(((b >> 3) << 11) | ((g >> 2) << 5) | (r >> 3)); break;
-			case B5G5R5PC: v = static_cast<uint16_t>(((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3)); break;
-			}
-			// The PC formats are little-endian, the others big-endian.
-			if (format == R5G6B5 || format == R5G5B5) { *dest++ = static_cast<uint8_t>(v >> 8); *dest++ = static_cast<uint8_t>(v); }
-			else { *dest++ = static_cast<uint8_t>(v); *dest++ = static_cast<uint8_t>(v >> 8); }
+		case R8G8B8:
+			for (int i = 0; i < count; ++i, bgra += 4, dest += 3) { dest[0] = bgra[2]; dest[1] = bgra[1]; dest[2] = bgra[0]; }
+			return;
+		case B8G8R8:
+			for (int i = 0; i < count; ++i, bgra += 4, dest += 3) { dest[0] = bgra[0]; dest[1] = bgra[1]; dest[2] = bgra[2]; }
+			return;
+		// The PC formats are little-endian, the others big-endian.
+		case R5G6B5: convert16<6, true, true>(bgra, dest, count); return;
+		case R5G6B5PC: convert16<6, true, false>(bgra, dest, count); return;
+		case R5G5B5: convert16<5, true, true>(bgra, dest, count); return;
+		case R5G5B5PC: convert16<5, true, false>(bgra, dest, count); return;
+		case B5G6R5PC: convert16<6, false, false>(bgra, dest, count); return;
+		case B5G5R5PC: convert16<5, false, false>(bgra, dest, count); return;
 		}
 	}
 
@@ -87,18 +116,36 @@ namespace present {
 	}
 
 	// The framebuffer object of an offscreen context: colour and
-	// depth/stencil renderbuffers. In the context that is current.
+	// depth/stencil renderbuffers, and two pixel buffers its pictures are
+	// read back into without waiting for the GPU. In the context that is
+	// current.
 	struct Framebuffer {
 		unsigned int fbo, color, depthStencil;
 		int width, height;
+		unsigned int pixelBuffers[2];
+		int next;          // the pixel buffer the next picture goes to
+		void* fence;       // GLsync of the pending picture, 0 if none
+		int pending;       // its pixel buffer
+		Target target;     // where it goes
+		bool core;
 	};
 
-	// Creates or resizes it and binds it for drawing and reading.
-	bool resize(Framebuffer& f, int width, int height);
+	// Creates or resizes it and binds it for drawing and reading; a pending
+	// picture is written first.
+	bool resize(Framebuffer& f, int width, int height, void* (*resolve)(uint32_t));
 	void destroy(Framebuffer& f);
-	// Reads its picture (bottom-up BGRA) into pixels and writes it into the
-	// target; leaves the application's pack state as it was.
-	bool copy(const Framebuffer& f, const Target& t, void* (*resolve)(uint32_t), bool core);
+
+	// Starts reading the picture back for the target (at a swap); a picture
+	// still pending is written first. Leaves the application's pack state as
+	// it was.
+	void start(Framebuffer& f, const Target& t, void* (*resolve)(uint32_t));
+	// Writes the pending picture if the GPU has finished it (between
+	// commands, without waiting), or in any case (wait).
+	void poll(Framebuffer& f, void* (*resolve)(uint32_t), bool wait);
+
+	// Performance counter ticks spent starting the read back and writing
+	// pictures, for the profile (QUARKTEX_PROFILE); the profile resets them.
+	extern long long readTicks, writeTicks;
 }
 
 #endif
