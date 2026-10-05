@@ -134,6 +134,7 @@ namespace {
 		GLsizei width, height;
 		int chromaMode; // 0 none, 1 texels in the bounds pass, 2 they are rejected
 		int chromaLower[3], chromaUpper[3]; // r, g, b, 0..255
+		std::vector<uint32_t> palette; // Warp3D CHUNKY (host/w3d.cpp)
 	};
 
 	struct State {
@@ -558,6 +559,11 @@ namespace ffp {
 			info->second.chromaLower[i] = static_cast<int>((lower >> (16 - 8 * i)) & 0xFF);
 			info->second.chromaUpper[i] = static_cast<int>((upper >> (16 - 8 * i)) & 0xFF);
 		}
+	}
+
+	std::vector<uint32_t>* TexturePalette(GLuint texture) {
+		std::map<GLuint, TextureInfo>::iterator info = ctx->textures.find(texture);
+		return info == ctx->textures.end() ? 0 : &info->second.palette;
 	}
 
 	void GenTextures(GLsizei n, GLuint* names) {

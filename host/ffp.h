@@ -8,6 +8,8 @@
 #define QUARKTEX_FFP_H
 
 #include "gl3.h"
+#include <cstdint>
+#include <vector>
 
 namespace ffp {
 	// The emulation's objects and state for one OpenGL context. create needs
@@ -59,6 +61,10 @@ namespace ffp {
 	// bounds pass, 2 they are rejected. The bounds are 0xRRGGBB (alpha
 	// ignored), inclusive, compared with the filtered texel in 8 bits.
 	void ChromaTest(GLboolean enable);
+
+	// Warp3D's palette of a CHUNKY texture, kept and deleted with the
+	// texture; 0 for a name without a texture.
+	std::vector<uint32_t>* TexturePalette(GLuint texture);
 	void ChromaBounds(GLuint texture, GLint mode, GLuint lower, GLuint upper);
 
 	// Textures: the OpenGL 1.1 pixel formats (GL_ALPHA, GL_LUMINANCE, ...)

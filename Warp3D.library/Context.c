@@ -150,6 +150,8 @@ void W3D_DestroyContext(__REGA0(W3D_Context *context)) {
 		}
 	}
 	unpatch(QT(context));
+	/* The textures the application left (0.53 kept them allocated). */
+	W3D_FreeAllTexObj(context);
 	w3d_select(context);
 	freeContext();
 	free(context->drawmem);

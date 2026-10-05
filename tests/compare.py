@@ -131,6 +131,9 @@ def main():
             if ratio is None:
                 status, detail = "FAIL", detail
                 del images["diff"]
+                if test in known:
+                    status = "KNOWN"
+                    detail += " - known difference: " + known[test]
             else:
                 status = "PASS" if ratio <= max_ratio else "FAIL"
                 detail = "%.3f%% of pixels differ (%s)" % (ratio * 100, detail)

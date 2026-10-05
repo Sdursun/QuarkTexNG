@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -119,6 +120,13 @@ GLvoid stub_glChromaTest(GLboolean enable) {
 GLvoid stub_glChromaBounds(GLuint texture, GLint mode, GLuint lower, GLuint upper) {
 	Record r("ChromaBounds");
 	r << texture << mode << lower << upper;
+}
+
+// ffp::TexturePalette: a palette per name, not recorded.
+static std::map<GLuint, std::vector<uint32_t> > stubPalettes;
+
+std::vector<uint32_t>* stub_glTexturePalette(GLuint texture) {
+	return &stubPalettes[texture];
 }
 
 // ffp::StencilPoints: the count, then x, y, value of each pixel.
@@ -369,10 +377,10 @@ int main() {
 		memcpy(arena + 0x17400, image, sizeof(image));
 		Command c = {buffer8, 0, resolve};
 		readPalette(c, 99, 0x17000);
-		std::vector<GLubyte> rgba = chunkyToRgba(c, palettes[99], 0x17400, 2, 2, 4);
+		std::vector<GLubyte> rgba = chunkyToRgba(c, paletteOf(99), 0x17400, 2, 2, 4);
 		const GLubyte expected[] = {1, 254, 0, 128, 2, 253, 1, 128, 3, 252, 1, 128, 4, 251, 2, 128};
 		check(rgba.size() == 16 && memcmp(&rgba[0], expected, 16) == 0, "chunkyToRgba");
-		palettes.erase(99);
+		stubPalettes.erase(99);
 	}
 
 	// W3D_UpdateTexSubImage of an R8G8B8 rectangle in an image 96 bytes wide:

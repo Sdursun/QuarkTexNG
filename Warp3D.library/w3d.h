@@ -60,6 +60,9 @@ typedef struct {
 void drawPrimitive(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex* v, int count);
 void drawPrimitiveList(W3D_Context* context, ULONG primitive, W3D_Texture* tex, W3D_Vertex** v, int count);
 
+/* Texture.c */
+ULONG W3D_FreeAllTexObj(__REGA0(W3D_Context *context));
+
 extern W3D_Driver driver;
 extern W3D_Driver *drivers[];
 

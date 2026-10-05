@@ -144,15 +144,22 @@ namespace {
 
 	// CHUNKY textures: 8-bit indices into a palette of 256 ARGB words. OpenGL
 	// gets them as RGBA bytes (0.53 sent the indices as GL_COLOR_INDEX and
-	// ignored the palette). The palette is kept per texture, so updates
-	// without a palette use the last one.
+	// ignored the palette). The palette is kept with the texture (ffp, per
+	// context), so updates without a palette use the last one; empty if
+	// there was none yet.
 	const uint32_t W3D_CHUNKY = 1;
-	std::map<GLuint, std::vector<uint32_t> > palettes;
+	const std::vector<uint32_t> noPalette;
+
+	const std::vector<uint32_t>& paletteOf(GLuint name) {
+		const std::vector<uint32_t>* palette = QT_GL(TexturePalette)(name);
+		return palette ? *palette : noPalette;
+	}
 
 	void readPalette(const Command& c, GLuint name, uint32_t address) {
-		std::vector<uint32_t>& palette = palettes[name];
-		palette.resize(256);
-		for (uint32_t i = 0; i < 256; ++i) palette[i] = readU32(c, address + 4 * i);
+		std::vector<uint32_t>* palette = QT_GL(TexturePalette)(name);
+		if (!palette) return;
+		palette->resize(256);
+		for (uint32_t i = 0; i < 256; ++i) (*palette)[i] = readU32(c, address + 4 * i);
 	}
 
 	std::vector<GLubyte> chunkyToRgba(const Command& c, const std::vector<uint32_t>& palette, uint32_t image,
@@ -162,7 +169,7 @@ namespace {
 		size_t out = 0;
 		for (int32_t y = 0; y < height; ++y) {
 			for (int32_t x = 0; x < width; ++x) {
-				uint32_t argb = palette[readU8(c, image + y * bytesPerRow + x)];
+				uint32_t argb = palette.size() == 256 ? palette[readU8(c, image + y * bytesPerRow + x)] : 0;
 				rgba[out++] = static_cast<GLubyte>(argb >> 16);
 				rgba[out++] = static_cast<GLubyte>(argb >> 8);
 				rgba[out++] = static_cast<GLubyte>(argb);
@@ -456,7 +463,7 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		if (format == W3D_CHUNKY && palette) {
 			int32_t width = static_cast<int32_t>(c.u(2)), height = static_cast<int32_t>(c.u(3));
 			readPalette(c, name, palette);
-			std::vector<GLubyte> rgba = chunkyToRgba(c, palettes[name], c.u(4), width, height, 0);
+			std::vector<GLubyte> rgba = chunkyToRgba(c, paletteOf(name), c.u(4), width, height, 0);
 			QT_GL(TexImage2D)(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 				rgba.empty() ? 0 : &rgba[0]);
 		}
@@ -472,7 +479,6 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		GLuint name = c.u(1);
 		if (c.words != 2) return false;
 		if (name) QT_GL(DeleteTextures)(1, &name);
-		palettes.erase(name);
 		return true;
 	}
 
@@ -535,10 +541,10 @@ bool qt_w3d_decode(const Command& c, int32_t& result) {
 		lookup(types, c.u(2), glType);
 		lookup(bytesPerPixel, c.u(2), pixelSize);
 		QT_GL(BindTexture)(GL_TEXTURE_2D, name);
-		if (c.u(2) == W3D_CHUNKY && (palette || palettes.count(name))) {
+		if (c.u(2) == W3D_CHUNKY && (palette || !paletteOf(name).empty())) {
 			int32_t width = static_cast<int32_t>(c.u(5)), height = static_cast<int32_t>(c.u(6));
 			if (palette) readPalette(c, name, palette);
-			std::vector<GLubyte> rgba = chunkyToRgba(c, palettes[name], c.u(7), width, height, bytesPerRow);
+			std::vector<GLubyte> rgba = chunkyToRgba(c, paletteOf(name), c.u(7), width, height, bytesPerRow);
 			QT_GL(TexSubImage2D)(GL_TEXTURE_2D, 0, (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), width, height,
 				GL_RGBA, GL_UNSIGNED_BYTE, rgba.empty() ? 0 : &rgba[0]);
 			return true;

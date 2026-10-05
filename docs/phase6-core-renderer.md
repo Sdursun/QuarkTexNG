@@ -168,6 +168,32 @@ one table (Hardware.c `support`) of what the renderer does:
 Test: t18_query (new); against the snapshot before (`query0`) only it
 changed.
 
+## Leaks
+
+An audit of the allocations in both libraries and the host found:
+
+- `W3D_DestroyContext` left the textures the application had not freed
+  allocated (the `W3D_Texture` and driver structures). It now calls
+  `W3D_FreeAllTexObj` first. Ten create/destroy cycles with three textures
+  left each lost at least 4 KB of Amiga memory before, less after.
+- The host kept the palettes of CHUNKY textures in one map by OpenGL
+  texture name for all contexts, and never removed the entries of destroyed
+  contexts. With several contexts, whose texture names may be the same, a
+  texture without a palette could take another context's one. The palette
+  is now kept with the texture in the context's `ffp` data
+  (`ffp::TexturePalette`) and goes with it. (The Intel driver used here
+  gives every context different texture names, so the test cannot show the
+  mix-up; it guards against it.)
+- `AmigaMesaDestroyContext` did not free the context structure (fixed with
+  the several contexts, above).
+
+The rest is paired up; the 1.9 MB `drawmem` buffer of each Warp3D context
+is not used by QuarkTex but freed with the context.
+
+Test: t19_leaks (new): the cycles above, and a CHUNKY texture without a
+palette next to a second context's texture with one. Against the snapshot
+before (`leaks0`) only the memory square changed, from red to green.
+
 ## Results
 
 All reference tests against the phase 5 snapshot (`run.ps1 -Against fix8`,
@@ -194,4 +220,4 @@ triangles/s.
   (CLUT, R5G6B5, ...). Today CHUNKY textures are converted to RGBA on the
   CPU and the 16-bit formats are uploaded with packed types; both work, so
   this is an optimisation, not a fix.
-- Roadmap item 5, still open: leaks.
+- Roadmap item 5 is done.
