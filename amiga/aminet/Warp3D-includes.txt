@@ -14,4 +14,6 @@ are used unchanged, as they are in QuarkTex's original repository:
     Warp3D.library/Warp3D.h
     Warp3D.library/Warp3D.fd
 
-They are also part of the Warp3D developer files.
+They are also part of the Warp3D developer files. Warp3D_lib.h, a list of
+prototypes generated from Warp3D.fd for the StormC build of QuarkTex 0.5,
+is left out for the same reason; nothing uses it.
