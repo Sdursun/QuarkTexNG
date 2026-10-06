@@ -14,7 +14,7 @@ build/apps/<label>/capture/app.log.
 
 The program is not expected to quit; WinUAE is stopped after -TimeoutSec.
 Every -CaptureEvery-th buffer swap of each context is saved as a BMP in
-build/apps/<label>/capture, as are QuartexNGLog.txt and the program's output.
+build/apps/<label>/capture, as are QuarkTexNGLog.txt and the program's output.
 
 .EXAMPLE
 pwsh tests/run-app.ps1 -VolumeDir C:\Temp\Share -Volume Share -Directory JK2_Pistorm -Command jk2sp `
@@ -35,7 +35,7 @@ param(
 	[int]$StackBytes = 2200000,
 	# Log the Warp3D texture commands (QUARKTEX_TRACE), and all Warp3D commands,
 	# with the first vertices of each array, of the given buffer swap
-	# (QUARKTEX_TRACE_FRAME), into QuartexNGLog.txt.
+	# (QUARKTEX_TRACE_FRAME), into QuarkTexNGLog.txt.
 	[switch]$Trace,
 	[int]$TraceFrame = -1,
 	# Log frame rate and where the time of a frame goes, every 300 frames
@@ -55,7 +55,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $cfg = Import-PowerShellDataFile $Settings
 $uaequit = Join-Path $cfg.WinUAEDir 'Amiga Programs\UAEquit'
 foreach ($path in $cfg.Kickstart, $cfg.HardFile, $VolumeDir, (Join-Path $cfg.WinUAEDir $Emulator),
-		(Join-Path $root 'build\amiga\Warp3D.library'), (Join-Path $root 'build\host-x64\quartexng-windows-x86-64.dll')) {
+		(Join-Path $root 'build\amiga\Warp3D.library'), (Join-Path $root 'build\host-x64\quarktexng-windows-x86-64.dll')) {
 	if (-not (Test-Path $path)) { throw "Not found: $path" }
 }
 
@@ -68,7 +68,7 @@ $uae = Join-Path $root 'build\tests\winuae'
 New-Item -ItemType Directory -Force $uae | Out-Null
 Copy-Item (Join-Path $cfg.WinUAEDir $Emulator) $uae -Force
 if (-not (Test-Path (Join-Path $uae 'winuae.ini'))) { New-Item -ItemType File (Join-Path $uae 'winuae.ini') | Out-Null }
-Copy-Item (Join-Path $root 'build\host-x86\quartexng-windows-x86.dll'), (Join-Path $root 'build\host-x64\quartexng-windows-x86-64.dll') $uae -Force
+Copy-Item (Join-Path $root 'build\host-x86\quarktexng-windows-x86.dll'), (Join-Path $root 'build\host-x64\quarktexng-windows-x86-64.dll') $uae -Force
 
 $dir = Join-Path $root "build\apps\$Label"
 $qttest = Join-Path $dir 'qttest'
@@ -109,7 +109,7 @@ if ($Profile) { $env:QUARKTEX_PROFILE = '1' }
 if ($TraceFrame -ge 0) { $env:QUARKTEX_TRACE_FRAME = "$TraceFrame" }
 # The host writes its log only when it has something to say: an old one
 # must not be taken for this run's.
-Remove-Item (Join-Path $uae 'QuartexNGLog.txt') -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $uae 'QuarkTexNGLog.txt') -ErrorAction SilentlyContinue
 $process = Start-Process (Join-Path $uae $Emulator) -ArgumentList '-f', "`"$config`"" -WorkingDirectory $uae -PassThru
 if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 	Stop-Process $process -Force
@@ -117,6 +117,6 @@ if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 }
 Remove-Item Env:QUARKTEX_CAPTURE_DIR, Env:QUARKTEX_CAPTURE_EVERY
 Remove-Item Env:QUARKTEX_TRACE, Env:QUARKTEX_TRACE_FRAME, Env:QUARKTEX_PROFILE -ErrorAction SilentlyContinue
-$hostLog = Join-Path $uae 'QuartexNGLog.txt'
+$hostLog = Join-Path $uae 'QuarkTexNGLog.txt'
 if (Test-Path $hostLog) { Copy-Item $hostLog (Join-Path $qttest 'capture') -Force }
 Get-ChildItem (Join-Path $qttest 'capture') | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host

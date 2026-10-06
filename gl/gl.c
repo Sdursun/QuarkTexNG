@@ -12,7 +12,7 @@
 #include <proto/picasso96.h>
 
 /*
- * Bridge to the host library (quartexng-windows-x86[-64].dll), reached through
+ * Bridge to the host library (quarktexng-windows-x86[-64].dll), reached through
  * uaenative.library, which the emulator provides when native_code=true:
  *   -30 open_library  (a1 = name, d0 = minimum version) -> handle
  *   -36 close_library (a1 = handle)
@@ -78,7 +78,7 @@ static void openHost(void) {
 	ULONG version;
 	qt_UniBase = OpenLibrary("uaenative.library", 1);
 	if (!qt_UniBase) return;
-	qt_host = uni_open_library("quartexng", 0);
+	qt_host = uni_open_library("quarktexng", 0);
 	if (!UNI_VALID(qt_host)) {
 		qt_host = 0;
 		return;

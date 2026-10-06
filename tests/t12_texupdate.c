@@ -100,7 +100,7 @@ void test_cleanup(void) {
 	int i;
 	const char *id = (const char *) Warp3DBase->lib_IdString;
 	if (texture) {
-		if (id && (strstr(id, "QuarkTex") || strstr(id, "QuartexNG"))) {
+		if (id && strstr(id, "QuarkTex")) {
 			ULONG result = W3D_FreeAllTexObj(context);
 			if (result != W3D_SUCCESS) fail("W3D_FreeAllTexObj", result);
 			else printf("%s: W3D_FreeAllTexObj returned\n", test_name);

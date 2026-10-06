@@ -1,6 +1,6 @@
 /*
  * w01_w3d_fullscreen: Warp3D in fullscreen as a game uses it, checking what
- * reaches Amiga display memory (QuartexNG phase 8). Not a reference test:
+ * reaches Amiga display memory (QuarkTex NG phase 8). Not a reference test:
  * QuarkTex 0.53 could not create a fullscreen context. Prints PASS or FAIL
  * per check, returns 5 if one failed; run it with tests/run-app.ps1.
  *

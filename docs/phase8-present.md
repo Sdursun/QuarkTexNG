@@ -172,5 +172,5 @@ the screen and each buffer holds its frame.
 
 Open: MiniGL Classic (the Warp3D-based minigl.library) in fullscreen
 creates its context and a texture, destroys the context and then crashes
-the system (AN_MemCorrupt). QuartexNG's own minigl.library runs those
-games; MiniGL Classic on QuartexNG's Warp3D is still to be looked into.
+the system (AN_MemCorrupt). QuarkTex NG's own minigl.library runs those
+games; MiniGL Classic on QuarkTex NG's Warp3D is still to be looked into.

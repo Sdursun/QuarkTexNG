@@ -358,7 +358,7 @@ void mgl_GLGetPointerv(GLcontext context, GLenum pname, GLvoid **params) {
 	*params = NULL;
 }
 
-static const char vendor[] = "QuartexNG";
+static const char vendor[] = "QuarkTex NG";
 static const char renderer[] = QT_PRODUCT " minigl.library (host OpenGL)";
 static const char version[] = "1.2";
 /* MiniGL's name for GL_ARB_multitexture, which applications looking for

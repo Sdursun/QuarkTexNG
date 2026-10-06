@@ -4,7 +4,7 @@
 #
 #   ./build.sh            Amiga libraries + host DLLs, collected in dist/
 #   ./build.sh amiga      Warp3D.library and agl.library only
-#   ./build.sh host       quartexng-windows-x86.dll and -x86-64.dll only
+#   ./build.sh host       quarktexng-windows-x86.dll and -x86-64.dll only
 #   ./build.sh tests      Warp3D test programs and the legacy QuarkTex.alib
 #                         the 0.53 reference libraries need (see tests/run.ps1)
 #   ./build.sh generate   regenerate the *.auto.* files from gl/glFuncs.txt
@@ -90,7 +90,7 @@ dist() {
 	mkdir -p dist
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
 	if [ -f build/amiga/minigl.library ]; then cp build/amiga/minigl.library dist/; fi
-	cp build/host-x86/quartexng-windows-x86.dll build/host-x64/quartexng-windows-x86-64.dll dist/
+	cp build/host-x86/quarktexng-windows-x86.dll build/host-x64/quarktexng-windows-x86-64.dll dist/
 	cp License.txt ReadMe.txt dist/
 	echo "dist/:"
 	ls -lR dist

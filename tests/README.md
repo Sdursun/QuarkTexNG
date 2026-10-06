@@ -39,7 +39,7 @@ Requirements:
 - `run.ps1` copies `winuae.exe` (and `winuae64.exe` if asked for) to
   `build/tests/winuae` and runs it in portable mode (with a `winuae.ini`), so the
   normal installation is not touched. The host libraries
-  `quartexng-windows-x86[-64].dll` go next to it, the legacy `QuarkTex.alib` into
+  `quarktexng-windows-x86[-64].dll` go next to it, the legacy `QuarkTex.alib` into
   its `alib` directory.
 - The test configuration (`winuae/test.uae.in`) boots from `QTBOOT:`
   (`amiga/boot`). That volume assigns the system from the read-only hard file,

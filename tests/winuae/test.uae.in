@@ -15,7 +15,7 @@ z3mem_size=256
 cpu_type=68040
 cpu_model=68040
 fpu_model=68040
-; QuartexNG needs the FPU's 80-bit precision ("Host (80-bit)"), see gl/gl.c.
+; QuarkTex NG needs the FPU's 80-bit precision ("Host (80-bit)"), see gl/gl.c.
 fpu_msvc_long_double=true
 cpu_compatible=false
 cpu_cycle_exact=false

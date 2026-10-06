@@ -16,7 +16,7 @@ struct Window *open_window(const char *title);
 
 /* Prints what the Amiga display shows at five points of the window's inner
  * area (corners inset by 10 and the centre), as "shown x,y: r g b", with y
- * from the bottom as in the captured frame: with QuartexNG's presenting into
+ * from the bottom as in the captured frame: with QuarkTex NG's presenting into
  * display memory (phase 8) they match the frame. Only on Picasso96 screens;
  * informational, the result does not fail the test. */
 void report_shown(const char *name, struct Window *window);
