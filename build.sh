@@ -121,6 +121,10 @@ aminet() {
 	done
 	git archive HEAD | tar -x -C "$package/Source"
 	git rev-parse HEAD > "$package/Source/COMMIT"
+	# The Warp3D API includes are not under the LGPL and their terms are not
+	# known to allow passing them on: left out, with where to get them.
+	rm "$package/Source/Warp3D.library/Warp3D.h" "$package/Source/Warp3D.library/Warp3D.fd"
+	tr -d '\r' < amiga/aminet/Warp3D-includes.txt > "$package/Source/Warp3D.library/Warp3D-includes.txt"
 	cp "$package/QuarkTexNG.readme" build/aminet/QuarkTexNG.readme
 	run "$AMIGA_IMAGE" "cd build/aminet && lha ao5q QuarkTexNG.lha QuarkTexNG && lha t QuarkTexNG.lha >/dev/null"
 	echo "build/aminet/:"

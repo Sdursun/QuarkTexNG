@@ -106,12 +106,14 @@ endorsed by its original author.
 The notices of the parts made by others, among them the mingw-w64 runtime
 in the host DLLs, are in ThirdParty.txt.
 
-The complete source code of this release is in Source/. Warp3D.h and
-Warp3D.fd in it are the Warp3D API includes, (C) 1998 Sam Jordan,
-Hans-Joerg Frieden and Thomas Frieden; Amigamesa.h is from Mesa 1.2,
-(C) 1995 Brian Paul, LGPL v2 or later. Building minigl.library needs
-MiniGL's SDK, (C) Hyperion under the Hyperion MiniGL Open Source License,
-which is not included.
+The source code of this release is in Source/. Left out are Warp3D.h and
+Warp3D.fd, the Warp3D API includes, (C) 1998 Sam Jordan, Hans-Joerg
+Frieden and Thomas Frieden, which are not under the LGPL: building needs
+them from QuarkTex's original repository, as
+Source/Warp3D.library/Warp3D-includes.txt explains. Amigamesa.h is from
+Mesa 1.2, (C) 1995 Brian Paul, LGPL v2 or later. Building minigl.library
+needs MiniGL's SDK, (C) Hyperion under the Hyperion MiniGL Open Source
+License, which is not included.
 
 Archive contents
 ----------------
@@ -124,7 +126,8 @@ Archive contents
   QuarkTexNG/ThirdParty.txt     notices of the parts made by others
   QuarkTexNG/Libs/              Warp3D.library, agl.library, minigl.library
   QuarkTexNG/WinUAE/            the host DLLs for 32- and 64-bit WinUAE
-  QuarkTexNG/Source/            source code of this release
+  QuarkTexNG/Source/            source code of this release (without the
+                                Warp3D API includes, see above)
 
 History
 -------

@@ -243,7 +243,9 @@ Third-party files in this repository keep their own terms:
 
 - `Warp3D.library/Warp3D.h`, `Warp3D.library/Warp3D.fd`: Warp3D API
   include files, © 1998 Sam Jordan, Hans-Jörg Frieden, Thomas Frieden,
-  used for compatibility with the Warp3D API.
+  used unchanged for compatibility with the Warp3D API. They are not under
+  the LGPL and are left out of the source in the Aminet archive, which
+  says where to get them (this repository, or QuarkTex's original one).
 - `agl.library/Amigamesa.h`: from Mesa 1.2, © 1995 Brian Paul, GNU Library
   General Public License version 2 or later.
 

@@ -1,0 +1,17 @@
+Warp3D.h and Warp3D.fd are not in this archive
+==============================================
+
+Two files of this directory are missing from the source in the Aminet
+archive: Warp3D.h and Warp3D.fd, the include files of the Warp3D API,
+(C) 1998 Sam Jordan, Hans-Joerg Frieden, Thomas Frieden, all rights
+reserved. They are not under QuarkTex NG's license, and their terms are not
+known to allow passing them on, so they are left out here.
+
+To build QuarkTex NG, put them into this directory (Warp3D.library/). They
+are used unchanged, as they are in QuarkTex's original repository:
+
+  https://github.com/RobDangerous/QuarkTex
+    Warp3D.library/Warp3D.h
+    Warp3D.library/Warp3D.fd
+
+They are also part of the Warp3D developer files.

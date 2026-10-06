@@ -61,14 +61,15 @@ with GCC include them under terms of the program's own choosing; QuarkTex
 NG's are the GNU LGPL v3.
 
 
-3. Warp3D API include files (in Source/)
-----------------------------------------
+3. Warp3D API include files (not in the Aminet archive)
+-------------------------------------------------------
 
 Warp3D.library/Warp3D.h and Warp3D.library/Warp3D.fd are the include files
 of the Warp3D API, (C) 1998 Sam Jordan, Hans-Joerg Frieden, Thomas Frieden,
-all rights reserved; they came with QuarkTex and are used so that
-QuarkTex NG's Warp3D.library offers the same interface. They are not under
-the LGPL.
+all rights reserved; they came with QuarkTex and are used, unchanged, so
+that QuarkTex NG's Warp3D.library offers the same interface. They are not
+under the LGPL and are left out of the source in the Aminet archive;
+Source/Warp3D.library/Warp3D-includes.txt there says where to get them.
 
 
 4. Mesa (in Source/)
