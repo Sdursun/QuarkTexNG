@@ -92,7 +92,7 @@ dist() {
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
 	if [ -f build/amiga/minigl.library ]; then cp build/amiga/minigl.library dist/; fi
 	cp build/host-x86/quarktexng-windows-x86.dll build/host-x64/quarktexng-windows-x86-64.dll dist/
-	cp License.txt COPYING ReadMe.txt dist/
+	cp License.txt COPYING ThirdParty.txt ReadMe.txt dist/
 	echo "dist/:"
 	ls -lR dist
 }
@@ -116,7 +116,7 @@ aminet() {
 	cp dist/Warp3D.library dist/agl.library dist/minigl.library "$package/Libs/"
 	cp dist/quarktexng-windows-x86.dll dist/quarktexng-windows-x86-64.dll "$package/WinUAE/"
 	# Text files with Amiga (LF) line ends.
-	for f in ReadMe.txt README.md License.txt COPYING amiga/aminet/QuarkTexNG.readme; do
+	for f in ReadMe.txt README.md License.txt COPYING ThirdParty.txt amiga/aminet/QuarkTexNG.readme; do
 		tr -d '\r' < "$f" > "$package/$(basename "$f")"
 	done
 	git archive HEAD | tar -x -C "$package/Source"

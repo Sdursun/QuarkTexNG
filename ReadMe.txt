@@ -17,6 +17,8 @@ Both are released under the GNU Lesser General Public License version 3
 (License.txt), which builds on the GNU General Public License version 3
 (COPYING). QuarkTex NG is a modified version of QuarkTex and is not made or
 endorsed by its original author.
+The notices of the parts made by others, among them the mingw-w64 runtime
+in the host DLLs, are in ThirdParty.txt.
 
 Source code: in Source/ of the Aminet archive, and at
 https://github.com/Sdursun/QuarkTexNG
@@ -46,8 +48,8 @@ Installing
 - For fullscreen: an RTG board (UAE Zorro III). README.md on GitHub has
   all settings.
 
-QuarkTex NG works in 32-bit (winuae.exe) and 64-bit (winuae64.exe) WinUAE; each
-loads the DLL for its own architecture.
+QuarkTex NG works in 32-bit (winuae.exe) and 64-bit (winuae64.exe)
+WinUAE; each loads the DLL for its own architecture.
 
 Building
 --------

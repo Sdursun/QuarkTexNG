@@ -1,0 +1,98 @@
+QuarkTex NG: third-party notices
+================================
+
+QuarkTex NG itself is under the GNU LGPL v3 (License.txt, with the GNU GPL
+v3 in COPYING). This file lists the parts made by others that are in the
+release or that it is built with, and their terms.
+
+
+1. mingw-w64 runtime (in the host DLLs)
+---------------------------------------
+
+quarktexng-windows-x86.dll and quarktexng-windows-x86-64.dll are built with
+the MinGW-w64 GCC cross compiler (Debian 12, mingw-w64 10.0.0) and contain
+parts of the mingw-w64 runtime, statically linked. Its notice:
+
+Copyright: 2009-2016 the mingw-w64 project
+License: ZPL-2.1
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+   1. Redistributions in source code must retain the accompanying
+      copyright notice, this list of conditions, and the following
+      disclaimer.
+   2. Redistributions in binary form must reproduce the accompanying
+      copyright notice, this list of conditions, and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+   3. Names of the copyright holders must not be used to endorse or
+      promote products derived from this software without prior
+      written permission from the copyright holders.
+   4. The right to distribute this software or to use it for any
+      purpose does not give you the right to use Servicemarks (sm) or
+      Trademarks (tm) of the copyright holders.  Use of them is
+      covered by separate agreement with the copyright holders.
+   5. If any files are modified, you must cause the modified files to
+      carry prominent notices stating that you changed the files and
+      the date of any change.
+
+Disclaimer
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+2. GCC runtime libraries (in the host DLLs)
+-------------------------------------------
+
+The host DLLs link libgcc and libstdc++ statically. They are under the GNU
+GPL v3 with the GCC Runtime Library Exception, which lets programs compiled
+with GCC include them under terms of the program's own choosing; QuarkTex
+NG's are the GNU LGPL v3.
+
+
+3. Warp3D API include files (in Source/)
+----------------------------------------
+
+Warp3D.library/Warp3D.h and Warp3D.library/Warp3D.fd are the include files
+of the Warp3D API, (C) 1998 Sam Jordan, Hans-Joerg Frieden, Thomas Frieden,
+all rights reserved; they came with QuarkTex and are used so that
+QuarkTex NG's Warp3D.library offers the same interface. They are not under
+the LGPL.
+
+
+4. Mesa (in Source/)
+--------------------
+
+agl.library/Amigamesa.h is from Mesa 1.2, (C) 1995 Brian Paul, under the
+GNU Library General Public License version 2 or (at your option) any later
+version.
+
+
+5. MiniGL SDK (not included)
+----------------------------
+
+minigl.library is QuarkTex NG's own implementation of MiniGL's shared
+library interface. Building it reads the include files of MiniGL's SDK,
+(C) 1999-2002 Hyperion, under the Hyperion MiniGL Open Source License,
+which allows MiniGL to be compiled for code running on AmigaOS and asks
+that the source of modifications be made public to the Amiga developer
+community; QuarkTex NG's source is in Source/. The SDK is not part of this
+release (see docs/phase7-minigl.md in Source/ for building).
+
+
+6. Picasso96 and AmigaOS include files (not included)
+-----------------------------------------------------
+
+The Amiga libraries are built with the AmigaOS and Picasso96 include files
+of the m68k-amigaos-gcc toolchain; none of them is part of this release.

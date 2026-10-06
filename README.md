@@ -235,6 +235,10 @@ WinUAE, with frame capture, profiling (`-Profile`), command tracing
 The license texts: [License.txt](License.txt) (GNU LGPL v3) and
 [COPYING](COPYING) (GNU GPL v3, on which the LGPL v3 builds).
 
+[ThirdParty.txt](ThirdParty.txt) collects the notices of everything made by
+others that is in the release or that it is built with, among them the
+mingw-w64 runtime that the host DLLs contain (Zope Public License 2.1).
+
 Third-party files in this repository keep their own terms:
 
 - `Warp3D.library/Warp3D.h`, `Warp3D.library/Warp3D.fd`: Warp3D API

@@ -103,6 +103,8 @@ Both are released under the GNU Lesser General Public License version 3
 (License.txt), which builds on the GNU General Public License version 3
 (COPYING). QuarkTex NG is a modified version of QuarkTex and is not made or
 endorsed by its original author.
+The notices of the parts made by others, among them the mingw-w64 runtime
+in the host DLLs, are in ThirdParty.txt.
 
 The complete source code of this release is in Source/. Warp3D.h and
 Warp3D.fd in it are the Warp3D API includes, (C) 1998 Sam Jordan,
@@ -119,6 +121,7 @@ Archive contents
   QuarkTexNG/README.md          full documentation
   QuarkTexNG/License.txt        GNU LGPL v3
   QuarkTexNG/COPYING            GNU GPL v3
+  QuarkTexNG/ThirdParty.txt     notices of the parts made by others
   QuarkTexNG/Libs/              Warp3D.library, agl.library, minigl.library
   QuarkTexNG/WinUAE/            the host DLLs for 32- and 64-bit WinUAE
   QuarkTexNG/Source/            source code of this release
