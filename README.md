@@ -103,17 +103,64 @@ runs at its own 90 fps cap.
 
 ## WinUAE settings
 
+Two settings are **required**; the others are what QuarkTex NG was tested
+and measured with. Each is given as it appears in WinUAE's settings window
+and as the line in a `.uae` configuration file.
+
+### 1. Allow native code (required)
+
+**Settings → Host → Miscellaneous → Allow native code**
+(`native_code=true`). The Amiga libraries reach the host DLL through
+WinUAE's native code interface; without it Warp3D, StormMESA and MiniGL
+programs find no driver.
+
+![WinUAE Miscellaneous page with "Allow native code" ticked](docs/images/winuae-allow-native-code.png)
+
+### 2. CPU, FPU and JIT (Settings → Hardware → CPU and FPU)
+
+| Setting | Value | Configuration file | |
+| --- | --- | --- | --- |
+| CPU | 68040 or 68060 | `cpu_type=68060`, `cpu_model=68060` | recommended |
+| CPU speed | **Fastest possible** | `cpu_speed=max` | recommended |
+| FPU | **CPU internal** (the 68040's or 68060's own FPU) | `fpu_model=68060` | required: the libraries are built for a 68020-68060 with FPU |
+| FPU precision | **Host (80-bit)** | `fpu_msvc_long_double=true` | **required** |
+| JIT | **on** | | strongly recommended |
+| JIT cache size | **16 MB** (slider at its maximum) | `cachesize=16384` | strongly recommended |
+| JIT FPU support | **on** | `compfpu=true` | strongly recommended |
+| More compatible | off | `cpu_compatible=false`, `fpu_strict=false` | |
+
+Why these matter:
+
+- **FPU precision: Host (80-bit).** A real 68881, 68040 or 68060 FPU
+  computes with 80-bit extended precision. WinUAE's default, *Host
+  (64-bit)*, uses 64-bit doubles, and the games then compute values a real
+  Amiga does not: in Jedi Knight II the first person weapon never appears,
+  in Return to Castle Wolfenstein it disappears during play (their matrices
+  become NaN). With *Host (80-bit)* both show. QuarkTex NG checks the
+  precision when a library opens: minigl.library shows a requester, and all
+  three libraries write a warning into `QuarkTexNGLog.txt`. *Softfloat
+  (80-bit)* is precise too, but WinUAE cannot combine it with the JIT's FPU
+  support, so it is much slower.
+- **JIT and JIT FPU support.** The 3D work runs on the PC, but the game
+  itself still runs on the emulated 68k; that is where the frame time goes
+  (RTCW: about 4.8 ms of a 5.9 ms frame). With the JIT's FPU support turned
+  off, Jedi Knight II fell from its 90 fps cap to about 15 fps. *Host
+  (80-bit)* keeps working with the JIT FPU on.
+- **JIT cache size.** Large games such as RTCW and Jedi Knight II run a lot
+  of 68k code; the largest cache (16 MB) keeps it translated.
+
+### 3. RTG board, display and memory
+
 | Setting | Where in WinUAE | Configuration file | |
 | --- | --- | --- | --- |
-| Native code | Settings → Miscellaneous: **Allow native code** | `native_code=true` | **required**: the libraries reach the host DLL through it |
-| 80-bit FPU | Settings → CPU and FPU → FPU: **Host (80-bit)** | `fpu_msvc_long_double=true` | **required**: with the default 64-bit FPU emulation games compute values a real 68k FPU does not (JK2's and RTCW's first person weapons disappear). minigl.library warns in a requester, all libraries in `QuarkTexNGLog.txt` |
-| CPU | 68040 or 68060 with FPU, CPU speed fastest possible | `cpu_type=68060`, `fpu_model=68060`, `cpu_speed=max` | recommended |
-| JIT | JIT on, JIT FPU allowed | `cachesize=16384`, `compfpu=true` | recommended; works with Host (80-bit) |
-| RTG board | Hardware → RTG board: UAE Zorro III, 64 MB or more | `gfxcard_type=ZorroIII`, `gfxcard_size=64` | required for fullscreen; 15-, 16-, 24- and 32-bit modes are written directly |
+| RTG board | Hardware → RTG board: UAE Zorro III, 64 MB or more | `gfxcard_type=ZorroIII`, `gfxcard_size=64` | required for fullscreen |
 | Display | Host → Display: window, full window or fullscreen | `gfx_fullscreen_picasso=true` or `fullwindow` | all three work |
-| Memory | Z3 Fast RAM, 256 MB or more for large games | `z3mem_size=512` | recommended |
+| Z3 Fast RAM | Hardware → RAM: 256 MB or more for large games | `z3mem_size=512` | recommended |
 | Sound | Host → Sound enabled; AHI with WinUAE's `uae.audio` driver | `sound_output=exact` | for the games' sound and lip sync |
 
+QuarkTex NG writes each frame into the Amiga's RTG display memory, in the
+screen's own format (15-, 16-, 24- and 32-bit modes), so WinUAE shows it like
+any other Amiga graphics, scaled and filtered with the rest of the display.
 Fullscreen screens get the display mode of their size from Picasso96, so a
 game's 1024 × 768 screen opens in a 1024 × 768 mode. On planar or 8-bit
 (CLUT) screens QuarkTex NG falls back to drawing in a host window, which
