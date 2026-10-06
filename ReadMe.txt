@@ -5,9 +5,22 @@ QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA (agl)
 and MiniGL programs inside the emulated Amiga draw with the host's OpenGL on
 Windows.
 
-It is the continuation of QuarkTex, the 3D graphics virtualization solution
-first released in 2003, developed by Robert Konrad.
-Released under the LGPL license.
+It is an independent continuation of QuarkTex, the 3D graphics
+virtualization solution Robert Konrad first released in 2003.
+
+License and source
+------------------
+
+QuarkTex (C) 2003-2012 Robert Konrad.
+QuarkTex NG, changes and additions since 2026 (C) Serkan DURSUN.
+Both are released under the GNU Lesser General Public License version 3
+(License.txt), which builds on the GNU General Public License version 3
+(COPYING). QuarkTex NG is a modified version of QuarkTex and is not made or
+endorsed by its original author.
+
+Source code: https://github.com/Sdursun/QuarkTexNG
+The WinUAE settings, performance figures and third-party notices are in
+README.md there.
 
 Installing
 ----------

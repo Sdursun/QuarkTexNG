@@ -91,7 +91,7 @@ dist() {
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
 	if [ -f build/amiga/minigl.library ]; then cp build/amiga/minigl.library dist/; fi
 	cp build/host-x86/quarktexng-windows-x86.dll build/host-x64/quarktexng-windows-x86-64.dll dist/
-	cp License.txt ReadMe.txt dist/
+	cp License.txt COPYING ReadMe.txt dist/
 	echo "dist/:"
 	ls -lR dist
 }
