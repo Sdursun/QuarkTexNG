@@ -111,7 +111,9 @@ aminet() {
 		if [ ! -f "dist/$f" ]; then echo "aminet: dist/$f missing (./build.sh with MINIGL_SDK set)" >&2; exit 1; fi
 	done
 	package=build/aminet/QuarkTexNG
-	rm -rf build/aminet
+	# The contents, not the directory, which Explorer or OneDrive may hold open.
+	mkdir -p build/aminet
+	rm -rf build/aminet/QuarkTexNG build/aminet/QuarkTexNG.lha build/aminet/QuarkTexNG.readme
 	mkdir -p "$package/Libs" "$package/WinUAE" "$package/Source"
 	cp dist/Warp3D.library dist/agl.library dist/minigl.library "$package/Libs/"
 	cp dist/quarktexng-windows-x86.dll dist/quarktexng-windows-x86-64.dll "$package/WinUAE/"
