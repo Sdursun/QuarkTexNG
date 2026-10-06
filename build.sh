@@ -9,6 +9,7 @@
 #                         the 0.53 reference libraries need (see tests/run.ps1)
 #   ./build.sh generate   regenerate the *.auto.* files from gl/glFuncs.txt
 #   ./build.sh unittest   check the generated encoder/decoder pair
+#   ./build.sh aminet     the Aminet archive and readme from dist/ (after ./build.sh)
 #   ./build.sh clean
 set -e
 
@@ -96,13 +97,44 @@ dist() {
 	ls -lR dist
 }
 
+# The Aminet release: build/aminet/QuarkTexNG.lha and QuarkTexNG.readme
+# (amiga/aminet/QuarkTexNG.readme). The archive holds the libraries and DLLs
+# of dist/, the documents and licenses, and the source of the commit they
+# were built from, which the LGPL asks for; so the tree must be committed.
+# minigl.library must be in dist/ (MINIGL_SDK set for the build).
+aminet() {
+	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+		echo "aminet: commit first, the archive carries the source of HEAD" >&2
+		exit 1
+	fi
+	for f in Warp3D.library agl.library minigl.library quarktexng-windows-x86.dll quarktexng-windows-x86-64.dll; do
+		if [ ! -f "dist/$f" ]; then echo "aminet: dist/$f missing (./build.sh with MINIGL_SDK set)" >&2; exit 1; fi
+	done
+	package=build/aminet/QuarkTexNG
+	rm -rf build/aminet
+	mkdir -p "$package/Libs" "$package/WinUAE" "$package/Source"
+	cp dist/Warp3D.library dist/agl.library dist/minigl.library "$package/Libs/"
+	cp dist/quarktexng-windows-x86.dll dist/quarktexng-windows-x86-64.dll "$package/WinUAE/"
+	# Text files with Amiga (LF) line ends.
+	for f in ReadMe.txt README.md License.txt COPYING amiga/aminet/QuarkTexNG.readme; do
+		tr -d '\r' < "$f" > "$package/$(basename "$f")"
+	done
+	git archive HEAD | tar -x -C "$package/Source"
+	git rev-parse HEAD > "$package/Source/COMMIT"
+	cp "$package/QuarkTexNG.readme" build/aminet/QuarkTexNG.readme
+	run "$AMIGA_IMAGE" "cd build/aminet && lha ao5q QuarkTexNG.lha QuarkTexNG && lha t QuarkTexNG.lha >/dev/null"
+	echo "build/aminet/:"
+	ls -l build/aminet
+}
+
 case "${1:-all}" in
 	all) amiga; host; dist ;;
+	aminet) aminet ;;
 	amiga) amiga ;;
 	host) host ;;
 	tests) tests ;;
 	generate) generate ;;
 	unittest) unittest ;;
 	clean) rm -rf build dist ;;
-	*) echo "usage: $0 [all|amiga|host|tests|generate|unittest|clean]" >&2; exit 1 ;;
+	*) echo "usage: $0 [all|amiga|host|tests|generate|unittest|aminet|clean]" >&2; exit 1 ;;
 esac

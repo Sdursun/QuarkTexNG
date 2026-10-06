@@ -1,0 +1,129 @@
+Short:        Hardware 3D for WinUAE (Warp3D/MiniGL)
+Author:       Serkan DURSUN, based on QuarkTex by Robert Konrad
+Uploader:     Serkan DURSUN <serkan.dursun@outlook.com>
+Type:         driver/video
+Version:      1.0beta
+Architecture: m68k-amigaos >= 3.0
+Distribution: Aminet
+Requires:     WinUAE with native code, Picasso96 RTG, 68020+ with FPU
+
+QuarkTex NG 1.0 beta
+====================
+
+QuarkTex NG gives AmigaOS in WinUAE hardware accelerated 3D: Warp3D,
+StormMESA (agl.library) and MiniGL programs draw with the PC's graphics card
+through OpenGL, instead of the emulated CPU drawing every pixel.
+
+It is an independent continuation of QuarkTex, the 3D virtualization
+solution Robert Konrad released in 2003 (driver/video/QuarkTex, last
+version 0.53), under the same license, the GNU LGPL v3.
+
+What is new since QuarkTex 0.53
+-------------------------------
+
+- Runs in 64-bit WinUAE as well (0.53 needed the 32-bit one).
+- Commands go to the host in batches instead of one emulator call per
+  OpenGL function; Warp3D is drawn on the host with OpenGL 3.3.
+- New minigl.library: MiniGL games such as Return to Castle Wolfenstein,
+  Jedi Knight II, OpenLara and Hurrican run on the host's OpenGL, with
+  multitexture, paletted textures and vertex arrays drawn by the host.
+- Frames are written into the Amiga's RTG display memory, so the 3D picture
+  shows in a window, a full window and fullscreen, scaled and filtered by
+  WinUAE like any other Amiga graphics (0.53: windowed mode only).
+- Stencil buffer, chroma keying, mipmaps and several 3D contexts at once.
+- Fixed: black fog, wrong texture colours, ignored palettes and texture
+  updates, broken Z-buffer reads and writes, depth writes that could not be
+  turned off, leaked textures, W3D_Query answers.
+
+Performance (Intel Iris Xe, 68040/68060 with JIT)
+-------------------------------------------------
+
+  Warp3D, 1.2 million triangles  QuarkTex 0.53 1.34 s, QuarkTex NG 0.39 s
+  RTCW at 640x480, no frame cap  MiniGL Classic on Warp3D 157 fps,
+                                 QuarkTex NG minigl.library about 170 fps
+  RTCW, data per frame to host   1.37 MB before, 22 KB now
+
+Requirements
+------------
+
+- Windows with a graphics card and driver for OpenGL 3.3.
+- WinUAE (tested with 6.0.3 and the 6.x betas), 32-bit or 64-bit.
+- AmigaOS 3.x, a 68020 or better with FPU (68040/68060 recommended),
+  Picasso96 with an RTG board (uaegfx).
+
+Installation
+------------
+
+1. Copy the two files in WinUAE/ (quarktexng-windows-x86.dll and
+   quarktexng-windows-x86-64.dll) into your WinUAE directory, next to
+   winuae.exe and winuae64.exe.
+2. Copy the three files in Libs/ (Warp3D.library, agl.library,
+   minigl.library) to LIBS: on your Amiga. Keep copies of the libraries you
+   replace. The libraries and the DLLs belong together.
+3. Set up WinUAE as below.
+
+WinUAE settings
+---------------
+
+Required:
+- Settings, Host, Miscellaneous: "Allow native code" (native_code=true).
+- Settings, Hardware, CPU and FPU: FPU "CPU internal" with the precision
+  "Host (80-bit)" (fpu_msvc_long_double=true). With the default 64-bit
+  emulation games compute values a real 68k FPU does not: in Jedi Knight II
+  the first person weapon never shows, in RTCW it disappears. The libraries
+  check this; minigl.library warns in a requester.
+
+Recommended:
+- CPU 68040 or 68060 at "Fastest possible".
+- JIT on, cache size 16 MB (cachesize=16384), JIT "FPU support" on
+  (compfpu=true). The games themselves run on the emulated 68k: with the
+  JIT FPU off, Jedi Knight II fell from 90 to about 15 fps.
+- RTG board UAE Zorro III, 64 MB or more (needed for fullscreen).
+- Z3 Fast RAM, 256 MB or more for large games.
+
+README.md in the archive explains every setting and has the full
+performance tables.
+
+Known issues
+------------
+
+- MiniGL Classic (the Warp3D based minigl.library) crashes in fullscreen on
+  QuarkTex NG's Warp3D.library. Use the minigl.library of this archive.
+- On planar or 8-bit screens the 3D picture is drawn in a window of its own
+  over WinUAE, which shows only while WinUAE runs in a window.
+- The rotating passport in OpenLara's menu draws dark.
+
+License and source
+------------------
+
+QuarkTex (C) 2003-2012 Robert Konrad.
+QuarkTex NG, changes and additions since 2026 (C) Serkan DURSUN.
+
+Both are released under the GNU Lesser General Public License version 3
+(License.txt), which builds on the GNU General Public License version 3
+(COPYING). QuarkTex NG is a modified version of QuarkTex and is not made or
+endorsed by its original author.
+
+The complete source code of this release is in Source/. Warp3D.h and
+Warp3D.fd in it are the Warp3D API includes, (C) 1998 Sam Jordan,
+Hans-Joerg Frieden and Thomas Frieden; Amigamesa.h is from Mesa 1.2,
+(C) 1995 Brian Paul, LGPL v2 or later. Building minigl.library needs
+MiniGL's SDK, (C) Hyperion under the Hyperion MiniGL Open Source License,
+which is not included.
+
+Archive contents
+----------------
+
+  QuarkTexNG/QuarkTexNG.readme  this file
+  QuarkTexNG/ReadMe.txt         installation and settings in short
+  QuarkTexNG/README.md          full documentation
+  QuarkTexNG/License.txt        GNU LGPL v3
+  QuarkTexNG/COPYING            GNU GPL v3
+  QuarkTexNG/Libs/              Warp3D.library, agl.library, minigl.library
+  QuarkTexNG/WinUAE/            the host DLLs for 32- and 64-bit WinUAE
+  QuarkTexNG/Source/            source code of this release
+
+History
+-------
+
+1.0beta  First release of QuarkTex NG.

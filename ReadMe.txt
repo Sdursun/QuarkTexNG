@@ -18,9 +18,10 @@ Both are released under the GNU Lesser General Public License version 3
 (COPYING). QuarkTex NG is a modified version of QuarkTex and is not made or
 endorsed by its original author.
 
-Source code: https://github.com/Sdursun/QuarkTexNG
+Source code: in Source/ of the Aminet archive, and at
+https://github.com/Sdursun/QuarkTexNG
 The WinUAE settings, performance figures and third-party notices are in
-README.md there.
+README.md, next to this file and on GitHub.
 
 Installing
 ----------
