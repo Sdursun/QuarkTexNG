@@ -2,13 +2,13 @@ Short:        Hardware 3D for WinUAE (Warp3D/MiniGL)
 Author:       Serkan DURSUN, based on QuarkTex by Robert Konrad
 Uploader:     Serkan DURSUN <blasterreal@gmail.com>
 Type:         driver/video
-Version:      1.0beta
+Version:      1.0beta2
 Architecture: m68k-amigaos >= 3.0
 Distribution: Aminet
 Requires:     WinUAE with native code, Picasso96 RTG, 68020+ with FPU
 
-QuarkTex NG 1.0 beta
-====================
+QuarkTex NG 1.0 beta 2
+======================
 
 QuarkTex NG gives AmigaOS in WinUAE hardware accelerated 3D: Warp3D,
 StormMESA (agl.library) and MiniGL programs draw with the PC's graphics card
@@ -27,6 +27,9 @@ What is new since QuarkTex 0.53
 - New minigl.library: MiniGL games such as Return to Castle Wolfenstein,
   Jedi Knight II, OpenLara and Hurrican run on the host's OpenGL, with
   multitexture, paletted textures and vertex arrays drawn by the host.
+  Moved to MiniGL's 29 SDK (PiStorm3D 29.1) in 1.0 beta 2: lighting, normal
+  arrays, a GLU and GLUT subset. Programs built on an older MiniGL SDK need
+  recompiling against the 29 SDK, same as on PiStorm3D itself.
 - Frames are written into the Amiga's RTG display memory, so the 3D picture
   shows in a window, a full window and fullscreen, scaled and filtered by
   WinUAE like any other Amiga graphics (0.53: windowed mode only).
@@ -132,4 +135,7 @@ Archive contents
 History
 -------
 
-1.0beta  First release of QuarkTex NG.
+1.0beta2  minigl.library moved to MiniGL's 29 SDK (PiStorm3D 29.1): lighting,
+          normal arrays, a GLU and GLUT subset. Programs built on an older
+          MiniGL SDK need recompiling against the 29 SDK.
+1.0beta   First release of QuarkTex NG.

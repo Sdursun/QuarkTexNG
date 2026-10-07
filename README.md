@@ -14,11 +14,11 @@ OpenGL function, a modern OpenGL 3.3 renderer for Warp3D, a new
 minigl.library, and frames written into Amiga display memory so they show
 in fullscreen too.
 
-Status: **1.0 beta**, in development.
+Status: **1.0 beta 2**, in development.
 
 ## What's new compared to QuarkTex 0.53
 
-| | QuarkTex 0.53 (2003) | QuarkTex NG 1.0 beta |
+| | QuarkTex 0.53 (2003) | QuarkTex NG 1.0 beta 2 |
 | --- | --- | --- |
 | WinUAE | 32-bit only (old uaelib traps) | 32-bit and **64-bit** (native code interface) |
 | Host communication | one emulator call per OpenGL function | commands batched in a buffer |

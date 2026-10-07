@@ -1,5 +1,5 @@
-QuarkTex NG 1.0 beta
-====================
+QuarkTex NG 1.0 beta 2
+======================
 
 QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA (agl)
 and MiniGL programs inside the emulated Amiga draw with the host's OpenGL on
