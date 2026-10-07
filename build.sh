@@ -47,8 +47,9 @@ unittest() {
 	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++11 -Wall -Wno-int-to-pointer-cast -O1 -Igl -o build/unittest tests/host/test.cpp && build/unittest"
 }
 
-# MiniGL's SDK include directory (from the PiStorm3D or MiniGL Classic
-# archive) for minigl.library; without it that library is not built.
+# MiniGL's 29 SDK include directory (SDK/minigl-shared-library/include of the
+# PiStorm3D 29 archive) for minigl.library; without it that library is not
+# built. A program built on an older SDK is not supported (minigl.library/lib.c).
 SDK_MOUNT=
 if [ -n "$MINIGL_SDK" ] && [ -f "$MINIGL_SDK/libraries/minigl_dispatch.h" ]; then
 	if command -v cygpath >/dev/null 2>&1; then SDK_MOUNT="-v $(cygpath -w "$MINIGL_SDK"):/sdk:ro"

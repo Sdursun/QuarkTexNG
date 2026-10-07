@@ -13,11 +13,12 @@
  * glDrawArrays/glDrawElements with the vertex arrays, read by the host from
  * Amiga memory (big-endian), synchronous: mode, first, count, index type
  * (0 for glDrawArrays, else GL_UNSIGNED_BYTE/SHORT/INT), index address; then
- * for the vertex, colour, and texture units 0 and 1 coordinate arrays each:
- * enabled, size, type, stride (in bytes, not 0), address.
+ * for the vertex, colour, texture units 0 and 1 coordinate, and normal arrays
+ * each: enabled, size, type, stride (in bytes, not 0), address. Normals have
+ * size 3; integer ones are normalised, as glNormalPointer has them.
  */
 #define QT_MGL_DRAW 0x9000
-#define QT_MGL_DRAW_WORDS 26
+#define QT_MGL_DRAW_WORDS 31
 #define QT_MGL_MAX_VERTICES 1048576
 
 /* GL_ARB_multitexture, which OpenGL 1.1's command set lacks; units are

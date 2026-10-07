@@ -589,7 +589,8 @@ int main() {
 			1, 3, GL_FLOAT, 16, 0x16000,
 			1, 4, GL_UNSIGNED_BYTE, 4, 0x16100,
 			0, 2, GL_FLOAT, 8, 0,
-			1, 2, GL_FLOAT, 16, 0x16000};
+			1, 2, GL_FLOAT, 16, 0x16000,
+			0, 3, GL_FLOAT, 12, 0};
 		memcpy(w, words, sizeof(words));
 		records.clear();
 		qt_flush();

@@ -1,7 +1,57 @@
 # Phase 7: a QuarkTex minigl.library
 
-Status: in progress (2026-10-05). Stages 1 (analysis), 2 (skeleton) and 5
-(the games) are done: RTCW, JK2, OpenLara and Hurrican run on it.
+Status: in progress. Stages 1 (analysis), 2 (skeleton) and 5 (the games) are
+done: RTCW, JK2, OpenLara and Hurrican run on it. Stage 6 (2026-10-07) moved
+the interface to MiniGL's 29 SDK (PiStorm3D 29.1).
+
+## Stage 6: MiniGL's 29 SDK (done)
+
+PiStorm3D's public 29.1 release changed MiniGL's interface from the 27 SDK
+this library was built against (phase 7 stages 1-5): GL tokens carry OpenGL's
+own values now instead of being auto-numbered, dispatch ABI 3 -> 5, 52 new
+table entries (lighting, display lists as stubs, GLU quadrics and
+`gluBuild2DMipmaps`, a GLUT subset), and `MGLResizeContext` returns whether it
+succeeded. `MINIGL_SDK` now points at `SDK/minigl-shared-library/include` of
+the PiStorm3D 29.1 archive (`SDK/README.txt` there); it is not part of
+QuarkTex (Hyperion MiniGL Open Source License), same as before.
+
+**A program built on the older (27) SDK is not supported.** This was tried
+(a per-task table, filled from the version `OpenLibrary` asks for) and
+dropped: that version never reaches the library. A real `OpenLibrary` call
+was checked disassembled (`m68k-amigaos-objdump`) -- the custom `Open()`
+vector is called with only A6 = library base; D0 holds nothing related to the
+version, confirmed by two calls (asking 14 and 29) logging unrelated values
+(12 and 24). Nothing else at `OpenLibrary` or `GetDispatchTable` time
+distinguishes the two generations either (both are the same LVO calls, no
+extra registers). The 29 SDK's own release notes describe the same break:
+"I used a game for minigl.library V27... the game needs to get recompiled...
+no source-code changes needed". `minigl.library/mglgen.py` now reads only the
+29 SDK's `#define`s (real OpenGL values; MiniGL's private ones, 0x7000-0x7FFF,
+still marked and skipped as unknown when an application passes one the host
+does not take, as before).
+
+Added, besides the enum change: `glLightfv`/`glMaterialfv`/`glLightModelfv`
+and their `glGet*` (float vectors only -- `glLighti`/`glMateriali` are not in
+the 29 table), `glNormalPointer` and `glNormal3fv` (vertex arrays and
+`glDrawArrays`/`glDrawElements` gained a normal array, `QT_MGL_DRAW_WORDS` 26
+-> 31; `glInterleavedArrays`' formats with a normal component fill it too),
+`glColorMaterial`/`glTexEnvfv` (stubs: the host does not shade, so lighting
+calls reach OpenGL but have no visible effect without a shader -- unchanged
+from before, now just not silently dropped), display lists and
+`glAreTexturesResident`-adjacent entries MiniGL does not actually implement
+either (stubs, logged once), a GLU subset (quadrics drawn in immediate mode,
+`gluBuild2DMipmaps` as `GL_GENERATE_MIPMAP` plus `glTexImage2D`) and the GLUT
+subset `mgl/glut.h` declares (one window, a main loop sharing the context's
+event handling with `MGLMainLoop`, game mode as a fullscreen context, the
+solid shapes, `glutGet(GLUT_ELAPSED_TIME)` from `timer.device`). MiniGL 29's
+thirteen NULL-vector entries (passed a NULL pointer, ignored rather than
+dereferenced) are matched. Library version 27.0 -> 29.1 (`amiga/Makefile`;
+the number is informational only, `MGLDispatchTable.structSize` is what a
+client checks, per the SDK's own note on this).
+
+Verified against `m01_minigl` (built with the 29 SDK's `MINIGL_VERSION`) in
+WinUAE: ABI 5, 840-byte table, all 13 checks PASS; the reference test suite
+(`tests/run.ps1`) is unaffected (0 FAIL, same PASS/KNOWN counts as before).
 
 ## Why
 

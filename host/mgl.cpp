@@ -105,23 +105,26 @@ namespace mgl {
 	}
 
 	// Elements 0 to count - 1 of the array as floats (colours of unsigned
-	// bytes stay bytes), size components each.
+	// bytes stay bytes), size components each. normalise: integers map to
+	// -1..1 (normals).
 	struct Converted {
 		std::vector<float> floats;
 		std::vector<uint8_t> bytes;
 	};
 
-	bool convert(const Command& c, const Array& a, uint32_t count, Converted& out) {
+	bool convert(const Command& c, const Array& a, uint32_t count, Converted& out, bool normalise = false) {
 		const uint8_t* base = static_cast<const uint8_t*>(c.resolve(a.address));
 		if (!base || a.size < 1 || a.size > 4) return false;
-		if (a.type == GL_UNSIGNED_BYTE) {
+		if (a.type == GL_UNSIGNED_BYTE && !normalise) {
 			out.bytes.resize(static_cast<size_t>(count) * a.size);
 			for (uint32_t i = 0; i < count; ++i) memcpy(&out.bytes[i * a.size], base + i * a.stride, a.size);
 			return true;
 		}
+		float scale = 1;
+		if (normalise) scale = a.type == GL_BYTE ? 1 / 127.0f : a.type == GL_SHORT ? 1 / 32767.0f : a.type == GL_INT ? 1 / 2147483647.0f : 1;
 		out.floats.resize(static_cast<size_t>(count) * a.size);
 		for (uint32_t i = 0; i < count; ++i)
-			for (uint32_t k = 0; k < a.size; ++k) out.floats[i * a.size + k] = component(base, a, i, k);
+			for (uint32_t k = 0; k < a.size; ++k) out.floats[i * a.size + k] = component(base, a, i, k) * scale;
 		return true;
 	}
 
@@ -132,11 +135,12 @@ namespace mgl {
 	}
 
 	// The arrays in QT_MGL_DRAW's order.
-	enum { Vertices, Colours, TexCoords0, TexCoords1, Arrays };
+	enum { Vertices, Colours, TexCoords0, TexCoords1, Normals, Arrays };
 
 	void setArray(int k, bool on, GLint size, GLenum type, const void* data) {
-		static const GLenum states[Arrays] = {GL_VERTEX_ARRAY, GL_COLOR_ARRAY, GL_TEXTURE_COORD_ARRAY, GL_TEXTURE_COORD_ARRAY};
-		if (k >= TexCoords0) QT_GL13(ClientActiveTexture)(GL_TEXTURE0 + (k - TexCoords0));
+		static const GLenum states[Arrays] = {GL_VERTEX_ARRAY, GL_COLOR_ARRAY, GL_TEXTURE_COORD_ARRAY, GL_TEXTURE_COORD_ARRAY,
+			GL_NORMAL_ARRAY};
+		if (k == TexCoords0 || k == TexCoords1) QT_GL13(ClientActiveTexture)(GL_TEXTURE0 + (k - TexCoords0));
 		if (!on) {
 			QT_GL(DisableClientState)(states[k]);
 			return;
@@ -145,6 +149,7 @@ namespace mgl {
 		void* pointer = const_cast<void*>(data);
 		if (k == Vertices) QT_GL(VertexPointer)(size, type, 0, pointer);
 		else if (k == Colours) QT_GL(ColorPointer)(size, type, 0, pointer);
+		else if (k == Normals) QT_GL(NormalPointer)(type, 0, pointer);
 		else QT_GL(TexCoordPointer)(size, type, 0, pointer);
 	}
 
@@ -227,7 +232,8 @@ namespace mgl {
 
 		Converted converted[Arrays];
 		bool on[Arrays];
-		for (int k = 0; k < Arrays; ++k) on[k] = arrays[k].enabled && convert(c, arrays[k], elements, converted[k]);
+		arrays[Normals].size = 3;
+		for (int k = 0; k < Arrays; ++k) on[k] = arrays[k].enabled && convert(c, arrays[k], elements, converted[k], k == Normals);
 		if (!on[Vertices]) return true;
 		if (qt_w3d_trace_all) traceDraw(c, arrays, converted, indices);
 		QT_GL(PushClientAttrib)(GL_CLIENT_VERTEX_ARRAY_BIT);
@@ -236,7 +242,6 @@ namespace mgl {
 			const void* data = !on[k] ? 0 : bytes ? static_cast<const void*>(&converted[k].bytes[0]) : static_cast<const void*>(&converted[k].floats[0]);
 			setArray(k, on[k], static_cast<GLint>(arrays[k].size), bytes ? GL_UNSIGNED_BYTE : GL_FLOAT, data);
 		}
-		QT_GL(DisableClientState)(GL_NORMAL_ARRAY);
 		QT_GL(DisableClientState)(GL_INDEX_ARRAY);
 		QT_GL(DisableClientState)(GL_EDGE_FLAG_ARRAY);
 		if (indexType) QT_GL(DrawElements)(mode, static_cast<GLsizei>(count), GL_UNSIGNED_INT, &indices[0]);

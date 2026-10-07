@@ -41,17 +41,20 @@ static void copySwapped64(void *dest, const void *src, int count) {
 
 /* --- Immediate mode with vectors ------------------------------------------ */
 
-void mgl_GLColor3fv(GLcontext context, GLfloat *v) { _glColor3f(v[0], v[1], v[2]); }
-void mgl_GLColor4fv(GLcontext context, GLfloat *v) { _glColor4f(v[0], v[1], v[2], v[3]); }
-void mgl_GLColor3ubv(GLcontext context, GLubyte *v) { _glColor3ub(v[0], v[1], v[2]); }
-void mgl_GLColor4ubv(GLcontext context, GLubyte *v) { _glColor4ub(v[0], v[1], v[2], v[3]); }
-void mgl_GLTexCoord2fv(GLcontext context, GLfloat *v) { _glTexCoord2f(v[0], v[1]); }
-void mgl_GLTexCoord4fv(GLcontext context, GLfloat *v) { _glTexCoord4f(v[0], v[1], v[2], v[3]); }
-void mgl_GLVertex2fv(GLcontext context, GLfloat *v) { _glVertex2f(v[0], v[1]); }
-void mgl_GLVertex3fv(GLcontext context, GLfloat *v) { _glVertex3f(v[0], v[1], v[2]); }
-void mgl_GLVertex4fv(GLcontext context, GLfloat *v) { _glVertex4f(v[0], v[1], v[2], v[3]); }
-void mgl_GLEdgeFlagv(GLcontext context, const GLboolean *flag) { _glEdgeFlag(*flag != 0); }
-void mgl_GLIndexiv(GLcontext context, const GLint *c) { _glIndexi(*c); }
+/* A NULL vector is ignored, as MiniGL 29 does (address 0 is readable on the
+ * 68k, so it would draw the exception vectors). */
+void mgl_GLColor3fv(GLcontext context, GLfloat *v) { if (v) _glColor3f(v[0], v[1], v[2]); }
+void mgl_GLColor4fv(GLcontext context, GLfloat *v) { if (v) _glColor4f(v[0], v[1], v[2], v[3]); }
+void mgl_GLColor3ubv(GLcontext context, GLubyte *v) { if (v) _glColor3ub(v[0], v[1], v[2]); }
+void mgl_GLColor4ubv(GLcontext context, GLubyte *v) { if (v) _glColor4ub(v[0], v[1], v[2], v[3]); }
+void mgl_GLTexCoord2fv(GLcontext context, GLfloat *v) { if (v) _glTexCoord2f(v[0], v[1]); }
+void mgl_GLTexCoord4fv(GLcontext context, GLfloat *v) { if (v) _glTexCoord4f(v[0], v[1], v[2], v[3]); }
+void mgl_GLVertex2fv(GLcontext context, GLfloat *v) { if (v) _glVertex2f(v[0], v[1]); }
+void mgl_GLVertex3fv(GLcontext context, GLfloat *v) { if (v) _glVertex3f(v[0], v[1], v[2]); }
+void mgl_GLVertex4fv(GLcontext context, GLfloat *v) { if (v) _glVertex4f(v[0], v[1], v[2], v[3]); }
+void mgl_GLNormal3fv(GLcontext context, GLfloat *n) { if (n) _glNormal3f(n[0], n[1], n[2]); }
+void mgl_GLEdgeFlagv(GLcontext context, const GLboolean *flag) { if (flag) _glEdgeFlag(*flag != 0); }
+void mgl_GLIndexiv(GLcontext context, const GLint *c) { if (c) _glIndexi(*c); }
 
 /* --- GL_ARB_multitexture (QT_MGL_TEXTURE_UNITS units) ---------------------- */
 
@@ -79,7 +82,7 @@ void mgl_GLMultiTexCoord2fARB(GLcontext context, GLenum unit, GLfloat s, GLfloat
 }
 
 void mgl_GLMultiTexCoord2fvARB(GLcontext context, GLenum unit, GLfloat *v) {
-	multiTexCoord(mgl_enum(unit), v[0], v[1]);
+	if (v) multiTexCoord(mgl_enum(unit), v[0], v[1]);
 }
 
 /* --- Matrices -------------------------------------------------------------- */
@@ -110,7 +113,7 @@ void mgl_GLMultMatrixd(GLcontext context, const GLdouble *m) {
 
 /* sin and cos of x (radians) by their series, after reducing x to -pi..pi:
  * the library has no maths library. */
-static void sinCos(double x, double *s, double *c) {
+void mgl_sinCos(double x, double *s, double *c) {
 	const double pi = 3.14159265358979323846;
 	double term, sum;
 	int n;
@@ -130,7 +133,7 @@ static void sinCos(double x, double *s, double *c) {
 	*c = sum;
 }
 
-static GLfloat squareRoot(GLfloat x) {
+GLfloat mgl_squareRoot(GLfloat x) {
 	GLfloat r = x > 1 ? x : 1;
 	int i;
 	if (x <= 0) return 0;
@@ -143,7 +146,7 @@ void mgl_GLUPerspective(GLfloat fovy, GLfloat aspect, GLfloat znear, GLfloat zfa
 	double s, c, f;
 	GLfloat m[16];
 	int i;
-	sinCos(fovy * 3.14159265358979323846 / 360.0, &s, &c);
+	mgl_sinCos(fovy * 3.14159265358979323846 / 360.0, &s, &c);
 	f = c / s;
 	for (i = 0; i < 16; ++i) m[i] = 0;
 	m[0] = (GLfloat) (f / aspect);
@@ -158,12 +161,12 @@ void mgl_GLUPerspective(GLfloat fovy, GLfloat aspect, GLfloat znear, GLfloat zfa
 void mgl_GLULookAt(GLfloat ex, GLfloat ey, GLfloat ez, GLfloat cx, GLfloat cy, GLfloat cz, GLfloat ux, GLfloat uy, GLfloat uz) {
 	GLfloat f[3] = {cx - ex, cy - ey, cz - ez}, s[3], u[3], m[16], length;
 	int i;
-	length = squareRoot(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+	length = mgl_squareRoot(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
 	if (length > 0) for (i = 0; i < 3; ++i) f[i] /= length;
 	s[0] = f[1] * uz - f[2] * uy;
 	s[1] = f[2] * ux - f[0] * uz;
 	s[2] = f[0] * uy - f[1] * ux;
-	length = squareRoot(s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
+	length = mgl_squareRoot(s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
 	if (length > 0) for (i = 0; i < 3; ++i) s[i] /= length;
 	u[0] = s[1] * f[2] - s[2] * f[1];
 	u[1] = s[2] * f[0] - s[0] * f[2];
@@ -281,6 +284,75 @@ void mgl_GLTexGenfv(GLcontext context, GLenum coord, GLenum pname, const GLfloat
 		_glTexGenfv(mgl_enum(coord), gl, copy);
 	}
 	else _glTexGeni(mgl_enum(coord), gl, (int) mgl_enum((unsigned int) params[0]));
+}
+
+void mgl_GLTexEnvfv(GLcontext context, GLenum target, GLenum pname, const GLfloat *params) {
+	unsigned int gl = mgl_enum(pname);
+	if (!params) return;
+	if (gl == QGL_TEXTURE_ENV_COLOR) {
+		GLfloat copy[4];
+		copySwapped32(copy, params, 4);
+		_glTexEnvfv(mgl_enum(target), gl, copy);
+	}
+	else mgl_GLTexEnvi(context, target, pname, (GLint) params[0]);
+}
+
+/* --- Lighting (MiniGL 29) ----------------------------------------------------- */
+
+static int mglOnly(unsigned int value) {
+	return (value & QT_MGL_ONLY) == QT_MGL_ONLY;
+}
+
+/* Values a light, material or light model parameter has. */
+static int lightCount(unsigned int pname) {
+	switch (pname) {
+	case QGL_AMBIENT: case QGL_DIFFUSE: case QGL_SPECULAR: case QGL_POSITION: case QGL_EMISSION:
+	case QGL_AMBIENT_AND_DIFFUSE: case QGL_LIGHT_MODEL_AMBIENT:
+		return 4;
+	case QGL_SPOT_DIRECTION: case QGL_COLOR_INDEXES:
+		return 3;
+	}
+	return 1;
+}
+
+void mgl_GLLightfv(GLcontext context, GLenum light, GLenum pname, const GLfloat *params) {
+	unsigned int l = mgl_enum(light), p = mgl_enum(pname);
+	GLfloat copy[4];
+	if (!params || mglOnly(l) || mglOnly(p)) return;
+	copySwapped32(copy, params, lightCount(p));
+	_glLightfv(l, p, copy);
+}
+
+void mgl_GLMaterialfv(GLcontext context, GLenum face, GLenum pname, const GLfloat *params) {
+	unsigned int f = mgl_enum(face), p = mgl_enum(pname);
+	GLfloat copy[4];
+	if (!params || mglOnly(f) || mglOnly(p)) return;
+	copySwapped32(copy, params, lightCount(p));
+	_glMaterialfv(f, p, copy);
+}
+
+void mgl_GLLightModelfv(GLcontext context, GLenum pname, const GLfloat *params) {
+	unsigned int p = mgl_enum(pname);
+	GLfloat copy[4];
+	if (!params || mglOnly(p)) return;
+	copySwapped32(copy, params, lightCount(p));
+	_glLightModelfv(p, copy);
+}
+
+void mgl_GLGetLightfv(GLcontext context, GLenum light, GLenum pname, GLfloat *params) {
+	unsigned int l = mgl_enum(light), p = mgl_enum(pname);
+	GLfloat values[4];
+	if (!params || mglOnly(l) || mglOnly(p)) return;
+	_glGetLightfv(l, p, values);
+	copySwapped32(params, values, lightCount(p));
+}
+
+void mgl_GLGetMaterialfv(GLcontext context, GLenum face, GLenum pname, GLfloat *params) {
+	unsigned int f = mgl_enum(face), p = mgl_enum(pname);
+	GLfloat values[4];
+	if (!params || mglOnly(f) || mglOnly(p)) return;
+	_glGetMaterialfv(f, p, values);
+	copySwapped32(params, values, lightCount(p));
 }
 
 /* --- Queries ---------------------------------------------------------------- */
@@ -500,8 +572,9 @@ typedef struct {
 } Array;
 
 /* Texture coordinates per unit; glTexCoordPointer and the client state of
- * GL_TEXTURE_COORD_ARRAY go to the unit glClientActiveTextureARB chose. */
-static Array vertices, colors, texCoords[QT_MGL_TEXTURE_UNITS];
+ * GL_TEXTURE_COORD_ARRAY go to the unit glClientActiveTextureARB chose.
+ * Normals: MiniGL 29. */
+static Array vertices, colors, texCoords[QT_MGL_TEXTURE_UNITS], normals;
 static int clientUnit;
 
 static int typeSize(unsigned int type) {
@@ -522,7 +595,7 @@ static void setArray(Array *a, int size, GLenum type, GLsizei stride, const GLvo
 
 void mgl_resetArrays(void) {
 	int u;
-	vertices.enabled = colors.enabled = FALSE;
+	vertices.enabled = colors.enabled = normals.enabled = FALSE;
 	for (u = 0; u < QT_MGL_TEXTURE_UNITS; ++u) texCoords[u].enabled = FALSE;
 	clientUnit = 0;
 }
@@ -539,6 +612,10 @@ void mgl_GLTexCoordPointer(GLcontext context, GLint size, GLenum type, GLsizei s
 	setArray(&texCoords[clientUnit], size, type, stride, pointer);
 }
 
+void mgl_GLNormalPointer(GLcontext context, GLenum type, GLsizei stride, const GLvoid *pointer) {
+	setArray(&normals, 3, type, stride, pointer);
+}
+
 void mgl_GLClientActiveTextureARB(GLcontext context, GLenum unit) {
 	unsigned int u = mgl_enum(unit) - QGL_TEXTURE0_ARB;
 	if (u < QT_MGL_TEXTURE_UNITS) clientUnit = u;
@@ -549,6 +626,7 @@ static Array *clientArray(GLenum cap) {
 	case QGL_VERTEX_ARRAY: return &vertices;
 	case QGL_COLOR_ARRAY: return &colors;
 	case QGL_TEXTURE_COORD_ARRAY: return &texCoords[clientUnit];
+	case QGL_NORMAL_ARRAY: return &normals;
 	}
 	return NULL;
 }
@@ -566,17 +644,18 @@ void mgl_GLDisableClientState(GLcontext context, GLenum cap) {
 /*
  * glInterleavedArrays: OpenGL 1.1's table of formats (GL_V2F 0x2A20 to
  * GL_T4F_C4F_N3F_V4F 0x2A2D), as texture coordinate, colour and vertex sizes
- * and offsets in bytes. Normals are skipped: MiniGL has no normal array.
+ * and offsets in bytes, and the offset of the normal (NO_NORMAL: none).
  */
+#define NO_NORMAL 0xFF
 static const struct {
-	UBYTE texCoords, colors, colorBytes, colorOffset, vertices, vertexOffset, size;
+	UBYTE texCoords, colors, colorBytes, colorOffset, vertices, vertexOffset, size, normalOffset;
 } interleaved[14] = {
-	{0, 0, 0, 0, 2, 0, 8}, {0, 0, 0, 0, 3, 0, 12},
-	{0, 4, 1, 0, 2, 4, 12}, {0, 4, 1, 0, 3, 4, 16}, {0, 3, 0, 0, 3, 12, 24},
-	{0, 0, 0, 0, 3, 12, 24}, {0, 4, 0, 0, 3, 28, 40},
-	{2, 0, 0, 0, 3, 8, 20}, {4, 0, 0, 0, 4, 16, 32},
-	{2, 4, 1, 8, 3, 12, 24}, {2, 3, 0, 8, 3, 20, 32}, {2, 0, 0, 0, 3, 20, 32},
-	{2, 4, 0, 8, 3, 36, 48}, {4, 4, 0, 16, 4, 44, 60}
+	{0, 0, 0, 0, 2, 0, 8, NO_NORMAL}, {0, 0, 0, 0, 3, 0, 12, NO_NORMAL},
+	{0, 4, 1, 0, 2, 4, 12, NO_NORMAL}, {0, 4, 1, 0, 3, 4, 16, NO_NORMAL}, {0, 3, 0, 0, 3, 12, 24, NO_NORMAL},
+	{0, 0, 0, 0, 3, 12, 24, 0}, {0, 4, 0, 0, 3, 28, 40, 16},
+	{2, 0, 0, 0, 3, 8, 20, NO_NORMAL}, {4, 0, 0, 0, 4, 16, 32, NO_NORMAL},
+	{2, 4, 1, 8, 3, 12, 24, NO_NORMAL}, {2, 3, 0, 8, 3, 20, 32, NO_NORMAL}, {2, 0, 0, 0, 3, 20, 32, 8},
+	{2, 4, 0, 8, 3, 36, 48, 24}, {4, 4, 0, 16, 4, 44, 60, 32}
 };
 
 void mgl_GLInterleavedArrays(GLcontext context, GLenum format, GLsizei stride, const GLvoid *pointer) {
@@ -596,6 +675,8 @@ void mgl_GLInterleavedArrays(GLcontext context, GLenum format, GLsizei stride, c
 	}
 	texCoords[clientUnit].enabled = interleaved[f].texCoords != 0;
 	if (texCoords[clientUnit].enabled) setArray(&texCoords[clientUnit], interleaved[f].texCoords, QGL_FLOAT, stride, p);
+	normals.enabled = interleaved[f].normalOffset != NO_NORMAL;
+	if (normals.enabled) setArray(&normals, 3, QGL_FLOAT, stride, p + interleaved[f].normalOffset);
 }
 
 /* Edge flags only matter to polygons drawn as lines or points, and colour
@@ -612,6 +693,8 @@ static GLfloat component(const Array *a, int i, int k) {
 	case QGL_DOUBLE: return (GLfloat) ((const GLdouble *) p)[k];
 	case QGL_INT: return (GLfloat) ((const LONG *) p)[k];
 	case QGL_SHORT: return (GLfloat) ((const WORD *) p)[k];
+	case QGL_BYTE: return (GLfloat) ((const BYTE *) p)[k];
+	case QGL_UNSIGNED_BYTE: return (GLfloat) p[k];
 	}
 	return 0;
 }
@@ -633,6 +716,12 @@ static void element(int i) {
 	}
 	if (texCoords[1].enabled && texCoords[1].pointer) {
 		multiTexCoord(QGL_TEXTURE1_ARB, component(&texCoords[1], i, 0), component(&texCoords[1], i, 1));
+	}
+	if (normals.enabled && normals.pointer) {
+		/* Integer normals map to -1..1. */
+		GLfloat scale = normals.type == QGL_BYTE ? 1 / 127.0f : normals.type == QGL_SHORT ? 1 / 32767.0f
+			: normals.type == QGL_INT ? 1 / 2147483647.0f : 1;
+		_glNormal3f(component(&normals, i, 0) * scale, component(&normals, i, 1) * scale, component(&normals, i, 2) * scale);
 	}
 	if (vertices.enabled && vertices.pointer) {
 		if (vertices.size == 2) _glVertex2f(component(&vertices, i, 0), component(&vertices, i, 1));
@@ -670,7 +759,7 @@ static void drawHost(GLenum mode, GLint first, GLsizei count, unsigned int index
 	w[4] = indexType;
 	w[5] = (ULONG) indices;
 	w = arrayWords(arrayWords(w + 6, &vertices), &colors);
-	arrayWords(arrayWords(w, &texCoords[0]), &texCoords[1]);
+	arrayWords(arrayWords(arrayWords(w, &texCoords[0]), &texCoords[1]), &normals);
 	qt_flush();
 }
 

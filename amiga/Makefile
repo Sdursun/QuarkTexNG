@@ -27,8 +27,9 @@ WARP3D_SRC = $(wildcard Warp3D.library/*.c)
 AGL_SRC    = $(wildcard agl.library/*.c)
 GL_SRC     = gl/gl.c
 
-# minigl.library needs MiniGL's SDK headers (not part of QuarkTex); build.sh
-# mounts them at /sdk and runs minigl.library/mglgen.py first.
+# minigl.library needs MiniGL's 29 SDK headers (not part of QuarkTex); build.sh
+# mounts them at /sdk and runs minigl.library/mglgen.py first. A program built
+# on an older SDK is not supported (minigl.library/lib.c).
 MINIGL_SDK ?= /sdk
 MINIGL_SRC  = $(wildcard minigl.library/*.c)
 # MINIGL_BACKEND_FLAG_CLASSIC, and QuarkTex's own bit (docs/phase7-minigl.md).
@@ -114,10 +115,14 @@ $(MINIGL_GENERATED):
 $(MINIGL_DIR)/functable.h: minigl.library/minigl.fd amiga/fd2functable.py | $(MINIGL_DIR)
 	$(PYTHON) amiga/fd2functable.py $< $@
 
+# The version of MiniGL's interface it implements (the 29 SDK's).
+MINIGL_VERSION  = 29
+MINIGL_REVISION = 1
+
 $(MINIGL_DIR)/libheader.o: amiga/libheader.c $(MINIGL_DIR)/functable.h
 	$(CC) $(CFLAGS) -I$(MINIGL_DIR) -DLIB_NAME='"minigl.library"' \
-		-DLIB_VERSION=27 -DLIB_REVISION=0 \
-		-DLIB_IDSTRING='"minigl.library 27.0 ($(DATE)) $(PRODUCT)"' \
+		-DLIB_VERSION=$(MINIGL_VERSION) -DLIB_REVISION=$(MINIGL_REVISION) \
+		-DLIB_IDSTRING='"minigl.library $(MINIGL_VERSION).$(MINIGL_REVISION) ($(DATE)) $(PRODUCT)"' \
 		-DLIB_INIT=INIT_0_MiniGL -DLIB_EXIT=EXIT_0_MiniGL -c -o $@ $<
 
 $(MINIGL_DIR)/%.o: minigl.library/%.c minigl.library/mgl.h $(MINIGL_DIR)/qgl.auto.h | $(MINIGL_DIR)

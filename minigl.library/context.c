@@ -57,6 +57,7 @@ static void destroy(QtMglContext *c) {
 	if (c->window && c->ownWindow) CloseWindow(c->window);
 	if (c->screen) CloseScreen(c->screen);
 	if (c->emptyPointer) FreeVec(c->emptyPointer);
+	mgl_glutForget((GLcontext) c);
 	if (mgl_current == (GLcontext) c) mgl_current = NULL;
 	FreeVec(c);
 }
@@ -209,11 +210,15 @@ static void *openWindow(QtMglContext *c, int left, int top, int width, int heigh
 	return attach(c);
 }
 
-void *mgl_MGLCreateContext(int offx, int offy, int w, int h) {
+GLcontext mgl_createContext(int left, int top, int width, int height, int window) {
 	QtMglContext *c = allocate();
 	if (!c) return NULL;
-	if (windowMode) return openWindow(c, offx, offy, w, h);
-	return openScreen(c, INVALID_ID, w, h);
+	if (window) return (GLcontext) openWindow(c, left, top, width, height);
+	return (GLcontext) openScreen(c, INVALID_ID, width, height);
+}
+
+void *mgl_MGLCreateContext(int offx, int offy, int w, int h) {
+	return mgl_createContext(offx, offy, w, h, windowMode);
 }
 
 /* ID from mglGetSupportedScreenModes, MGL_SM_BESTMODE or MGL_SM_WINDOWMODE;
@@ -294,11 +299,13 @@ void mgl_MGLSwitchDisplay(GLcontext context) {
 	else swapBuffers();
 }
 
-void mgl_MGLResizeContext(GLcontext context, GLsizei width, GLsizei height) {
+/* Whether the window could be resized (MiniGL 29 returns it). */
+GLboolean mgl_MGLResizeContext(GLcontext context, GLsizei width, GLsizei height) {
 	QtMglContext *c = QT_MGL(context);
-	if (!c || c->fullscreen || !c->ownWindow) return;
+	if (!c || c->fullscreen || !c->ownWindow || width < 1 || height < 1) return GL_FALSE;
 	ChangeWindowBox(c->window, c->window->LeftEdge, c->window->TopEdge,
 		width + c->window->BorderLeft + c->window->BorderRight, height + c->window->BorderTop + c->window->BorderBottom);
+	return GL_TRUE;
 }
 
 void *mgl_MGLGetWindowHandle(GLcontext context) {
@@ -403,50 +410,58 @@ static int specialKey(UWORD code) {
 	return -1;
 }
 
+/* The window's messages so far, to the handlers; FALSE once the loop is to
+ * end (MGLExit, the close gadget, Esc without a key handler). */
+BOOL mgl_handleEvents(QtMglContext *c) {
+	struct IntuiMessage *message;
+	while (c->running && (message = (struct IntuiMessage *) GetMsg(c->window->UserPort))) {
+		ULONG class = message->Class;
+		UWORD code = message->Code;
+		WORD x = message->MouseX, y = message->MouseY;
+		ReplyMsg((struct Message *) message);
+		switch (class) {
+		case IDCMP_CLOSEWINDOW:
+			c->running = FALSE;
+			break;
+		case IDCMP_VANILLAKEY:
+			if (c->key) c->key((char) code);
+			else if (code == 27) c->running = FALSE; /* Esc */
+			break;
+		case IDCMP_RAWKEY:
+			if (c->special && specialKey(code) >= 0) c->special((MGLspecial) specialKey(code));
+			break;
+		case IDCMP_MOUSEBUTTONS:
+			if (code == SELECTDOWN) c->buttons |= MGL_BUTTON_LEFT;
+			else if (code == SELECTUP) c->buttons &= ~MGL_BUTTON_LEFT;
+			else if (code == MENUDOWN) c->buttons |= MGL_BUTTON_RIGHT;
+			else if (code == MENUUP) c->buttons &= ~MGL_BUTTON_RIGHT;
+			if (c->mouse) c->mouse(x, y, c->buttons);
+			break;
+		case IDCMP_MOUSEMOVE:
+			if (c->mouse) c->mouse(x, y, c->buttons);
+			break;
+		}
+	}
+	return c->running;
+}
+
+/* Nothing will be drawn until the next message: the last frame is shown now,
+ * then the message awaited. */
+void mgl_waitForEvent(QtMglContext *c) {
+	if (c->offscreen) {
+		selectContext(c->host);
+		finishFrame();
+	}
+	WaitPort(c->window->UserPort);
+}
+
 void mgl_MGLMainLoop(GLcontext context) {
 	QtMglContext *c = QT_MGL(context);
-	GLbitfield buttons = 0;
 	if (!c || !c->window) return;
 	c->running = TRUE;
-	while (c->running) {
-		struct IntuiMessage *message;
-		while ((message = (struct IntuiMessage *) GetMsg(c->window->UserPort))) {
-			ULONG class = message->Class;
-			UWORD code = message->Code;
-			WORD x = message->MouseX, y = message->MouseY;
-			ReplyMsg((struct Message *) message);
-			switch (class) {
-			case IDCMP_CLOSEWINDOW:
-				c->running = FALSE;
-				break;
-			case IDCMP_VANILLAKEY:
-				if (c->key) c->key((char) code);
-				else if (code == 27) c->running = FALSE; /* Esc */
-				break;
-			case IDCMP_RAWKEY:
-				if (c->special && specialKey(code) >= 0) c->special((MGLspecial) specialKey(code));
-				break;
-			case IDCMP_MOUSEBUTTONS:
-				if (code == SELECTDOWN) buttons |= MGL_BUTTON_LEFT;
-				else if (code == SELECTUP) buttons &= ~MGL_BUTTON_LEFT;
-				else if (code == MENUDOWN) buttons |= MGL_BUTTON_RIGHT;
-				else if (code == MENUUP) buttons &= ~MGL_BUTTON_RIGHT;
-				if (c->mouse) c->mouse(x, y, buttons);
-				break;
-			case IDCMP_MOUSEMOVE:
-				if (c->mouse) c->mouse(x, y, buttons);
-				break;
-			}
-		}
-		if (!c->running) break;
+	c->buttons = 0;
+	while (mgl_handleEvents(c)) {
 		if (c->idle) c->idle();
-		else {
-			/* Nothing follows until an event: the last frame now. */
-			if (c->offscreen) {
-				selectContext(c->host);
-				finishFrame();
-			}
-			WaitPort(c->window->UserPort);
-		}
+		else mgl_waitForEvent(c);
 	}
 }

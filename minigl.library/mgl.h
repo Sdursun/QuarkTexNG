@@ -1,7 +1,9 @@
 /*
  * QuarkTex's minigl.library (docs/phase7-minigl.md): what its hand-written
- * parts share. They include MiniGL's headers, whose GL_* constants are
- * MiniGL's own numbers; OpenGL's are QGL_* (qgl.auto.h), and gl/gl.h, which
+ * parts share. They include MiniGL's headers (the 29 SDK), whose GL_*
+ * constants already carry OpenGL's own values; mgl_enum only needs to catch
+ * MiniGL's private ones (0x7000-0x7FFF) and an application's own unknown
+ * numbers. OpenGL's constants are QGL_* (qgl.auto.h), and gl/gl.h, which
  * defines GL_* too, is replaced by the declarations below.
  */
 #ifndef QUARKTEX_MGL_H
@@ -58,7 +60,8 @@ typedef struct QtMglContext {
 	BOOL ownWindow;
 	BOOL fullscreen;
 	int left, top, width, height;
-	BOOL running;            /* MGLMainLoop */
+	BOOL running;            /* MGLMainLoop, GLUTMainLoop */
+	GLbitfield buttons;      /* the mouse buttons held */
 	IdleFn idle;
 	KeyHandlerFn key;
 	MouseHandlerFn mouse;
@@ -77,5 +80,19 @@ void mgl_unknown(const char *name);
 
 /* glfuncs.c: the vertex arrays of the current context are reset. */
 void mgl_resetArrays(void);
+/* glfuncs.c: sine and cosine, square root (no maths library here). */
+void mgl_sinCos(double x, double *s, double *c);
+GLfloat mgl_squareRoot(GLfloat x);
+/* glu.c: GLUT's state is reset when its window's context goes; at the
+ * library's end its clock goes. */
+void mgl_glutForget(GLcontext context);
+void mgl_gluExit(void);
+/* context.c, for the main loops: the messages of the context's window so far
+ * to its handlers (FALSE: the loop is to end), and waiting for the next. */
+BOOL mgl_handleEvents(QtMglContext *c);
+void mgl_waitForEvent(QtMglContext *c);
+/* context.c: contexts as MGLCreateContext makes them, a window or a screen
+ * (window: not the mglChooseWindowMode setting). */
+GLcontext mgl_createContext(int left, int top, int width, int height, int window);
 
 #endif

@@ -20,7 +20,7 @@
 #include "present.h"
 
 // Must match QT_PROTOCOL_VERSION in gl/gl.c.
-#define QT_PROTOCOL_VERSION 9
+#define QT_PROTOCOL_VERSION 10
 
 extern "C" {
 	__declspec(dllexport) uni_resolve_function uni_resolve = 0;

@@ -26,7 +26,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 9
+#define QT_PROTOCOL_VERSION 10
 
 #define QT_BUFFER_BYTES (256 * 1024)
 

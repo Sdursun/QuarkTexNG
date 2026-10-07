@@ -3,6 +3,16 @@
 /*
  * The library: one entry point (LVO -30) returning the dispatch table
  * (dispatch.auto.c, generated in the order of MiniGL's minigl_dispatch.h).
+ *
+ * Built against MiniGL's 29 SDK (docs/phase7-minigl.md): its GL tokens carry
+ * OpenGL's own values, which mgl_enum passes through (and marks MiniGL's
+ * private ones, 0x7000-0x7FFF). A client built on the older SDK (27), whose
+ * tokens were auto-numbered positions, is not supported: there is no way to
+ * tell the two apart at OpenLibrary or GetDispatchTable time (neither passes
+ * the client's requested version down to the library -- confirmed against a
+ * real OpenLibrary call, whose D0 at the Open() vector is not it), and the
+ * 29 SDK's own release notes call this the same break: "the game needs to
+ * get recompiled... with the latest SDK".
  */
 
 extern const MGLDispatchTable mgl_dispatch;
@@ -14,6 +24,7 @@ void INIT_0_MiniGL(void) {
 }
 
 void EXIT_0_MiniGL(void) {
+	mgl_gluExit();
 	glExit();
 }
 

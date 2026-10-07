@@ -19,6 +19,7 @@
  * Built only when MiniGL's SDK headers are there (tests/Makefile).
  */
 #include <libraries/minigl_dispatch.h>
+#include <libraries/minigl.h>
 #include <proto/exec.h>
 #include <proto/Picasso96.h>
 #include <intuition/intuition.h>
@@ -161,7 +162,7 @@ int main(void) {
 	const char *extensions;
 	int frame;
 
-	MiniGLBase = OpenLibrary("minigl.library", 14);
+	MiniGLBase = OpenLibrary("minigl.library", MINIGL_VERSION);
 	P96Base = OpenLibrary("Picasso96API.library", 2);
 	if (!MiniGLBase) {
 		printf("m01: FAIL no minigl.library\n");
