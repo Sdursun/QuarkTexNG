@@ -48,6 +48,27 @@ HANDWRITTEN = {
     "GLTexParameteri", "GLTexImage2D", "GLUniformMatrix4fv", "GLGenFramebuffers", "GLDeleteFramebuffers",
     "GLBindFramebuffer", "GLFramebufferTexture2D", "GLCheckFramebufferStatus", "GLGenRenderbuffers",
     "GLDeleteRenderbuffers", "GLBindRenderbuffer", "GLRenderbufferStorage", "GLFramebufferRenderbuffer",
+    # Stage 3: the rest of GLES2 and the SDK's extensions.
+    "GLBlendFunc", "GLStencilFunc", "GLStencilMask", "GLStencilOp", "GLPolygonOffset", "GLPixelStorei",
+    "GLDepthRangef", "GLPolygonMode", "GLIsTexture", "GLTexParameterf", "GLTexParameterfv", "GLTexParameteriv",
+    "GLCopyTexImage2D", "GLCopyTexSubImage2D", "GLBlendColor", "GLBlendEquation", "GLBlendEquationSeparate",
+    "GLBlendFuncSeparate", "GLStencilFuncSeparate", "GLStencilMaskSeparate", "GLStencilOpSeparate",
+    "GLSampleCoverage", "GLIsFramebuffer", "GLIsRenderbuffer", "GLIsBuffer", "GLProvokingVertex",
+    "GLReleaseShaderCompiler", "GLDiscardFramebufferEXT", "GLInsertEventMarkerEXT", "GLPushGroupMarkerEXT",
+    "GLPopGroupMarkerEXT", "GLGetShaderPrecisionFormat", "GLVertexAttrib1f", "GLVertexAttrib2f",
+    "GLVertexAttrib3f", "GLVertexAttrib4f", "GLVertexAttrib1fv", "GLVertexAttrib2fv", "GLVertexAttrib3fv",
+    "GLVertexAttrib4fv", "GLGetVertexAttribiv", "GLGetVertexAttribfv", "GLGetVertexAttribPointerv",
+    "GLUniform1fv", "GLUniform2fv", "GLUniform3fv", "GLUniform4fv", "GLUniform1iv", "GLUniform2iv",
+    "GLUniform3iv", "GLUniform4iv", "GLUniformMatrix2fv", "GLUniformMatrix3fv", "GLBufferSubData",
+    "GLGetBufferParameteriv", "GLGetBufferParameterivOES", "GLMapBufferOES", "GLUnmapBufferOES",
+    "GLGetBufferPointervOES", "GLGetTexParameteriv", "GLGetTexParameterfv", "GLGetRenderbufferParameteriv",
+    "GLGetFramebufferAttachmentParameteriv", "GLGetUniformfv", "GLGetUniformiv", "GLGetIntegerv",
+    "GLGetFloatv", "GLGetBooleanv", "GLGetActiveAttrib", "GLGetActiveUniform", "GLGetAttachedShaders",
+    "GLGetShaderSource", "GLTexSubImage2D", "GLReadPixels", "GLDrawBuffersEXT", "GLDrawRangeElements",
+    "GLDrawElementsBaseVertexOES",
+    # Left as logging stubs: no compressed texture or shader/program binary
+    # formats are offered (glGet reports none), and glClipControlEXT needs
+    # OpenGL 4.5.
 }
 
 os.makedirs(out, exist_ok=True)

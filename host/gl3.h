@@ -89,7 +89,38 @@ typedef ptrdiff_t GLsizeiptr;
 	F(void, DeleteRenderbuffers, (GLsizei n, const GLuint* renderbuffers)) \
 	F(void, BindRenderbuffer, (GLenum target, GLuint renderbuffer)) \
 	F(void, RenderbufferStorage, (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
-	F(void, FramebufferRenderbuffer, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer))
+	F(void, FramebufferRenderbuffer, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)) \
+	F(void, BlendColor, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+	F(void, BlendEquation, (GLenum mode)) \
+	F(void, BlendEquationSeparate, (GLenum modeRGB, GLenum modeAlpha)) \
+	F(void, BlendFuncSeparate, (GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha)) \
+	F(void, StencilFuncSeparate, (GLenum face, GLenum func, GLint ref, GLuint mask)) \
+	F(void, StencilMaskSeparate, (GLenum face, GLuint mask)) \
+	F(void, StencilOpSeparate, (GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)) \
+	F(void, SampleCoverage, (GLfloat value, GLboolean invert)) \
+	F(GLboolean, IsFramebuffer, (GLuint framebuffer)) \
+	F(GLboolean, IsRenderbuffer, (GLuint renderbuffer)) \
+	F(void, VertexAttrib4f, (GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w)) \
+	F(void, ProvokingVertex, (GLenum mode)) \
+	F(void, Uniform1fv, (GLint location, GLsizei count, const GLfloat* value)) \
+	F(void, Uniform2fv, (GLint location, GLsizei count, const GLfloat* value)) \
+	F(void, Uniform3fv, (GLint location, GLsizei count, const GLfloat* value)) \
+	F(void, Uniform4fv, (GLint location, GLsizei count, const GLfloat* value)) \
+	F(void, Uniform1iv, (GLint location, GLsizei count, const GLint* value)) \
+	F(void, Uniform2iv, (GLint location, GLsizei count, const GLint* value)) \
+	F(void, Uniform3iv, (GLint location, GLsizei count, const GLint* value)) \
+	F(void, Uniform4iv, (GLint location, GLsizei count, const GLint* value)) \
+	F(void, UniformMatrix2fv, (GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)) \
+	F(void, UniformMatrix3fv, (GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)) \
+	F(void, GetUniformfv, (GLuint program, GLint location, GLfloat* params)) \
+	F(void, GetUniformiv, (GLuint program, GLint location, GLint* params)) \
+	F(void, GetActiveAttrib, (GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name)) \
+	F(void, GetActiveUniform, (GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name)) \
+	F(void, GetAttachedShaders, (GLuint program, GLsizei maxCount, GLsizei* count, GLuint* shaders)) \
+	F(void, GetShaderSource, (GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* source)) \
+	F(void, GetRenderbufferParameteriv, (GLenum target, GLenum pname, GLint* params)) \
+	F(void, GetFramebufferAttachmentParameteriv, (GLenum target, GLenum attachment, GLenum pname, GLint* params)) \
+	F(void, DrawBuffers, (GLsizei n, const GLenum* bufs))
 
 namespace gl3 {
 #define QT_GL3_DECLARE(result, name, parameters) extern result (APIENTRY* name) parameters;

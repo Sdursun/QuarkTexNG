@@ -59,6 +59,9 @@ static void *attach(struct OGLES2Context *c) {
 	 * call glViewport itself if it never resizes (as minigl.library's
 	 * contexts also start out). */
 	_glViewport(0, 0, c->width, c->height);
+	/* GLES2 vertex shaders always set gl_PointSize themselves; a desktop
+	 * core profile only lets them with GL_PROGRAM_POINT_SIZE on. */
+	_glEnable(0x8642);
 	ogles2_current = c;
 	return c;
 }

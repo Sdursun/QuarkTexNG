@@ -1,5 +1,7 @@
 #include "ogles2.h"
 #include "gldeclarations.auto.h"
+#include <exec/memory.h>
+#include <proto/exec.h>
 
 /*
  * The GL entries the host's existing OpenGL 3.3 core command buffer already
@@ -48,9 +50,15 @@ static const char vendor[] = "QuarkTex NG";
 static const char renderer[] = QT_PRODUCT " ogles2.library (host OpenGL)";
 static const char version[] = "OpenGL ES 2.0";
 static const char shadingVersion[] = "OpenGL ES GLSL ES 1.00";
-/* No extensions offered yet (stage 1 draws nothing of its own); real ones
- * (OES_texture_npot etc.) are added as the GL entries they need are. */
-static const char extensions[] = "";
+/* Only what the host's OpenGL 3.3 core context really does as GLES2 would
+ * (host/ogles2.cpp): non-power-of-two textures, 32-bit indices, depth
+ * textures, the shaders' derivative functions (core in the GLSL 3.30 the
+ * host compiles them as), the renderbuffer formats it shares,
+ * glMapBufferOES and the base vertex draw. */
+static const char extensions[] = "GL_OES_texture_npot GL_OES_element_index_uint GL_OES_depth_texture "
+	"GL_OES_standard_derivatives GL_OES_depth24 "
+	"GL_OES_packed_depth_stencil GL_OES_rgb8_rgba8 GL_OES_mapbuffer GL_OES_draw_elements_base_vertex "
+	"GL_EXT_discard_framebuffer";
 
 const GLubyte *ogles2_GLGetString(struct OGLES2Context *ctx, GLenum name) {
 	switch (name) {
@@ -455,6 +463,434 @@ void ogles2_GLUniformMatrix4fv(struct OGLES2Context *ctx, GLint location, GLsize
 	w[3] = 0;
 	w[4] = (ULONG) value;
 	qt_flush();
+}
+
+/*
+ * The rest of GLES2 (stage 3, gl/oglescmd.h). Entries desktop GL 1.1 has
+ * with no pointer argument go through its existing _gl<Name> encoders;
+ * small input arrays (glTexParameterfv, glVertexAttrib4fv, ...) are read
+ * here and sent as scalars.
+ */
+
+void ogles2_GLBlendFunc(struct OGLES2Context *ctx, GLenum sfactor, GLenum dfactor) { _glBlendFunc(sfactor, dfactor); }
+void ogles2_GLStencilFunc(struct OGLES2Context *ctx, GLenum func, GLint ref, GLuint mask) { _glStencilFunc(func, ref, mask); }
+void ogles2_GLStencilMask(struct OGLES2Context *ctx, GLuint mask) { _glStencilMask(mask); }
+void ogles2_GLStencilOp(struct OGLES2Context *ctx, GLenum fail, GLenum zfail, GLenum zpass) { _glStencilOp(fail, zfail, zpass); }
+void ogles2_GLPolygonOffset(struct OGLES2Context *ctx, GLfloat factor, GLfloat units) { _glPolygonOffset(factor, units); }
+void ogles2_GLPixelStorei(struct OGLES2Context *ctx, GLenum pname, GLint param) { _glPixelStorei(pname, param); }
+void ogles2_GLDepthRangef(struct OGLES2Context *ctx, GLfloat n, GLfloat f) { _glDepthRange(n, f); }
+void ogles2_GLPolygonMode(struct OGLES2Context *ctx, GLenum face, GLenum mode) { _glPolygonMode(face, mode); }
+GLboolean ogles2_GLIsTexture(struct OGLES2Context *ctx, GLuint texture) { return _glIsTexture(texture); }
+void ogles2_GLTexParameterf(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLfloat param) {
+	_glTexParameterf(target, pname, param);
+}
+/* GLES2's texture parameters are all single values. */
+void ogles2_GLTexParameterfv(struct OGLES2Context *ctx, GLenum target, GLenum pname, const GLfloat *params) {
+	if (params) _glTexParameterf(target, pname, params[0]);
+}
+void ogles2_GLTexParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum pname, const GLint *params) {
+	if (params) call(QT_OGLES2_C_TexParameteri, target, pname, (ULONG) params[0], 0, 0);
+}
+void ogles2_GLCopyTexImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y,
+		GLsizei width, GLsizei height, GLint border) {
+	_glCopyTexImage2D(target, level, internalformat, x, y, width, height, border);
+}
+void ogles2_GLCopyTexSubImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x,
+		GLint y, GLsizei width, GLsizei height) {
+	_glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+}
+
+void ogles2_GLBlendColor(struct OGLES2Context *ctx, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
+	call(QT_OGLES2_C_BlendColor, floatWord(red), floatWord(green), floatWord(blue), floatWord(alpha), 0);
+}
+void ogles2_GLBlendEquation(struct OGLES2Context *ctx, GLenum mode) { call(QT_OGLES2_C_BlendEquation, mode, 0, 0, 0, 0); }
+void ogles2_GLBlendEquationSeparate(struct OGLES2Context *ctx, GLenum modeRGB, GLenum modeAlpha) {
+	call(QT_OGLES2_C_BlendEquationSeparate, modeRGB, modeAlpha, 0, 0, 0);
+}
+void ogles2_GLBlendFuncSeparate(struct OGLES2Context *ctx, GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha,
+		GLenum dfactorAlpha) {
+	call(QT_OGLES2_C_BlendFuncSeparate, sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha, 0);
+}
+void ogles2_GLStencilFuncSeparate(struct OGLES2Context *ctx, GLenum face, GLenum func, GLint ref, GLuint mask) {
+	call(QT_OGLES2_C_StencilFuncSeparate, face, func, (ULONG) ref, mask, 0);
+}
+void ogles2_GLStencilMaskSeparate(struct OGLES2Context *ctx, GLenum face, GLuint mask) {
+	call(QT_OGLES2_C_StencilMaskSeparate, face, mask, 0, 0, 0);
+}
+void ogles2_GLStencilOpSeparate(struct OGLES2Context *ctx, GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass) {
+	call(QT_OGLES2_C_StencilOpSeparate, face, sfail, dpfail, dppass, 0);
+}
+void ogles2_GLSampleCoverage(struct OGLES2Context *ctx, GLfloat value, GLboolean invert) {
+	call(QT_OGLES2_C_SampleCoverage, floatWord(value), invert, 0, 0, 0);
+}
+GLboolean ogles2_GLIsFramebuffer(struct OGLES2Context *ctx, GLuint framebuffer) {
+	return (GLboolean) call(QT_OGLES2_C_IsFramebuffer, framebuffer, 0, 0, 0, 0);
+}
+GLboolean ogles2_GLIsRenderbuffer(struct OGLES2Context *ctx, GLuint renderbuffer) {
+	return (GLboolean) call(QT_OGLES2_C_IsRenderbuffer, renderbuffer, 0, 0, 0, 0);
+}
+GLboolean ogles2_GLIsBuffer(struct OGLES2Context *ctx, GLuint buffer) { return (GLboolean) call(QT_OGLES2_C_IsBuffer, buffer, 0, 0, 0, 0); }
+void ogles2_GLProvokingVertex(struct OGLES2Context *ctx, GLenum mode) { call(QT_OGLES2_C_ProvokingVertex, mode, 0, 0, 0, 0); }
+
+/* Hints, or nothing to do on a host that always has its compiler. */
+void ogles2_GLReleaseShaderCompiler(struct OGLES2Context *ctx) {}
+void ogles2_GLDiscardFramebufferEXT(struct OGLES2Context *ctx, GLenum target, GLsizei numAttachments, const GLenum *attachments) {}
+void ogles2_GLInsertEventMarkerEXT(struct OGLES2Context *ctx, GLsizei length, const GLchar *marker) {}
+void ogles2_GLPushGroupMarkerEXT(struct OGLES2Context *ctx, GLsizei length, const GLchar *marker) {}
+void ogles2_GLPopGroupMarkerEXT(struct OGLES2Context *ctx) {}
+
+/* The host compiles GLSL ES as desktop GLSL: IEEE single precision floats
+ * and 32-bit ints whatever the precision qualifier (the values a desktop
+ * GLES2 implementation reports for highp). */
+void ogles2_GLGetShaderPrecisionFormat(struct OGLES2Context *ctx, GLenum shadertype, GLenum precisiontype, GLint *range,
+		GLint *precision) {
+	int isFloat = precisiontype == GL_LOW_FLOAT || precisiontype == GL_MEDIUM_FLOAT || precisiontype == GL_HIGH_FLOAT;
+	if (range) {
+		range[0] = isFloat ? 127 : 31;
+		range[1] = isFloat ? 127 : 30;
+	}
+	if (precision) *precision = isFloat ? 23 : 0;
+}
+
+/* Generic vertex attributes: their current values, used by a disabled
+ * attribute array, live on the host (glVertexAttrib4f there); a copy is
+ * kept here for glGetVertexAttribfv. */
+static GLfloat currentAttrib[QT_OGLES2_MAX_ATTRIBS][4] = {
+	{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}
+};
+
+static void vertexAttrib(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+	if (index < QT_OGLES2_MAX_ATTRIBS) {
+		currentAttrib[index][0] = x;
+		currentAttrib[index][1] = y;
+		currentAttrib[index][2] = z;
+		currentAttrib[index][3] = w;
+	}
+	call(QT_OGLES2_C_VertexAttrib4f, index, floatWord(x), floatWord(y), floatWord(z), floatWord(w));
+}
+
+void ogles2_GLVertexAttrib1f(struct OGLES2Context *ctx, GLuint index, GLfloat x) { vertexAttrib(index, x, 0, 0, 1); }
+void ogles2_GLVertexAttrib2f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y) { vertexAttrib(index, x, y, 0, 1); }
+void ogles2_GLVertexAttrib3f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y, GLfloat z) {
+	vertexAttrib(index, x, y, z, 1);
+}
+void ogles2_GLVertexAttrib4f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+	vertexAttrib(index, x, y, z, w);
+}
+void ogles2_GLVertexAttrib1fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) { if (v) vertexAttrib(index, v[0], 0, 0, 1); }
+void ogles2_GLVertexAttrib2fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) {
+	if (v) vertexAttrib(index, v[0], v[1], 0, 1);
+}
+void ogles2_GLVertexAttrib3fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) {
+	if (v) vertexAttrib(index, v[0], v[1], v[2], 1);
+}
+void ogles2_GLVertexAttrib4fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) {
+	if (v) vertexAttrib(index, v[0], v[1], v[2], v[3]);
+}
+
+/* glGetVertexAttrib*: the array state is 68k-side only (Attrib above). */
+static int vertexAttribValue(GLuint index, GLenum pname, GLint *value) {
+	const Attrib *a;
+	if (index >= QT_OGLES2_MAX_ATTRIBS) return 0;
+	a = &attribs[index];
+	switch (pname) {
+	case GL_VERTEX_ATTRIB_ARRAY_ENABLED: *value = a->enabled; return 1;
+	case GL_VERTEX_ATTRIB_ARRAY_SIZE: *value = a->size ? a->size : 4; return 1;
+	case GL_VERTEX_ATTRIB_ARRAY_STRIDE: *value = a->stride; return 1;
+	case GL_VERTEX_ATTRIB_ARRAY_TYPE: *value = a->type ? a->type : GL_FLOAT; return 1;
+	case GL_VERTEX_ATTRIB_ARRAY_NORMALIZED: *value = a->normalized; return 1;
+	case GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING: *value = a->bufferName; return 1;
+	}
+	return 0;
+}
+
+void ogles2_GLGetVertexAttribiv(struct OGLES2Context *ctx, GLuint index, GLenum pname, GLint *params) {
+	int i;
+	if (!params) return;
+	if (pname == GL_CURRENT_VERTEX_ATTRIB) {
+		if (index < QT_OGLES2_MAX_ATTRIBS) for (i = 0; i < 4; ++i) params[i] = (GLint) currentAttrib[index][i];
+		return;
+	}
+	vertexAttribValue(index, pname, params);
+}
+
+void ogles2_GLGetVertexAttribfv(struct OGLES2Context *ctx, GLuint index, GLenum pname, GLfloat *params) {
+	GLint value;
+	int i;
+	if (!params) return;
+	if (pname == GL_CURRENT_VERTEX_ATTRIB) {
+		if (index < QT_OGLES2_MAX_ATTRIBS) for (i = 0; i < 4; ++i) params[i] = currentAttrib[index][i];
+		return;
+	}
+	if (vertexAttribValue(index, pname, &value)) params[0] = (GLfloat) value;
+}
+
+void ogles2_GLGetVertexAttribPointerv(struct OGLES2Context *ctx, GLuint index, GLenum pname, void **pointer) {
+	if (pointer && index < QT_OGLES2_MAX_ATTRIBS && pname == GL_VERTEX_ATTRIB_ARRAY_POINTER) *pointer = (void *) attribs[index].pointer;
+}
+
+static void uniformV(ULONG subop, GLint location, GLsizei count, const void *value) {
+	ULONG *w = qt_reserve(QT_OGLES2_UNIFORM_V_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_UNIFORM_V << 16) | QT_OGLES2_UNIFORM_V_WORDS;
+	w[1] = subop;
+	w[2] = (ULONG) location;
+	w[3] = (ULONG) count;
+	w[4] = (ULONG) value;
+	qt_flush();
+}
+
+void ogles2_GLUniform1fv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLfloat *value) {
+	uniformV(QT_OGLES2_U_1F, location, count, value);
+}
+void ogles2_GLUniform2fv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLfloat *value) {
+	uniformV(QT_OGLES2_U_2F, location, count, value);
+}
+void ogles2_GLUniform3fv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLfloat *value) {
+	uniformV(QT_OGLES2_U_3F, location, count, value);
+}
+void ogles2_GLUniform4fv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLfloat *value) {
+	uniformV(QT_OGLES2_U_4F, location, count, value);
+}
+void ogles2_GLUniform1iv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLint *value) {
+	uniformV(QT_OGLES2_U_1I, location, count, value);
+}
+void ogles2_GLUniform2iv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLint *value) {
+	uniformV(QT_OGLES2_U_2I, location, count, value);
+}
+void ogles2_GLUniform3iv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLint *value) {
+	uniformV(QT_OGLES2_U_3I, location, count, value);
+}
+void ogles2_GLUniform4iv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLint *value) {
+	uniformV(QT_OGLES2_U_4I, location, count, value);
+}
+/* transpose must be GL_FALSE in GLES2 (GL_INVALID_VALUE otherwise). */
+void ogles2_GLUniformMatrix2fv(struct OGLES2Context *ctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
+	if (!transpose) uniformV(QT_OGLES2_U_M2, location, count, value);
+}
+void ogles2_GLUniformMatrix3fv(struct OGLES2Context *ctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
+	if (!transpose) uniformV(QT_OGLES2_U_M3, location, count, value);
+}
+
+static void bufferCopy(ULONG opcode, GLenum target, ULONG offset, ULONG size, const void *data) {
+	ULONG *w = qt_reserve(QT_OGLES2_BUFFER_SUB_DATA_WORDS);
+	w[0] = (opcode << 16) | QT_OGLES2_BUFFER_SUB_DATA_WORDS;
+	w[1] = target;
+	w[2] = offset;
+	w[3] = size;
+	w[4] = (ULONG) data;
+	qt_flush();
+}
+
+void ogles2_GLBufferSubData(struct OGLES2Context *ctx, GLenum target, GLintptr offset, GLsizeiptr size, const void *data) {
+	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, target, (ULONG) offset, (ULONG) size, data);
+}
+
+static void getParam(ULONG subop, ULONG w0, ULONG w1, ULONG w2, void *out) {
+	ULONG *w = qt_reserve(QT_OGLES2_GET_PARAM_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_GET_PARAM << 16) | QT_OGLES2_GET_PARAM_WORDS;
+	w[1] = subop;
+	w[2] = w0;
+	w[3] = w1;
+	w[4] = w2;
+	w[5] = (ULONG) out;
+	qt_flush();
+}
+
+/* glMapBufferOES: the fake buffers live on the host, so a mapping is a
+ * 68k-side copy, written back whole by glUnmapBufferOES. */
+#define GL_WRITE_ONLY_OES 0x88B9
+#define GL_BUFFER_ACCESS_OES 0x88BB
+#define GL_BUFFER_MAPPED_OES 0x88BC
+#define GL_BUFFER_MAP_POINTER_OES 0x88BD
+
+static void *mapped[2];
+static ULONG mappedSize[2];
+
+/* 0 for GL_ARRAY_BUFFER, 1 for GL_ELEMENT_ARRAY_BUFFER, -1 for others. */
+static int bufferSlot(GLenum target) {
+	return target == GL_ARRAY_BUFFER ? 0 : target == GL_ELEMENT_ARRAY_BUFFER ? 1 : -1;
+}
+
+void ogles2_GLGetBufferParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
+	int slot = bufferSlot(target);
+	if (!params || slot < 0) return;
+	if (pname == GL_BUFFER_MAPPED_OES) *params = mapped[slot] != NULL;
+	else if (pname == GL_BUFFER_ACCESS_OES) *params = GL_WRITE_ONLY_OES;
+	else getParam(QT_OGLES2_P_BufferParameteriv, target, pname, 0, params);
+}
+void ogles2_GLGetBufferParameterivOES(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
+	ogles2_GLGetBufferParameteriv(ctx, target, pname, params);
+}
+
+void *ogles2_GLMapBufferOES(struct OGLES2Context *ctx, GLenum target, GLenum access) {
+	int slot = bufferSlot(target);
+	GLint size = 0;
+	if (slot < 0 || mapped[slot]) return NULL;
+	getParam(QT_OGLES2_P_BufferParameteriv, target, GL_BUFFER_SIZE, 0, &size);
+	if (size <= 0) return NULL;
+	mapped[slot] = AllocVec((ULONG) size, MEMF_ANY);
+	if (!mapped[slot]) return NULL;
+	mappedSize[slot] = (ULONG) size;
+	bufferCopy(QT_OGLES2_READ_BUFFER, target, 0, (ULONG) size, mapped[slot]);
+	return mapped[slot];
+}
+
+GLboolean ogles2_GLUnmapBufferOES(struct OGLES2Context *ctx, GLenum target) {
+	int slot = bufferSlot(target);
+	if (slot < 0 || !mapped[slot]) return GL_FALSE;
+	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, target, 0, mappedSize[slot], mapped[slot]);
+	FreeVec(mapped[slot]);
+	mapped[slot] = NULL;
+	return GL_TRUE;
+}
+
+void ogles2_GLGetBufferPointervOES(struct OGLES2Context *ctx, GLenum target, GLenum pname, void **params) {
+	int slot = bufferSlot(target);
+	if (params) *params = slot >= 0 && pname == GL_BUFFER_MAP_POINTER_OES ? mapped[slot] : NULL;
+}
+
+void ogles2_GLGetTexParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
+	getParam(QT_OGLES2_P_TexParameteriv, target, pname, 0, params);
+}
+void ogles2_GLGetTexParameterfv(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLfloat *params) {
+	getParam(QT_OGLES2_P_TexParameterfv, target, pname, 0, params);
+}
+void ogles2_GLGetRenderbufferParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
+	getParam(QT_OGLES2_P_RenderbufferParameteriv, target, pname, 0, params);
+}
+void ogles2_GLGetFramebufferAttachmentParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum attachment, GLenum pname,
+		GLint *params) {
+	getParam(QT_OGLES2_P_FramebufferAttachmentParameteriv, target, attachment, pname, params);
+}
+void ogles2_GLGetUniformfv(struct OGLES2Context *ctx, GLuint program, GLint location, GLfloat *params) {
+	getParam(QT_OGLES2_P_Uniformfv, program, (ULONG) location, 0, params);
+}
+void ogles2_GLGetUniformiv(struct OGLES2Context *ctx, GLuint program, GLint location, GLint *params) {
+	getParam(QT_OGLES2_P_Uniformiv, program, (ULONG) location, 0, params);
+}
+
+/* glGet*: the buffer bindings and the attribute count are 68k-side state;
+ * the rest is the host's (QT_OGLES2_GET). */
+static int localValue(GLenum pname, GLint *value) {
+	switch (pname) {
+	case GL_ARRAY_BUFFER_BINDING: *value = boundArrayBuffer; return 1;
+	case GL_ELEMENT_ARRAY_BUFFER_BINDING: *value = boundElementArrayBuffer; return 1;
+	case GL_MAX_VERTEX_ATTRIBS: *value = QT_OGLES2_MAX_ATTRIBS; return 1;
+	}
+	return 0;
+}
+
+static void get(ULONG kind, GLenum pname, void *data) {
+	ULONG *w = qt_reserve(QT_OGLES2_GET_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_GET << 16) | QT_OGLES2_GET_WORDS;
+	w[1] = kind;
+	w[2] = pname;
+	w[3] = (ULONG) data;
+	qt_flush();
+}
+
+void ogles2_GLGetIntegerv(struct OGLES2Context *ctx, GLenum pname, GLint *data) {
+	if (data && !localValue(pname, data)) get(QT_OGLES2_GET_Integer, pname, data);
+}
+void ogles2_GLGetFloatv(struct OGLES2Context *ctx, GLenum pname, GLfloat *data) {
+	GLint value;
+	if (!data) return;
+	if (localValue(pname, &value)) *data = (GLfloat) value;
+	else get(QT_OGLES2_GET_Float, pname, data);
+}
+void ogles2_GLGetBooleanv(struct OGLES2Context *ctx, GLenum pname, GLboolean *data) {
+	GLint value;
+	if (!data) return;
+	if (localValue(pname, &value)) *data = value != 0;
+	else get(QT_OGLES2_GET_Boolean, pname, data);
+}
+
+static void getActive(ULONG subop, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type,
+		GLchar *name) {
+	ULONG *w = qt_reserve(QT_OGLES2_GET_ACTIVE_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_GET_ACTIVE << 16) | QT_OGLES2_GET_ACTIVE_WORDS;
+	w[1] = subop;
+	w[2] = program;
+	w[3] = index;
+	w[4] = (ULONG) bufSize;
+	w[5] = (ULONG) length;
+	w[6] = (ULONG) size;
+	w[7] = (ULONG) type;
+	w[8] = (ULONG) name;
+	qt_flush();
+}
+
+void ogles2_GLGetActiveAttrib(struct OGLES2Context *ctx, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size,
+		GLenum *type, GLchar *name) {
+	getActive(QT_OGLES2_A_Attrib, program, index, bufSize, length, size, type, name);
+}
+void ogles2_GLGetActiveUniform(struct OGLES2Context *ctx, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size,
+		GLenum *type, GLchar *name) {
+	getActive(QT_OGLES2_A_Uniform, program, index, bufSize, length, size, type, name);
+}
+
+void ogles2_GLGetAttachedShaders(struct OGLES2Context *ctx, GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) {
+	ULONG *w = qt_reserve(QT_OGLES2_GET_ATTACHED_SHADERS_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_GET_ATTACHED_SHADERS << 16) | QT_OGLES2_GET_ATTACHED_SHADERS_WORDS;
+	w[1] = program;
+	w[2] = (ULONG) maxCount;
+	w[3] = (ULONG) count;
+	w[4] = (ULONG) shaders;
+	qt_flush();
+}
+
+void ogles2_GLGetShaderSource(struct OGLES2Context *ctx, GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *source) {
+	getLog(QT_OGLES2_G_ShaderSource, shader, bufSize, length, source);
+}
+
+void ogles2_GLTexSubImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width,
+		GLsizei height, GLenum format, GLenum type, const void *pixels) {
+	ULONG *w = qt_reserve(QT_OGLES2_TEX_SUB_IMAGE_2D_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_TEX_SUB_IMAGE_2D << 16) | QT_OGLES2_TEX_SUB_IMAGE_2D_WORDS;
+	w[1] = target;
+	w[2] = (ULONG) level;
+	w[3] = (ULONG) xoffset;
+	w[4] = (ULONG) yoffset;
+	w[5] = (ULONG) width;
+	w[6] = (ULONG) height;
+	w[7] = format;
+	w[8] = type;
+	w[9] = (ULONG) pixels;
+	qt_flush();
+}
+
+void ogles2_GLReadPixels(struct OGLES2Context *ctx, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type,
+		void *pixels) {
+	ULONG *w = qt_reserve(QT_OGLES2_READ_PIXELS_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_READ_PIXELS << 16) | QT_OGLES2_READ_PIXELS_WORDS;
+	w[1] = (ULONG) x;
+	w[2] = (ULONG) y;
+	w[3] = (ULONG) width;
+	w[4] = (ULONG) height;
+	w[5] = format;
+	w[6] = type;
+	w[7] = (ULONG) pixels;
+	qt_flush();
+}
+
+void ogles2_GLDrawBuffersEXT(struct OGLES2Context *ctx, GLsizei n, const GLenum *bufs) {
+	ULONG *w = qt_reserve(QT_OGLES2_DRAW_BUFFERS_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_DRAW_BUFFERS << 16) | QT_OGLES2_DRAW_BUFFERS_WORDS;
+	w[1] = (ULONG) n;
+	w[2] = (ULONG) bufs;
+	qt_flush();
+}
+
+/* start/end are only a hint. */
+void ogles2_GLDrawRangeElements(struct OGLES2Context *ctx, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type,
+		const void *indices) {
+	draw(mode, 0, count, type, boundElementArrayBuffer, indices);
+}
+
+/* QT_OGLES2_DRAW's first is the base vertex of an indexed draw. */
+void ogles2_GLDrawElementsBaseVertexOES(struct OGLES2Context *ctx, GLenum mode, GLsizei count, GLenum type, const void *indices,
+		GLint basevertex) {
+	draw(mode, basevertex, count, type, boundElementArrayBuffer, indices);
 }
 
 /* lib.c: an entry the library does not implement yet. */

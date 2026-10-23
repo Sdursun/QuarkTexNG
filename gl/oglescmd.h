@@ -122,8 +122,7 @@ enum { QT_OGLES2_G_Shader, QT_OGLES2_G_Program };
 /*
  * Textures and framebuffers (stage 2, cube/boingocean): real host OpenGL
  * objects, the same as shaders and programs (above). glTexImage2D's pixel
- * data is GL_UNSIGNED_BYTE in every known caller -- byte-granular, so no
- * order to convert, forwarded as given; another type is logged as missing.
+ * data is converted as glTexSubImage2D's is (QT_OGLES2_TEX_SUB_IMAGE_2D).
  */
 
 /* glGenTextures/glDeleteTextures, glGenFramebuffers/glDeleteFramebuffers,
@@ -163,5 +162,99 @@ enum {
  * big-endian floats. */
 #define QT_OGLES2_UNIFORM_MATRIX4FV 0xA019
 #define QT_OGLES2_UNIFORM_MATRIX4FV_WORDS 5
+
+/*
+ * The rest of GLES2 (stage 3). Entries GL 1.1 already has with no pointer
+ * argument (glBlendFunc, glStencilOp, glPixelStorei, glCopyTexImage2D, ...)
+ * use the existing _gl<Name> encoders, as stage 1's do; vertex attribute
+ * state queries and glMapBufferOES are answered on the 68k side.
+ *
+ * QT_OGLES2_CALL's later subops: glBlendColor and glSampleCoverage take
+ * float words (bit patterns, read with c.f()); glVertexAttrib4f is index,
+ * x, y, z, w (glVertexAttrib1f..4fv all become it, GLES2's own defaults of
+ * 0, 0, 0, 1 filled in on the 68k side); glIsBuffer asks about QuarkTex's
+ * fake buffers (QT_OGLES2_GEN_BUFFERS).
+ *
+ * QT_OGLES2_DRAW's "first" is the base vertex of an indexed draw (glDraw-
+ * ElementsBaseVertexOES; 0 from glDrawElements), added to every index.
+ */
+enum {
+	QT_OGLES2_C_BlendColor = QT_OGLES2_C_RenderbufferStorage + 1, QT_OGLES2_C_BlendEquation,
+	QT_OGLES2_C_BlendEquationSeparate, QT_OGLES2_C_BlendFuncSeparate, QT_OGLES2_C_StencilFuncSeparate,
+	QT_OGLES2_C_StencilMaskSeparate, QT_OGLES2_C_StencilOpSeparate, QT_OGLES2_C_SampleCoverage,
+	QT_OGLES2_C_IsFramebuffer, QT_OGLES2_C_IsRenderbuffer, QT_OGLES2_C_IsBuffer, QT_OGLES2_C_VertexAttrib4f,
+	QT_OGLES2_C_ProvokingVertex
+};
+
+/* glUniform{1,2,3,4}{f,i}v (QT_OGLES2_UNIFORM's subops) and glUniformMatrix
+ * {2,3,4}fv (below; transpose is GL_FALSE in GLES2, so not sent): subop,
+ * location, count, address of count vectors or matrices of big-endian
+ * floats or ints. */
+#define QT_OGLES2_UNIFORM_V 0xA01A
+#define QT_OGLES2_UNIFORM_V_WORDS 5
+enum { QT_OGLES2_U_M2 = QT_OGLES2_U_4I + 1, QT_OGLES2_U_M3, QT_OGLES2_U_M4 };
+
+/* glBufferSubData: target (its bound fake buffer), offset, size, address of
+ * size bytes, kept big-endian as glBufferData's are. QT_OGLES2_READ_BUFFER
+ * is the reverse, for glMapBufferOES: the bound buffer's bytes offset to
+ * offset + size copied to the address. */
+#define QT_OGLES2_BUFFER_SUB_DATA 0xA01B
+#define QT_OGLES2_BUFFER_SUB_DATA_WORDS 5
+#define QT_OGLES2_READ_BUFFER 0xA01C
+#define QT_OGLES2_READ_BUFFER_WORDS 5
+
+/* glGetIntegerv/glGetFloatv/glGetBooleanv: kind, pname, address the host
+ * writes the value(s) to, as many as pname has (big-endian ints or floats,
+ * GLboolean bytes). GLES2-only pnames the host's desktop core profile does
+ * not have are answered from their desktop equivalents. */
+#define QT_OGLES2_GET 0xA01D
+#define QT_OGLES2_GET_WORDS 4
+enum { QT_OGLES2_GET_Integer, QT_OGLES2_GET_Float, QT_OGLES2_GET_Boolean };
+
+/* glGetTexParameter{i,f}v, glGetRenderbufferParameteriv, glGetFramebuffer-
+ * AttachmentParameteriv, glGetBufferParameteriv (a fake buffer's), glGet-
+ * Uniform{f,i}v: subop, w0..w2 (their scalar arguments in order: target,
+ * pname; target, attachment, pname; program, location), address of the
+ * result(s), big-endian. A uniform's value count comes from its type. */
+#define QT_OGLES2_GET_PARAM 0xA01E
+#define QT_OGLES2_GET_PARAM_WORDS 6
+enum {
+	QT_OGLES2_P_TexParameteriv, QT_OGLES2_P_TexParameterfv, QT_OGLES2_P_RenderbufferParameteriv,
+	QT_OGLES2_P_FramebufferAttachmentParameteriv, QT_OGLES2_P_BufferParameteriv, QT_OGLES2_P_Uniformfv,
+	QT_OGLES2_P_Uniformiv
+};
+
+/* glGetActiveAttrib/glGetActiveUniform: subop, program, index, bufSize,
+ * addresses of the length, size and type (big-endian, each 0 if not
+ * wanted) and of bufSize bytes for the name. */
+#define QT_OGLES2_GET_ACTIVE 0xA01F
+#define QT_OGLES2_GET_ACTIVE_WORDS 9
+enum { QT_OGLES2_A_Attrib, QT_OGLES2_A_Uniform };
+
+/* glGetAttachedShaders: program, maxCount, address of the count (0 if not
+ * wanted), address of maxCount GLuints. */
+#define QT_OGLES2_GET_ATTACHED_SHADERS 0xA020
+#define QT_OGLES2_GET_ATTACHED_SHADERS_WORDS 5
+
+/* glGetShaderSource: QT_OGLES2_GET_LOG with this subop. */
+enum { QT_OGLES2_G_ShaderSource = QT_OGLES2_G_Program + 1 };
+
+/* glTexSubImage2D: target, level, xoffset, yoffset, width, height, format,
+ * type, address of the pixel data. GL_UNSIGNED_BYTE pixels are forwarded
+ * as given; the 16-bit types (GL_UNSIGNED_SHORT_5_6_5, 4_4_4_4, 5_5_5_1,
+ * GL_UNSIGNED_SHORT) and 32-bit ones (GL_UNSIGNED_INT, _24_8) are swapped.
+ * GL_ALPHA/LUMINANCE/LUMINANCE_ALPHA are
+ * (gone from desktop core profiles) stored as GL_RED/GL_RG with a swizzle. */
+#define QT_OGLES2_TEX_SUB_IMAGE_2D 0xA021
+#define QT_OGLES2_TEX_SUB_IMAGE_2D_WORDS 10
+
+/* glReadPixels: x, y, width, height, format, type, address the host reads
+ * into (16-bit packed types swapped afterwards). */
+#define QT_OGLES2_READ_PIXELS 0xA022
+#define QT_OGLES2_READ_PIXELS_WORDS 8
+
+/* glDrawBuffersEXT: n, address of n big-endian GLenums. */
+#define QT_OGLES2_DRAW_BUFFERS 0xA023
+#define QT_OGLES2_DRAW_BUFFERS_WORDS 3
 
 #endif

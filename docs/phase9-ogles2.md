@@ -1,8 +1,9 @@
 # Phase 9: a QuarkTex ogles2.library
 
-Status: stage 2 done (2026-10-23): a GLSL ES shader compiles, a program
-links, a vertex buffer uploads, and a real triangle draws and animates in
-WinUAE, through the SDK's own `triangle` example unmodified.
+Status: stage 3 done (2026-10-24). All of GLES2 is implemented except
+compressed textures, shader and program binaries and glClipControlEXT,
+which stay logging stubs. The SDK's four examples run unmodified in WinUAE:
+`triangle`, `cube`, `boingocean` and `boing2026`.
 
 ## Why
 
@@ -20,8 +21,8 @@ MiniGL-style translation table needed) and it has no fixed-function
 pipeline at all, so none of minigl/agl's `ffp.cpp`-style emulation is
 needed either -- a GLES2 program supplies its own shaders, which the host's
 OpenGL 3.3 core context (the same `QT_CONTEXT_CORE` Warp3D uses) compiles
-directly, given `GL_ARB_ES2_compatibility` (checked by a desktop driver
-supporting GLSL ES source, not yet verified here; stage 2).
+after host/ogles2.cpp rewrites the GLSL ES source as GLSL 3.30 core
+(stage 3).
 
 ## The interface (from the ogles2 SDK, `SDK/include`)
 
@@ -201,6 +202,70 @@ Verified live in WinUAE with two SDK examples, built unmodified:
 `cube.c` (a textured, mipmapped, rotating cube with an MVP matrix uniform)
 and `boingocean.c` (a render-to-texture reflection effect, 660 fps at
 640x480). The reference suite (`tests/run.ps1`) still shows no FAIL.
+
+## Stage 3: the rest of GLES2 (done)
+
+The library now implements 152 of the 164 dispatch entries itself (plus
+the six agl* context calls). Six remain logging stubs on purpose:
+`glCompressedTexImage2D` and `glCompressedTexSubImage2D` (no compressed
+formats are offered, and `GL_NUM_COMPRESSED_TEXTURE_FORMATS` is 0),
+`glShaderBinary`, `glProgramBinaryOES` and `glGetProgramBinaryOES` (no
+binary formats), and `glClipControlEXT` (OpenGL 4.5).
+
+- **Shaders are translated.** The host compiles each GLSL ES 1.00 shader as
+  GLSL 3.30 core. A shader with no `#version` line is GLSL 1.10, and only
+  some drivers accept that in a core profile; Intel does, others need not.
+  `attribute`, `varying`, `texture2D` and the other names GLSL 3.30 core
+  dropped become `#define`s. `gl_FragColor` and `gl_FragData` become
+  declared outputs. `#version` and `GL_OES_*` `#extension` lines are blanked,
+  so the compiler's line numbers still match the application's source.
+  `GL_ES` and the other `GL_` macros cannot be defined (the names are
+  reserved), so a shader's `#ifdef GL_ES` parts drop out. In practice these
+  are precision statements, which GLSL 3.30 ignores anyway.
+  `glGetShaderSource` and `GL_SHADER_SOURCE_LENGTH` still return the
+  application's own source.
+- **Pixel formats.** `GL_ALPHA`, `GL_LUMINANCE` and `GL_LUMINANCE_ALPHA`
+  are stored as `GL_RED`/`GL_RG` with a texture swizzle; core profiles do
+  not have them. Pixel data in 16-bit types (`GL_UNSIGNED_SHORT_5_6_5`,
+  `4_4_4_4`, `5_5_5_1`, and `GL_UNSIGNED_SHORT` depth) and 32-bit types
+  (`GL_UNSIGNED_INT`, `GL_UNSIGNED_INT_24_8`) is byte-swapped by
+  `glTexImage2D`, `glTexSubImage2D` and `glReadPixels`, honouring the pack
+  and unpack alignment. `GL_RGB565` renderbuffers become `GL_RGB8`: desktop
+  OpenGL only has `GL_RGB565` from 4.1 on.
+- **Queries.** `glGetIntegerv`/`Floatv`/`Booleanv` write as many values as
+  the pname has. GLES2-only pnames such as `GL_MAX_VARYING_VECTORS` are
+  answered from their desktop equivalents. The buffer bindings and
+  `GL_MAX_VERTEX_ATTRIBS` (8) are answered on the 68k side. Vertex attribute
+  queries and `glGetShaderPrecisionFormat` are answered there too.
+  `glGetUniform*v` finds the uniform's type through its active uniforms to
+  know how many values to write.
+- **Buffers.** `glBufferSubData` writes into a fake buffer.
+  `glMapBufferOES` copies the buffer into 68k memory, and `glUnmapBufferOES`
+  writes the whole copy back. `glDrawElementsBaseVertexOES` sends the base
+  vertex in `QT_OGLES2_DRAW`'s otherwise unused `first` word.
+- **Contexts** enable `GL_PROGRAM_POINT_SIZE`, because a GLES2 vertex shader
+  always sets `gl_PointSize` itself.
+- **Extensions offered:** `GL_OES_texture_npot`, `GL_OES_element_index_uint`,
+  `GL_OES_depth_texture`, `GL_OES_standard_derivatives`, `GL_OES_depth24`,
+  `GL_OES_packed_depth_stencil`, `GL_OES_rgb8_rgba8`, `GL_OES_mapbuffer`,
+  `GL_OES_draw_elements_base_vertex` and `GL_EXT_discard_framebuffer`.
+
+Verification:
+- `tests/o02_ogles2_api.c` reads back the result of each group of new
+  entries: queries, uniform arrays and matrices, the program queries,
+  buffers and mapping, luminance and RGB565 textures, `glTexSubImage2D`,
+  constant attributes, `glBlendColor` and the base vertex draw. All 37
+  checks pass in WinUAE.
+- `boing2026` (shadow maps in depth textures, MSAA framebuffers, bloom,
+  derivatives) draws correctly at about 1300 fps at 640x480 on this
+  project's test machine (Intel Iris Xe).
+- `boingocean` now runs at about 1800 fps, up from 660.
+
+**Known limit:** only one program at a time. The command buffer and the
+selected host context are global in `gl/gl.c`, shared by every QuarkTex
+library (Warp3D, agl and minigl have the same limit). ogles2.library's
+68k-side vertex attribute and buffer binding state is global too. Two
+ogles2 programs running at once draw into each other's windows.
 
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 
