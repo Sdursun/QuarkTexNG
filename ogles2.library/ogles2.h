@@ -41,6 +41,11 @@ void logString(char *c);
  * qt_flush executes the buffer on the host and returns the last result. */
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
+/* Two pointers kept per task (gl/gl.c): [0] is the task's current context. */
+APTR *qt_taskData(void);
+/* Whether the task still runs (is ready or waiting). */
+struct Task;
+int qt_alive(struct Task *task);
 #define QT_CONTEXT_CORE 1
 #define QT_CONTEXT_OFFSCREEN 4
 
@@ -48,6 +53,18 @@ ULONG qt_flush(void);
  * OGLES2Context; /@ opaque @/" -- applications only ever pass the pointer
  * back, so this gives that tag its real body, as MiniGL's own headers do
  * for GLcontext/GLcontext_t. */
+/* glVertexAttribPointer's state (glfuncs.c): on the 68k side only, sent
+ * with each draw (gl/oglescmd.h). */
+typedef struct {
+	GLboolean enabled;
+	GLint size;
+	GLenum type;
+	GLboolean normalized;
+	GLsizei stride;
+	GLuint bufferName;  /* the one bound to GL_ARRAY_BUFFER at the call, or 0 */
+	ULONG pointer;       /* an offset into it, or an Amiga address */
+} QtOgles2Attrib;
+
 struct OGLES2Context {
 	ULONG host;
 	struct Window *window;   /* NULL for a bitmap context */
@@ -57,9 +74,17 @@ struct OGLES2Context {
 	BOOL ownWindow;
 	BOOL ownScreen;
 	int left, top, width, height;
+	/* GLES2 state the 68k side keeps (glfuncs.c): per context, as several
+	 * programs may use the library at once (docs/multitasking.md). */
+	QtOgles2Attrib attribs[QT_OGLES2_MAX_ATTRIBS];
+	GLfloat currentAttrib[QT_OGLES2_MAX_ATTRIBS][4]; /* glVertexAttrib4f's, for glGetVertexAttribfv */
+	GLuint arrayBuffer, elementArrayBuffer;          /* the bound buffers */
+	void *mapped[2];                                 /* glMapBufferOES's copies, by bufferSlot */
+	ULONG mappedSize[2];
 };
 
-extern struct OGLES2Context *ogles2_current;
+/* The calling task's current context (aglMakeCurrent). */
+#define ogles2_current (*(struct OGLES2Context **) &qt_taskData()[0])
 
 /* lib.c: an entry the library does not implement yet. */
 void ogles2_missing(const char *name);

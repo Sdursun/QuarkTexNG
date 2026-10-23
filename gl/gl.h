@@ -72,6 +72,13 @@ extern int qt_fpu_extended;
  * qt_flush executes the buffer on the host and returns the last result. */
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
+/* Two pointers kept per task, for the library's own use (several programs
+ * may use a library at once; docs/multitasking.md). Freed with FreeVec when
+ * the task frees its last context: [1] must be AllocVec'd or NULL. */
+APTR *qt_taskData(void);
+/* Whether the task still runs (is ready or waiting). */
+struct Task;
+int qt_alive(struct Task *task);
 
 #include "gldefines.h"
 #include "gldeclarations.auto.h"

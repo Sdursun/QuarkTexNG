@@ -278,7 +278,15 @@ namespace ogles2 {
 	//
 	// The application's own source is kept for glGetShaderSource and
 	// GL_SHADER_SOURCE_LENGTH.
-	std::map<GLuint, std::string> sources;
+	// Keyed by the current host OpenGL context as well: shader names are its
+	// own, and several programs' contexts may each have a shader 1.
+#ifndef QT_TEST
+	uintptr_t currentGL() { return reinterpret_cast<uintptr_t>(wglGetCurrentContext()); }
+#else
+	uintptr_t currentGL() { return 0; }
+#endif
+	typedef std::pair<uintptr_t, GLuint> ShaderKey;
+	std::map<ShaderKey, std::string> sources;
 
 	std::string coreSource(const std::string& source, bool fragment) {
 		std::string out =
@@ -318,7 +326,7 @@ namespace ogles2 {
 		if (!source) return true;
 		GLint type = 0;
 		QT_GL3(GetShaderiv)(shader, 0x8B4F, &type); // GL_SHADER_TYPE
-		sources[shader] = source;
+		sources[ShaderKey(currentGL(), shader)] = source;
 		std::string core = coreSource(source, type == 0x8B30); // GL_FRAGMENT_SHADER
 		const char* text = core.c_str();
 		QT_GL3(ShaderSource)(shader, 1, &text, 0);
@@ -351,24 +359,12 @@ namespace ogles2 {
 		return true;
 	}
 
-	// The buffer currently bound to GL_ARRAY_BUFFER/GL_ELEMENT_ARRAY_BUFFER,
-	// so glBufferData knows which one gets the data; glVertexAttribPointer's
-	// and glDrawElements' own buffer names travel with each QT_OGLES2_DRAW
-	// instead (host/mgl.cpp's minigl.library keeps no state like this at all,
-	// since its arrays are never buffer-backed).
-	uint32_t arrayBuffer, elementArrayBuffer;
-
-	bool bindBuffer(const Command& c) {
-		uint32_t target = c.u(1), buffer = c.u(2);
-		if (target == GL_ARRAY_BUFFER) arrayBuffer = buffer;
-		else if (target == GL_ELEMENT_ARRAY_BUFFER) elementArrayBuffer = buffer;
-		return true;
-	}
-
+	// No bindings here: the 68k side keeps them per context and names the
+	// buffer in each command (docs/multitasking.md), so several programs'
+	// contexts never share one.
 	bool bufferData(const Command& c) {
-		uint32_t target = c.u(1), size = c.u(2);
+		uint32_t name = c.u(1), size = c.u(2);
 		const uint8_t* data = c.p(3);
-		uint32_t name = target == GL_ELEMENT_ARRAY_BUFFER ? elementArrayBuffer : arrayBuffer;
 		if (!name) return true;
 		std::vector<uint8_t>& buffer = buffers[name];
 		buffer.resize(size);
@@ -377,28 +373,26 @@ namespace ogles2 {
 		return true;
 	}
 
-	// The bound fake buffer of target, or 0.
-	std::vector<uint8_t>* boundBuffer(uint32_t target) {
-		uint32_t name = target == GL_ELEMENT_ARRAY_BUFFER ? elementArrayBuffer : arrayBuffer;
+	std::vector<uint8_t>* buffer(uint32_t name) {
 		std::map<uint32_t, std::vector<uint8_t>>::iterator it = buffers.find(name);
 		return name && it != buffers.end() ? &it->second : 0;
 	}
 
 	bool bufferSubData(const Command& c) {
-		std::vector<uint8_t>* buffer = boundBuffer(c.u(1));
+		std::vector<uint8_t>* b = buffer(c.u(1));
 		uint32_t offset = c.u(2), size = c.u(3);
 		const uint8_t* data = c.p(4);
-		if (!buffer || !data || offset > buffer->size() || size > buffer->size() - offset) return true;
-		if (size) memcpy(&(*buffer)[offset], data, size);
+		if (!b || !data || offset > b->size() || size > b->size() - offset) return true;
+		if (size) memcpy(&(*b)[offset], data, size);
 		return true;
 	}
 
 	bool readBuffer(const Command& c) {
-		std::vector<uint8_t>* buffer = boundBuffer(c.u(1));
+		std::vector<uint8_t>* b = buffer(c.u(1));
 		uint32_t offset = c.u(2), size = c.u(3);
 		uint8_t* out = c.p(4);
-		if (!buffer || !out || offset > buffer->size() || size > buffer->size() - offset) return true;
-		if (size) memcpy(out, &(*buffer)[offset], size);
+		if (!b || !out || offset > b->size() || size > b->size() - offset) return true;
+		if (size) memcpy(out, &(*b)[offset], size);
 		return true;
 	}
 
@@ -485,7 +479,7 @@ namespace ogles2 {
 		case QT_OGLES2_S_CreateShader: return static_cast<int32_t>(QT_GL3(CreateShader)(static_cast<GLenum>(w0)));
 		case QT_OGLES2_S_DeleteShader:
 			QT_GL3(DeleteShader)(static_cast<GLuint>(w0));
-			sources.erase(static_cast<GLuint>(w0));
+			sources.erase(ShaderKey(currentGL(), static_cast<GLuint>(w0)));
 			return 0;
 		case QT_OGLES2_S_CompileShader: QT_GL3(CompileShader)(static_cast<GLuint>(w0)); return 0;
 		case QT_OGLES2_S_AttachShader: QT_GL3(AttachShader)(static_cast<GLuint>(w0), static_cast<GLuint>(w1)); return 0;
@@ -542,7 +536,7 @@ namespace ogles2 {
 		uint8_t* out = c.p(4);
 		GLint value = 0;
 		if (c.u(1) == QT_OGLES2_G_Shader) {
-			std::map<GLuint, std::string>::const_iterator it = sources.find(id);
+			std::map<ShaderKey, std::string>::const_iterator it = sources.find(ShaderKey(currentGL(), id));
 			// The application's own source, not coreSource's.
 			if (pname == 0x8B88 && it != sources.end()) value = static_cast<GLint>(it->second.size() + 1); // GL_SHADER_SOURCE_LENGTH
 			else QT_GL3(GetShaderiv)(id, pname, &value);
@@ -564,7 +558,7 @@ namespace ogles2 {
 		if (textOut && bufSize > 0) {
 			if (c.u(1) == QT_OGLES2_G_Shader) QT_GL3(GetShaderInfoLog)(id, bufSize, &length, textOut);
 			else if (c.u(1) == QT_OGLES2_G_ShaderSource) {
-				std::map<GLuint, std::string>::const_iterator it = sources.find(id);
+				std::map<ShaderKey, std::string>::const_iterator it = sources.find(ShaderKey(currentGL(), id));
 				if (it != sources.end()) {
 					length = static_cast<GLsizei>(it->second.size() < static_cast<size_t>(bufSize - 1) ? it->second.size() : bufSize - 1);
 					memcpy(textOut, it->second.data(), length);
@@ -996,11 +990,10 @@ namespace ogles2 {
 			putWord(out, static_cast<uint32_t>(ints[0]));
 			break;
 		case QT_OGLES2_P_BufferParameteriv: {
-			uint32_t name = w0 == GL_ELEMENT_ARRAY_BUFFER ? elementArrayBuffer : arrayBuffer;
-			std::vector<uint8_t>* buffer = boundBuffer(w0);
+			std::vector<uint8_t>* b = buffer(w0);
 			uint32_t value = 0;
-			if (w1 == 0x8764) value = buffer ? static_cast<uint32_t>(buffer->size()) : 0; // GL_BUFFER_SIZE
-			else if (w1 == 0x8765) value = usages.count(name) ? usages[name] : 0x88E4; // GL_BUFFER_USAGE, default GL_STATIC_DRAW
+			if (w1 == 0x8764) value = b ? static_cast<uint32_t>(b->size()) : 0; // GL_BUFFER_SIZE
+			else if (w1 == 0x8765) value = usages.count(w0) ? usages[w0] : 0x88E4; // GL_BUFFER_USAGE, default GL_STATIC_DRAW
 			putWord(out, value);
 			break;
 		}
@@ -1099,9 +1092,6 @@ bool qt_ogles2_decode(const Command& c, int32_t& result) {
 	case QT_OGLES2_DELETE_BUFFERS:
 		if (c.words != QT_OGLES2_DELETE_BUFFERS_WORDS) return false;
 		return ogles2::deleteBuffers(c);
-	case QT_OGLES2_BIND_BUFFER:
-		if (c.words != QT_OGLES2_BIND_BUFFER_WORDS) return false;
-		return ogles2::bindBuffer(c);
 	case QT_OGLES2_BUFFER_DATA:
 		if (c.words != QT_OGLES2_BUFFER_DATA_WORDS) return false;
 		return ogles2::bufferData(c);

@@ -199,7 +199,9 @@ void mgl_GLUDisk(GLUquadricObj *q, GLdouble inner, GLdouble outer, GLint slices,
 
 /* --- GLUT ----------------------------------------------------------------- */
 
-static struct {
+/* Per task (gl/gl.c's qt_taskData()[1]): GLUT is a program's own event
+ * loop, and several programs may run at once (docs/multitasking.md). */
+typedef struct {
 	GLcontext context; /* the window's (or game mode's) */
 	void (*display)(void);
 	void (*idle)(void);
@@ -211,12 +213,31 @@ static struct {
 	int initX, initY, initWidth, initHeight;
 	BOOL gameMode;
 	int gameWidth, gameHeight, gameDepth, gameRefresh;
-} glut = {NULL, NULL, NULL, NULL, NULL, FALSE, -1, -1, 0, -1, -1, 300, 300, FALSE, 0, 0, 0, 0};
+	struct timeval start; /* glutInit's time, for GLUT_ELAPSED_TIME */
+} Glut;
+
+static const Glut glutDefaults = {NULL, NULL, NULL, NULL, NULL, FALSE, -1, -1, 0, -1, -1, 300, 300, FALSE, 0, 0, 0, 0};
+
+/* The calling task's GLUT state, made on first use (freed by gl/gl.c with
+ * the task's last context); a scratch one if there is no memory. */
+static Glut *glutState(void) {
+	static Glut scratch;
+	APTR *data = qt_taskData();
+	if (!data[1] && (data[1] = AllocVec(sizeof(Glut), MEMF_ANY))) *(Glut *) data[1] = glutDefaults;
+	if (!data[1]) {
+		scratch = glutDefaults;
+		return &scratch;
+	}
+	return (Glut *) data[1];
+}
+
+#define glut (*glutState())
 
 void mgl_glutForget(GLcontext context) {
-	if (glut.context == context) {
-		glut.context = NULL;
-		glut.gameMode = FALSE;
+	Glut *g = (Glut *) qt_taskData()[1]; /* none made if the task has none */
+	if (g && g->context == context) {
+		g->context = NULL;
+		g->gameMode = FALSE;
 	}
 }
 
@@ -224,7 +245,6 @@ void mgl_glutForget(GLcontext context) {
 
 struct Device *TimerBase;
 static struct timerequest timer;
-static struct timeval start;
 
 static void readClock(struct timeval *now) {
 	if (!TimerBase && !OpenDevice((STRPTR) TIMERNAME, UNIT_MICROHZ, (struct IORequest *) &timer, 0)) {
@@ -242,11 +262,12 @@ void mgl_gluExit(void) {
 static int elapsed(void) {
 	struct timeval now;
 	readClock(&now);
-	return (int) ((now.tv_secs - start.tv_secs) * 1000 + ((LONG) now.tv_micro - (LONG) start.tv_micro) / 1000);
+	struct timeval *start = &glut.start;
+	return (int) ((now.tv_secs - start->tv_secs) * 1000 + ((LONG) now.tv_micro - (LONG) start->tv_micro) / 1000);
 }
 
 void mgl_GLUTInit(int *argcp, char **argv) {
-	readClock(&start);
+	readClock(&glut.start);
 }
 
 void mgl_GLUTInitDisplayMode(unsigned int mode) { glut.displayMode = mode; }

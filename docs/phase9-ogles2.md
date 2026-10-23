@@ -261,11 +261,8 @@ Verification:
   project's test machine (Intel Iris Xe).
 - `boingocean` now runs at about 1800 fps, up from 660.
 
-**Known limit:** only one program at a time. The command buffer and the
-selected host context are global in `gl/gl.c`, shared by every QuarkTex
-library (Warp3D, agl and minigl have the same limit). ogles2.library's
-68k-side vertex attribute and buffer binding state is global too. Two
-ogles2 programs running at once draw into each other's windows.
+**Several programs at once:** this was a limit of stage 3 and of every
+QuarkTex library; fixed afterwards, see docs/multitasking.md.
 
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 

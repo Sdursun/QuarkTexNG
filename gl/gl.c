@@ -1,5 +1,6 @@
 #include "gl.h"
 #include <exec/memory.h>
+#include <exec/execbase.h>
 #include <proto/exec.h>
 #include <inline/macros.h>
 /* gl.c opens graphics.library and Picasso96 itself, under names of its own,
@@ -26,7 +27,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 10
+#define QT_PROTOCOL_VERSION 11
 
 #define QT_BUFFER_BYTES (256 * 1024)
 
@@ -96,26 +97,132 @@ static void openHost(void) {
 
 /* --- Command buffer ------------------------------------------------------ */
 
-static ULONG *qt_buffer;
-static ULONG qt_used;
+/*
+ * One command buffer and selected host context per task: a library is shared
+ * by every program that opens it, and a program can lose the CPU between
+ * qt_reserve and qt_flush, so with one buffer two programs' commands would
+ * mix, and go to whichever context was selected last (docs/multitasking.md).
+ * A task's slot is made when it first sends a command or asks for its
+ * qt_taskData, and given back when it frees its last context; a slot whose
+ * task has gone without doing so is taken back when the table is full.
+ *
+ * Only the task itself uses its slot, so nothing here needs a lock but the
+ * table's own changes (Forbid). The host executes a buffer within one 68k
+ * instruction, so a host call is never interrupted by another task's.
+ */
+#define QT_SLOTS 32
+
+typedef struct {
+	struct Task *task;  /* NULL: free */
+	ULONG *buffer;      /* NULL until the first command, or if AllocVec failed */
+	ULONG used;
+	ULONG context;      /* host id of the context the buffer is for, 0 = none */
+	ULONG contexts;     /* host contexts the task made and has not freed */
+	APTR data[2];       /* qt_taskData */
+} QtSlot;
+
+static QtSlot qt_slots[QT_SLOTS];
+static QtSlot *qt_last = &qt_slots[0]; /* the slot used last, checked first */
+static ULONG qt_lastContext; /* a new task's context: the one selected last by any */
 static ULONG qt_scratch[32]; /* takes the commands while there is no buffer */
-static ULONG qt_context; /* host id of the context the buffer is for, 0 = none */
+
+static void qt_release(QtSlot *s) {
+	if (s->buffer) FreeVec(s->buffer);
+	if (s->data[1]) FreeVec(s->data[1]);
+	s->buffer = NULL;
+	s->data[0] = s->data[1] = NULL;
+	s->used = s->context = s->contexts = 0;
+	s->task = NULL;
+}
+
+static int qt_inList(struct List *list, struct Task *task) {
+	struct Node *n;
+	for (n = list->lh_Head; n->ln_Succ; n = n->ln_Succ) if ((struct Task *) n == task) return 1;
+	return 0;
+}
+
+int qt_alive(struct Task *task) {
+	int alive;
+	if (task == SysBase->ThisTask) return 1;
+	Disable();
+	alive = qt_inList(&SysBase->TaskReady, task) || qt_inList(&SysBase->TaskWait, task);
+	Enable();
+	return alive;
+}
+
+/* Gives back the slots of tasks that have ended (called with the table full,
+ * under Forbid). Their buffered commands are dropped: whatever context they
+ * were for has no program left drawing into it. */
+static void qt_reclaim(void) {
+	int i;
+	for (i = 0; i < QT_SLOTS; ++i) {
+		struct Task *t = qt_slots[i].task;
+		if (t && !qt_alive(t)) qt_release(&qt_slots[i]);
+	}
+}
+
+/* The calling task's slot, made if it has none; NULL if the table is full of
+ * live tasks. */
+static QtSlot *qt_slot(void) {
+	struct Task *me = SysBase->ThisTask;
+	QtSlot *s = qt_last, *found = NULL;
+	int i, pass;
+	if (s->task == me) return s;
+	Forbid();
+	for (i = 0; i < QT_SLOTS && !found; ++i) if (qt_slots[i].task == me) found = &qt_slots[i];
+	for (pass = 0; pass < 2 && !found; ++pass) {
+		if (pass) qt_reclaim();
+		for (i = 0; i < QT_SLOTS && !found; ++i) {
+			if (!qt_slots[i].task) {
+				found = &qt_slots[i];
+				found->task = me;
+				found->context = qt_lastContext;
+			}
+		}
+	}
+	Permit();
+	if (found) qt_last = found;
+	return found;
+}
+
+/* The slot's command buffer, allocated on first use: a task that only asks
+ * for its qt_taskData needs none. */
+static ULONG *qt_buffer(QtSlot *s) {
+	if (!s->buffer && qt_execute) s->buffer = AllocVec(QT_BUFFER_BYTES, MEMF_ANY);
+	return s->buffer;
+}
+
+APTR *qt_taskData(void) {
+	static APTR none[2];
+	QtSlot *s = qt_slot();
+	return s ? s->data : none;
+}
 
 /* Executes the buffered commands; returns the result of the last one. */
 ULONG qt_flush(void) {
-	ULONG bytes = qt_used * 4;
-	qt_used = 0;
-	if (!bytes || !qt_buffer) return 0;
-	return hostCall(qt_execute, bytes, qt_context, 0, 0, 0, (ULONG) qt_buffer);
+	QtSlot *s = qt_slot();
+	ULONG bytes;
+	if (!s) return 0;
+	bytes = s->used * 4;
+	s->used = 0;
+	if (!bytes || !s->buffer) return 0;
+	return hostCall(qt_execute, bytes, s->context, 0, 0, 0, (ULONG) s->buffer);
 }
 
 ULONG *qt_reserve(ULONG words) {
+	QtSlot *s = qt_slot();
 	ULONG *w;
-	if (!qt_buffer) return qt_scratch;
-	if (qt_used + words > QT_BUFFER_BYTES / 4) qt_flush();
-	w = qt_buffer + qt_used;
-	qt_used += words;
+	if (!s || !qt_buffer(s)) return qt_scratch;
+	if (s->used + words > QT_BUFFER_BYTES / 4) qt_flush();
+	w = s->buffer + s->used;
+	s->used += words;
 	return w;
+}
+
+/* The calling task's selected host context. */
+static ULONG qt_context(void) {
+	QtSlot *s = qt_slot();
+	return s ? s->context : 0;
 }
 
 static inline ULONG qt_f2l(float f) {
@@ -159,8 +266,6 @@ static int fpuExtended(void) {
 
 void glInit(void) {
 	openHost();
-	if (qt_execute) qt_buffer = AllocVec(QT_BUFFER_BYTES, MEMF_ANY);
-	qt_used = 0;
 	qt_GfxBase = (struct qt_GfxBase *) OpenLibrary("graphics.library", 39);
 	qt_P96Base = OpenLibrary("Picasso96API.library", 2);
 	qt_fpu_extended = fpuExtended();
@@ -171,11 +276,12 @@ void glInit(void) {
 }
 
 void glExit(void) {
+	int i;
 	qt_flush();
-	if (qt_buffer) FreeVec(qt_buffer);
+	for (i = 0; i < QT_SLOTS; ++i) if (qt_slots[i].task) qt_release(&qt_slots[i]);
+	qt_lastContext = 0;
 	if (qt_host) uni_close_library(qt_host);
 	if (qt_UniBase) CloseLibrary(qt_UniBase);
-	qt_buffer = NULL;
 	qt_host = qt_execute = qt_create = qt_move = qt_free = qt_swap = qt_log = qt_finish = 0;
 	qt_UniBase = NULL;
 	if (qt_P96Base) CloseLibrary(qt_P96Base);
@@ -185,33 +291,53 @@ void glExit(void) {
 }
 
 ULONG createContext(int left, int top, int width, int height, int flags) {
+	QtSlot *s = qt_slot();
 	ULONG id;
-	if (!qt_buffer || !qt_create) return 0;
+	if (!s || !qt_buffer(s) || !qt_create) return 0;
 	id = hostCall(qt_create, left, top, width, height, flags, 0);
-	if (id) selectContext(id);
+	if (id) {
+		++s->contexts;
+		selectContext(id);
+	}
 	return id;
 }
 
 void selectContext(ULONG id) {
-	if (id == qt_context) return;
+	QtSlot *s = qt_slot();
+	if (!s) return;
+	qt_lastContext = id;
+	if (id == s->context) return;
 	qt_flush();
-	qt_context = id;
+	s->context = id;
 }
 
 void moveWindow(int left, int top, int width, int height) {
 	qt_flush();
-	hostCall(qt_move, left, top, width, height, qt_context, 0);
+	hostCall(qt_move, left, top, width, height, qt_context(), 0);
 }
 
+/* The task's slot goes when its last context does (a context freed by
+ * another task than the one that made it counts against that one). */
 void freeContext(void) {
+	QtSlot *s = qt_slot();
+	ULONG id = qt_context();
 	qt_flush();
-	hostCall(qt_free, qt_context, 0, 0, 0, 0, 0);
-	qt_context = 0;
+	hostCall(qt_free, id, 0, 0, 0, 0, 0);
+	if (qt_lastContext == id) qt_lastContext = 0;
+	if (!s) return;
+	s->context = 0;
+	if (s->contexts) --s->contexts;
+	if (!s->contexts) {
+		Forbid();
+		if (qt_last == s) qt_last = &qt_slots[0];
+		qt_release(s);
+		Permit();
+	}
 }
 
 void swapBuffersTo(const QtTarget *target) {
 	qt_flush();
-	hostCall(qt_swap, qt_context, 0, 0, 0, 0, (ULONG) target);
+	hostCall(qt_swap, qt_context(), 0, 0, 0, 0, (ULONG) target);
 }
 
 /* --- Presenting into Amiga display memory (QT_CONTEXT_OFFSCREEN) --------- */
@@ -252,12 +378,12 @@ void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top
 
 void swapBuffers(void) {
 	qt_flush();
-	hostCall(qt_swap, qt_context, 0, 0, 0, 0, 0);
+	hostCall(qt_swap, qt_context(), 0, 0, 0, 0, 0);
 }
 
 void finishFrame(void) {
 	qt_flush();
-	hostCall(qt_finish, qt_context, 0, 0, 0, 0, 0);
+	hostCall(qt_finish, qt_context(), 0, 0, 0, 0, 0);
 }
 
 /* c is an Amiga address. */

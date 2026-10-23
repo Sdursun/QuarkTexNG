@@ -1,4 +1,47 @@
 #include "../gl/gl.h"
+#include <exec/memory.h>
+#include <proto/exec.h>
+
+/*
+ * The arrays' pointers and formats, read on the 68k side for glArrayElement
+ * and the like: per task (gl/gl.c's qt_taskData()[1]), as several programs
+ * may use the library at once (docs/multitasking.md). Whether each array is
+ * enabled lives in the host's context.
+ */
+typedef struct {
+	GLint vertexSize;
+	GLenum vertexType;
+	GLsizei vertexStride;
+	GLvoid *vertexPtr;
+	GLenum normalType;
+	GLsizei normalStride;
+	GLvoid *normalPtr;
+	GLint colorSize;
+	GLenum colorType;
+	GLsizei colorStride;
+	GLvoid *colorPtr;
+	GLenum indexType;
+	GLsizei indexStride;
+	GLvoid *indexPtr;
+	GLint texCoordSize;
+	GLenum texCoordType;
+	GLsizei texCoordStride;
+	GLvoid *texCoordPtr;
+	GLsizei edgeFlagStride;
+	GLboolean *edgeFlagPtr;
+} Arrays;
+
+/* The calling task's arrays, made on first use (freed by gl/gl.c with the
+ * task's last context); a scratch set if there is no memory. Not static:
+ * the inline element functions below use it. */
+Arrays *qt_aglArrays(void) {
+	static Arrays scratch;
+	APTR *data = qt_taskData();
+	if (!data[1]) data[1] = AllocVec(sizeof(Arrays), MEMF_ANY | MEMF_CLEAR);
+	return data[1] ? (Arrays *) data[1] : &scratch;
+}
+
+#define A (qt_aglArrays())
 
 /* Stride 0 means tightly packed elements of size components. 0.53 stepped by
  * 0 then and repeated the first element. */
@@ -14,17 +57,13 @@ static GLsizei packedStride(GLsizei stride, GLint size, GLenum type) {
 	return size * bytes;
 }
 
-GLint vertexSize;
-GLenum vertexType;
-GLsizei vertexStride;
-GLvoid *vertexPtr = NULL;
 
 void glVertexPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei stride __asm("d2"), GLvoid *ptr __asm("a0")) {
 	LOG;
-	vertexSize = size;
-	vertexType = type;
-	vertexStride = packedStride(stride, size, type);
-	vertexPtr = ptr;
+	A->vertexSize = size;
+	A->vertexType = type;
+	A->vertexStride = packedStride(stride, size, type);
+	A->vertexPtr = ptr;
 	_glVertexPointer(size, type, stride, memoffset + (long) ptr);
 }
 
@@ -33,34 +72,34 @@ inline void vertex(int i) {
 	GLint *ip = NULL;
 	GLfloat *fp = NULL;
 	GLdouble *dp = NULL;
-	switch (vertexType) {
+	switch (A->vertexType) {
 	case GL_SHORT:
-		sp = (GLshort*) (vertexPtr + i * vertexStride);
-		switch (vertexSize) {
+		sp = (GLshort*) (A->vertexPtr + i * A->vertexStride);
+		switch (A->vertexSize) {
 		case 2: _glVertex2s(sp[0], sp[1]); break;
 		case 3: _glVertex3s(sp[0], sp[1], sp[2]); break;
 		case 4: _glVertex4s(sp[0], sp[1], sp[2], sp[3]); break;
 		}
 		break;
 	case GL_INT:
-		ip = (GLint*) (vertexPtr + i * vertexStride);
-		switch (vertexSize) {
+		ip = (GLint*) (A->vertexPtr + i * A->vertexStride);
+		switch (A->vertexSize) {
 		case 2: _glVertex2i(ip[0], ip[1]); break;
 		case 3: _glVertex3i(ip[0], ip[1], ip[2]); break;
 		case 4: _glVertex4i(ip[0], ip[1], ip[2], ip[3]); break;
 		}
 		break;
 	case GL_FLOAT:
-		fp = (GLfloat*) (vertexPtr + i * vertexStride);
-		switch (vertexSize) {
+		fp = (GLfloat*) (A->vertexPtr + i * A->vertexStride);
+		switch (A->vertexSize) {
 		case 2: _glVertex2f(fp[0], fp[1]); break;
 		case 3: _glVertex3f(fp[0], fp[1], fp[2]); break;
 		case 4: _glVertex4f(fp[0], fp[1], fp[2], fp[3]); break;
 		}
 		break;
 	case GL_DOUBLE:
-		dp = (GLdouble*) (vertexPtr + i * vertexStride);
-		switch (vertexSize) {
+		dp = (GLdouble*) (A->vertexPtr + i * A->vertexStride);
+		switch (A->vertexSize) {
 		case 2: _glVertex2d(dp[0], dp[1]); break;
 		case 3: _glVertex3d(dp[0], dp[1], dp[2]); break;
 		case 4: _glVertex4d(dp[0], dp[1], dp[2], dp[3]); break;
@@ -69,15 +108,12 @@ inline void vertex(int i) {
 	}
 }
 
-GLenum normalType;
-GLsizei normalStride;
-GLvoid *normalPtr = NULL;
 
 void glNormalPointer(GLenum type __asm("d0"), GLsizei stride __asm("d1"), GLvoid *ptr __asm("a0")) {
 	LOG;
-	normalType = type;
-	normalStride = packedStride(stride, 3, type);
-	normalPtr = ptr;
+	A->normalType = type;
+	A->normalStride = packedStride(stride, 3, type);
+	A->normalPtr = ptr;
 	_glNormalPointer(type, stride, memoffset + (long) ptr);
 }
 
@@ -87,41 +123,37 @@ inline void normal(int i) {
 	GLint *ip = NULL;
 	GLfloat *fp = NULL;
 	GLdouble *dp = NULL;
-	switch (normalType) {
+	switch (A->normalType) {
 	case GL_BYTE:
-		bp = (GLbyte*) (normalPtr + i * normalStride);
+		bp = (GLbyte*) (A->normalPtr + i * A->normalStride);
 		_glNormal3b(bp[0], bp[1], bp[2]);
 		break;
 	case GL_SHORT:
-		sp = (GLshort*) (normalPtr + i * normalStride);
+		sp = (GLshort*) (A->normalPtr + i * A->normalStride);
 		_glNormal3s(sp[0], sp[1], sp[2]);
 		break;
 	case GL_INT:
-		ip = (GLint*) (normalPtr + i * normalStride);
+		ip = (GLint*) (A->normalPtr + i * A->normalStride);
 		_glNormal3i(ip[0], ip[1], ip[2]);
 		break;
 	case GL_FLOAT:
-		fp = (GLfloat*) (normalPtr + i * normalStride);
+		fp = (GLfloat*) (A->normalPtr + i * A->normalStride);
 		_glNormal3f(fp[0], fp[1], fp[2]);
 		break;
 	case GL_DOUBLE:
-		dp = (GLdouble*) (normalPtr + i * normalStride);
+		dp = (GLdouble*) (A->normalPtr + i * A->normalStride);
 		_glNormal3d(dp[0], dp[1], dp[2]);
 		break;
 	}
 }
 
-GLint colorSize;
-GLenum colorType;
-GLsizei colorStride;
-GLvoid *colorPtr = NULL;
 
 void glColorPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei stride __asm("d2"), GLvoid *ptr __asm("a0")) {
 	LOG;
-	colorSize = size;
-	colorType = type;
-	colorStride = packedStride(stride, size, type);
-	colorPtr = ptr;
+	A->colorSize = size;
+	A->colorType = type;
+	A->colorStride = packedStride(stride, size, type);
+	A->colorPtr = ptr;
 	_glColorPointer(size, type, stride, memoffset + (long) ptr);
 }
 
@@ -135,59 +167,59 @@ inline void color(int i) {
 	GLuint *uip = NULL;
 	GLfloat *fp = NULL;
 	GLdouble *dp = NULL;
-	switch (colorType) {
+	switch (A->colorType) {
 	case GL_BYTE:
-		bp = (GLbyte*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		bp = (GLbyte*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3b(bp[0], bp[1], bp[2]); break;
 		case 4: _glColor4b(bp[0], bp[1], bp[2], bp[3]); break;
 		}
 		break;
 	case GL_UNSIGNED_BYTE:
-		ubp = (GLubyte*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		ubp = (GLubyte*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3ub(ubp[0], ubp[1], ubp[2]); break;
 		case 4: _glColor4ub(ubp[0], ubp[1], ubp[2], ubp[3]); break;
 		}
 		break;
 	case GL_SHORT:
-		sp = (GLshort*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		sp = (GLshort*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3s(sp[0], sp[1], sp[2]); break;
 		case 4: _glColor4s(sp[0], sp[1], sp[2], sp[3]); break;
 		}
 		break;
 	case GL_UNSIGNED_SHORT:
-		usp = (GLushort*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		usp = (GLushort*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3us(usp[0], usp[1], usp[2]); break;
 		case 4: _glColor4us(usp[0], usp[1], usp[2], usp[3]); break;
 		}
 		break;
 	case GL_INT:
-		ip = (GLint*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		ip = (GLint*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3i(ip[0], ip[1], ip[2]); break;
 		case 4: _glColor4i(ip[0], ip[1], ip[2], ip[3]); break;
 		}
 		break;
 	case GL_UNSIGNED_INT:
-		uip = (GLuint*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		uip = (GLuint*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3ui(uip[0], uip[1], uip[2]); break;
 		case 4: _glColor4ui(uip[0], uip[1], uip[2], uip[3]); break;
 		}
 		break;
 	case GL_FLOAT:
-		fp = (GLfloat*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		fp = (GLfloat*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3f(fp[0], fp[1], fp[2]); break;
 		case 4: _glColor4f(fp[0], fp[1], fp[2], fp[3]); break;
 		}
 		break;
 	case GL_DOUBLE:
-		dp = (GLdouble*) (colorPtr + i * colorStride);
-		switch (colorSize) {
+		dp = (GLdouble*) (A->colorPtr + i * A->colorStride);
+		switch (A->colorSize) {
 		case 3: _glColor3d(dp[0], dp[1], dp[2]); break;
 		case 4: _glColor4d(dp[0], dp[1], dp[2], dp[3]); break;
 		}
@@ -195,15 +227,12 @@ inline void color(int i) {
 	}
 }
 
-GLenum indexType;
-GLsizei indexStride;
-GLvoid *indexPtr = NULL;
 
 void glIndexPointer(GLenum type __asm("d0"), GLsizei stride __asm("d1"), GLvoid *ptr __asm("a0")) {
 	LOG;
-	indexType = type;
-	indexStride = packedStride(stride, 1, type);
-	indexPtr = ptr;
+	A->indexType = type;
+	A->indexStride = packedStride(stride, 1, type);
+	A->indexPtr = ptr;
 	_glIndexPointer(type, stride, memoffset + (long) ptr);
 }
 
@@ -213,41 +242,37 @@ inline void index(int i) {
 	GLint *ip = NULL;
 	GLfloat *fp = NULL;
 	GLdouble *dp = NULL;
-	switch (indexType) {
+	switch (A->indexType) {
 	case GL_UNSIGNED_BYTE:
-		ubp = (GLubyte*) (indexPtr + i * indexStride);
+		ubp = (GLubyte*) (A->indexPtr + i * A->indexStride);
 		_glIndexub(bp[0]);
 		break;
 	case GL_SHORT:
-		sp = (GLshort*) (indexPtr + i * indexStride);
+		sp = (GLshort*) (A->indexPtr + i * A->indexStride);
 		_glIndexs(sp[0]);
 		break;
 	case GL_INT:
-		ip = (GLint*) (indexPtr + i * indexStride);
+		ip = (GLint*) (A->indexPtr + i * A->indexStride);
 		_glIndexi(ip[0]);
 		break;
 	case GL_FLOAT:
-		fp = (GLfloat*) (indexPtr + i * indexStride);
+		fp = (GLfloat*) (A->indexPtr + i * A->indexStride);
 		_glIndexf(fp[0]);
 		break;
 	case GL_DOUBLE:
-		dp = (GLdouble*) (indexPtr + i * indexStride);
+		dp = (GLdouble*) (A->indexPtr + i * A->indexStride);
 		_glIndexd(dp[0]);
 		break;
 	}
 }
 
-GLint texCoordSize;
-GLenum texCoordType;
-GLsizei texCoordStride;
-GLvoid *texCoordPtr = NULL;
 
 void glTexCoordPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei stride __asm("d2"), GLvoid *ptr __asm("a0")) {
 	LOG;
-	texCoordSize = size;
-	texCoordType = type;
-	texCoordStride = packedStride(stride, size, type);
-	texCoordPtr = ptr;
+	A->texCoordSize = size;
+	A->texCoordType = type;
+	A->texCoordStride = packedStride(stride, size, type);
+	A->texCoordPtr = ptr;
 	_glTexCoordPointer(size, type, stride, memoffset + (long) ptr);
 }
 
@@ -256,10 +281,10 @@ inline void texCoord(int i) {
 	GLint *ip = NULL;
 	GLfloat *fp = NULL;
 	GLdouble *dp = NULL;
-	switch (texCoordType) {
+	switch (A->texCoordType) {
 	case GL_SHORT:
-		sp = (GLshort*) (texCoordPtr + i * texCoordStride);
-		switch (texCoordSize) {
+		sp = (GLshort*) (A->texCoordPtr + i * A->texCoordStride);
+		switch (A->texCoordSize) {
 		case 1: _glTexCoord1s(sp[0]); break;
 		case 2: _glTexCoord2s(sp[0], sp[1]); break;
 		case 3: _glTexCoord3s(sp[0], sp[1], sp[2]); break;
@@ -267,8 +292,8 @@ inline void texCoord(int i) {
 		}
 		break;
 	case GL_INT:
-		ip = (GLint*) (texCoordPtr + i * texCoordStride);
-		switch (texCoordSize) {
+		ip = (GLint*) (A->texCoordPtr + i * A->texCoordStride);
+		switch (A->texCoordSize) {
 		case 1: _glTexCoord1i(ip[0]); break;
 		case 2: _glTexCoord2i(ip[0], ip[1]); break;
 		case 3: _glTexCoord3i(ip[0], ip[1], ip[2]); break;
@@ -276,8 +301,8 @@ inline void texCoord(int i) {
 		}
 		break;
 	case GL_FLOAT:
-		fp = (GLfloat*) (texCoordPtr + i * texCoordStride);
-		switch (texCoordSize) {
+		fp = (GLfloat*) (A->texCoordPtr + i * A->texCoordStride);
+		switch (A->texCoordSize) {
 		case 1: _glTexCoord1f(fp[0]); break;
 		case 2: _glTexCoord2f(fp[0], fp[1]); break;
 		case 3: _glTexCoord3f(fp[0], fp[1], fp[2]); break;
@@ -285,8 +310,8 @@ inline void texCoord(int i) {
 		}
 		break;
 	case GL_DOUBLE:
-		dp = (GLdouble*) (texCoordPtr + i * texCoordStride);
-		switch (texCoordSize) {
+		dp = (GLdouble*) (A->texCoordPtr + i * A->texCoordStride);
+		switch (A->texCoordSize) {
 		case 1: _glTexCoord1d(dp[0]); break;
 		case 2: _glTexCoord2d(dp[0], dp[1]); break;
 		case 3: _glTexCoord3d(dp[0], dp[1], dp[2]); break;
@@ -296,17 +321,15 @@ inline void texCoord(int i) {
 	}
 }
 
-GLsizei edgeFlagStride;
-GLboolean *edgeFlagPtr = NULL;
 void glEdgeFlagPointer(GLsizei stride __asm("d0"), GLboolean *ptr __asm("a0")) {
 	LOG;
-	edgeFlagStride = stride ? stride : (GLsizei) sizeof(GLboolean);
-	edgeFlagPtr = ptr;
+	A->edgeFlagStride = stride ? stride : (GLsizei) sizeof(GLboolean);
+	A->edgeFlagPtr = ptr;
 	_glEdgeFlagPointer(stride, memoffset + (long) ptr);
 }
 
 inline void edgeFlag(int i) {
-	GLboolean *bp = (GLboolean*) (edgeFlagPtr + i * edgeFlagStride);
+	GLboolean *bp = (GLboolean*) (A->edgeFlagPtr + i * A->edgeFlagStride);
 	_glEdgeFlag(bp[0]);
 }
 

@@ -46,8 +46,35 @@ void logString(char *c);
 extern int qt_fpu_extended; /* as in gl/gl.h */
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
+/* Two pointers kept per task (gl/gl.c): [1] is its GLUT state (glu.c). */
+APTR *qt_taskData(void);
+/* Whether the task still runs (is ready or waiting). */
+struct Task;
+int qt_alive(struct Task *task);
 #define QT_CONTEXT_PLAIN 2 /* as in gl/gl.h */
 #define QT_CONTEXT_OFFSCREEN 4
+
+/* A client-side vertex array (glfuncs.c). */
+typedef struct {
+	BOOL enabled;
+	int size;
+	unsigned int type; /* OpenGL's */
+	int stride;        /* in bytes, never 0 */
+	const UBYTE *pointer;
+} QtMglArray;
+
+/* The state glfuncs.c keeps on the 68k side: per context, as several
+ * programs may use the library at once (docs/multitasking.md). Texture
+ * coordinates per unit; glTexCoordPointer and the client state of
+ * GL_TEXTURE_COORD_ARRAY go to the unit glClientActiveTextureARB chose. */
+typedef struct {
+	QtMglArray vertices, colors, texCoords[QT_MGL_TEXTURE_UNITS], normals;
+	int clientUnit;
+	GLboolean sharedPalette; /* GL_SHARED_TEXTURE_PALETTE_EXT */
+	int unpackAlignment;     /* for colour index images, expanded on the 68k */
+	UBYTE palette[256][4];   /* glColorTable's */
+	BOOL paletteAlpha;
+} QtMglClient;
 
 /* A context. MiniGL's GLcontext is opaque to applications: they only pass
  * it back, so ours is a different structure. */
@@ -67,11 +94,16 @@ typedef struct QtMglContext {
 	MouseHandlerFn mouse;
 	SpecialHandlerFn special;
 	UWORD *emptyPointer;     /* MGLClearPointer, chip memory */
+	QtMglClient client;
 } QtMglContext;
 
 #define QT_MGL(context) ((QtMglContext *) (context))
 
-extern GLcontext mgl_current;
+/* The calling program's current context: the variable its copy of the
+ * dispatch table points to (lib.c), which MiniGL 29's applications read and
+ * write themselves (MGLD_CTX). */
+GLcontext *mgl_currentFor(void);
+#define mgl_current (*mgl_currentFor())
 
 /* lib.c: an entry the library does not implement yet, and a call with a
  * constant MiniGL does not know, are logged. */
@@ -79,7 +111,7 @@ void mgl_missing(const char *name);
 void mgl_unknown(const char *name);
 
 /* glfuncs.c: the vertex arrays of the current context are reset. */
-void mgl_resetArrays(void);
+void mgl_resetArrays(GLcontext context);
 /* glfuncs.c: sine and cosine, square root (no maths library here). */
 void mgl_sinCos(double x, double *s, double *c);
 GLfloat mgl_squareRoot(GLfloat x);

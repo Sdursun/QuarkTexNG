@@ -199,16 +199,24 @@ void mgl_GLRotatefEXTs(GLcontext context, GLfloat sin_an, GLfloat cos_an, const 
 
 /* --- State ----------------------------------------------------------------- */
 
+/* The context's 68k-side state; a call with no context (none made current
+ * yet) gets a scratch one. */
+static QtMglClient noClient = {.unpackAlignment = 4};
+
+static QtMglClient *client(GLcontext context) {
+	if (!context) context = mgl_current;
+	return context ? &QT_MGL(context)->client : &noClient;
+}
+
 /* GL_SHARED_TEXTURE_PALETTE_EXT: the only palette is the shared one, applied
  * when a texture is loaded (see glColorTable), so the state is only kept. */
-static GLboolean sharedPalette;
 
 /* glEnable/glDisable go through MGLSetState. MiniGL's own capabilities
  * (MGL_PERSPECTIVE_MAPPING, MGL_Z_OFFSET, ...) have no OpenGL meaning. */
 void mgl_MGLSetState(GLcontext context, GLenum cap, GLboolean state) {
 	unsigned int gl = mgl_enum(cap);
 	if ((gl & QT_MGL_ONLY) == QT_MGL_ONLY) return;
-	if (gl == QGL_SHARED_TEXTURE_PALETTE_EXT) sharedPalette = state ? GL_TRUE : GL_FALSE;
+	if (gl == QGL_SHARED_TEXTURE_PALETTE_EXT) client(context)->sharedPalette = state ? GL_TRUE : GL_FALSE;
 	else if (state) _glEnable(gl);
 	else _glDisable(gl);
 }
@@ -216,7 +224,7 @@ void mgl_MGLSetState(GLcontext context, GLenum cap, GLboolean state) {
 GLboolean mgl_GLIsEnabled(GLcontext context, GLenum cap) {
 	unsigned int gl = mgl_enum(cap);
 	if ((gl & QT_MGL_ONLY) == QT_MGL_ONLY) return GL_FALSE;
-	if (gl == QGL_SHARED_TEXTURE_PALETTE_EXT) return sharedPalette;
+	if (gl == QGL_SHARED_TEXTURE_PALETTE_EXT) return client(context)->sharedPalette;
 	return _glIsEnabled(gl) ? GL_TRUE : GL_FALSE;
 }
 
@@ -251,12 +259,11 @@ void mgl_GLTexParameteri(GLcontext context, GLenum target, GLenum pname, GLint p
 
 /* The host's swap byte modes are the inverse of the application's (see
  * attach in context.c). */
-static int unpackAlignment = 4; /* for colour index images, expanded here */
 
 void mgl_GLPixelStorei(GLcontext context, GLenum pname, GLint param) {
 	unsigned int gl = mgl_enum(pname);
 	if (gl == QGL_UNPACK_SWAP_BYTES || gl == QGL_PACK_SWAP_BYTES) param = !param;
-	if (gl == QGL_UNPACK_ALIGNMENT && (param == 1 || param == 2 || param == 4 || param == 8)) unpackAlignment = param;
+	if (gl == QGL_UNPACK_ALIGNMENT && (param == 1 || param == 2 || param == 4 || param == 8)) client(context)->unpackAlignment = param;
 	_glPixelStorei(gl, param);
 }
 
@@ -456,10 +463,8 @@ const GLubyte *mgl_GLGetString(GLcontext context, GLenum name) {
  * and applied when a GL_COLOR_INDEX image is loaded, which is expanded here
  * into RGBA. Changing the palette does not change textures already loaded.
  */
-static UBYTE palette[256][4];
-static BOOL paletteAlpha;
-
 void mgl_GLColorTable(GLcontext context, GLenum target, GLenum internalformat, GLint width, GLenum format, GLenum type, GLvoid *data) {
+	QtMglClient *s = client(context);
 	unsigned int f = mgl_enum(format);
 	int components = f == QGL_RGBA ? 4 : f == QGL_RGB ? 3 : 0, i, k;
 	const UBYTE *p = (const UBYTE *) data;
@@ -469,23 +474,23 @@ void mgl_GLColorTable(GLcontext context, GLenum target, GLenum internalformat, G
 	}
 	if (width > 256) width = 256;
 	for (i = 0; i < width; ++i, p += components) {
-		for (k = 0; k < 3; ++k) palette[i][k] = p[k];
-		palette[i][3] = components == 4 ? p[3] : 255;
+		for (k = 0; k < 3; ++k) s->palette[i][k] = p[k];
+		s->palette[i][3] = components == 4 ? p[3] : 255;
 	}
-	paletteAlpha = components == 4;
+	s->paletteAlpha = components == 4;
 }
 
 /* A width x height image of colour indices (unsigned bytes, rows aligned to
  * the unpack alignment) as RGBA, in a buffer for FreeVec; NULL if there is
  * no memory. */
-static UBYTE *indicesToRgba(const UBYTE *indices, int width, int height) {
-	int row = (width + unpackAlignment - 1) & ~(unpackAlignment - 1), x, y;
+static UBYTE *indicesToRgba(const QtMglClient *s, const UBYTE *indices, int width, int height) {
+	int row = (width + s->unpackAlignment - 1) & ~(s->unpackAlignment - 1), x, y;
 	UBYTE *rgba = (UBYTE *) AllocVec(width * height * 4, MEMF_ANY), *d = rgba;
 	if (!rgba) return NULL;
 	for (y = 0; y < height; ++y) {
-		const UBYTE *s = indices + y * row;
+		const UBYTE *in = indices + y * row;
 		for (x = 0; x < width; ++x, d += 4) {
-			const UBYTE *c = palette[s[x]];
+			const UBYTE *c = s->palette[in[x]];
 			d[0] = c[0]; d[1] = c[1]; d[2] = c[2]; d[3] = c[3];
 		}
 	}
@@ -497,9 +502,10 @@ void mgl_GLTexImage2D(GLcontext context, GLenum target, GLint level, GLint inter
 		GLint border, GLenum format, GLenum type, const GLvoid *pixels) {
 	int components = internalformat >= 1 && internalformat <= 4 ? internalformat : (int) mgl_enum((unsigned int) internalformat);
 	if (mgl_enum(format) == QGL_COLOR_INDEX) {
-		UBYTE *rgba = pixels ? indicesToRgba((const UBYTE *) pixels, width, height) : NULL;
+		QtMglClient *s = client(context);
+		UBYTE *rgba = pixels ? indicesToRgba(s, (const UBYTE *) pixels, width, height) : NULL;
 		if (pixels && !rgba) return;
-		_glTexImage2D(mgl_enum(target), level, paletteAlpha ? QGL_RGBA : QGL_RGB, width, height, border, QGL_RGBA, QGL_UNSIGNED_BYTE, rgba);
+		_glTexImage2D(mgl_enum(target), level, s->paletteAlpha ? QGL_RGBA : QGL_RGB, width, height, border, QGL_RGBA, QGL_UNSIGNED_BYTE, rgba);
 		if (rgba) FreeVec(rgba);
 		return;
 	}
@@ -514,7 +520,7 @@ void mgl_GLTexSubImage2D(GLcontext context, GLenum target, GLint level, GLint xo
 		return;
 	}
 	if (f == QGL_COLOR_INDEX) {
-		UBYTE *rgba = pixels ? indicesToRgba((const UBYTE *) pixels, width, height) : NULL;
+		UBYTE *rgba = pixels ? indicesToRgba(client(context), (const UBYTE *) pixels, width, height) : NULL;
 		if (!rgba) return;
 		_glTexSubImage2D(t, level, xoffset, yoffset, width, height, QGL_RGBA, QGL_UNSIGNED_BYTE, rgba);
 		FreeVec(rgba);
@@ -563,19 +569,8 @@ GLboolean mgl_GLAreTexturesResident(GLcontext context, GLsizei n, const GLuint *
 
 /* --- Vertex arrays (read on the 68k) ----------------------------------------- */
 
-typedef struct {
-	BOOL enabled;
-	int size;
-	unsigned int type; /* OpenGL's */
-	int stride;        /* in bytes, never 0 */
-	const UBYTE *pointer;
-} Array;
-
-/* Texture coordinates per unit; glTexCoordPointer and the client state of
- * GL_TEXTURE_COORD_ARRAY go to the unit glClientActiveTextureARB chose.
- * Normals: MiniGL 29. */
-static Array vertices, colors, texCoords[QT_MGL_TEXTURE_UNITS], normals;
-static int clientUnit;
+/* The arrays are the context's (QtMglClient, mgl.h). Normals: MiniGL 29. */
+typedef QtMglArray Array;
 
 static int typeSize(unsigned int type) {
 	switch (type) {
@@ -593,51 +588,54 @@ static void setArray(Array *a, int size, GLenum type, GLsizei stride, const GLvo
 	a->pointer = (const UBYTE *) pointer;
 }
 
-void mgl_resetArrays(void) {
+void mgl_resetArrays(GLcontext context) {
+	QtMglClient *s = client(context);
 	int u;
-	vertices.enabled = colors.enabled = normals.enabled = FALSE;
-	for (u = 0; u < QT_MGL_TEXTURE_UNITS; ++u) texCoords[u].enabled = FALSE;
-	clientUnit = 0;
+	s->vertices.enabled = s->colors.enabled = s->normals.enabled = FALSE;
+	for (u = 0; u < QT_MGL_TEXTURE_UNITS; ++u) s->texCoords[u].enabled = FALSE;
+	s->clientUnit = 0;
+	s->unpackAlignment = 4;
 }
 
 void mgl_GLVertexPointer(GLcontext context, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer) {
-	setArray(&vertices, size, type, stride, pointer);
+	setArray(&client(context)->vertices, size, type, stride, pointer);
 }
 
 void mgl_GLColorPointer(GLcontext context, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer) {
-	setArray(&colors, size, type, stride, pointer);
+	setArray(&client(context)->colors, size, type, stride, pointer);
 }
 
 void mgl_GLTexCoordPointer(GLcontext context, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer) {
-	setArray(&texCoords[clientUnit], size, type, stride, pointer);
+	QtMglClient *s = client(context);
+	setArray(&s->texCoords[s->clientUnit], size, type, stride, pointer);
 }
 
 void mgl_GLNormalPointer(GLcontext context, GLenum type, GLsizei stride, const GLvoid *pointer) {
-	setArray(&normals, 3, type, stride, pointer);
+	setArray(&client(context)->normals, 3, type, stride, pointer);
 }
 
 void mgl_GLClientActiveTextureARB(GLcontext context, GLenum unit) {
 	unsigned int u = mgl_enum(unit) - QGL_TEXTURE0_ARB;
-	if (u < QT_MGL_TEXTURE_UNITS) clientUnit = u;
+	if (u < QT_MGL_TEXTURE_UNITS) client(context)->clientUnit = u;
 }
 
-static Array *clientArray(GLenum cap) {
+static Array *clientArray(QtMglClient *s, GLenum cap) {
 	switch (mgl_enum(cap)) {
-	case QGL_VERTEX_ARRAY: return &vertices;
-	case QGL_COLOR_ARRAY: return &colors;
-	case QGL_TEXTURE_COORD_ARRAY: return &texCoords[clientUnit];
-	case QGL_NORMAL_ARRAY: return &normals;
+	case QGL_VERTEX_ARRAY: return &s->vertices;
+	case QGL_COLOR_ARRAY: return &s->colors;
+	case QGL_TEXTURE_COORD_ARRAY: return &s->texCoords[s->clientUnit];
+	case QGL_NORMAL_ARRAY: return &s->normals;
 	}
 	return NULL;
 }
 
 void mgl_GLEnableClientState(GLcontext context, GLenum cap) {
-	Array *a = clientArray(cap);
+	Array *a = clientArray(client(context), cap);
 	if (a) a->enabled = TRUE;
 }
 
 void mgl_GLDisableClientState(GLcontext context, GLenum cap) {
-	Array *a = clientArray(cap);
+	Array *a = clientArray(client(context), cap);
 	if (a) a->enabled = FALSE;
 }
 
@@ -661,22 +659,24 @@ static const struct {
 void mgl_GLInterleavedArrays(GLcontext context, GLenum format, GLsizei stride, const GLvoid *pointer) {
 	unsigned int f = mgl_enum(format) - 0x2A20;
 	const UBYTE *p = (const UBYTE *) pointer;
+	QtMglClient *s = client(context);
+	Array *t = &s->texCoords[s->clientUnit];
 	if (f >= 14) {
 		mgl_unknown("GLInterleavedArrays");
 		return;
 	}
 	if (!stride) stride = interleaved[f].size;
-	setArray(&vertices, interleaved[f].vertices, QGL_FLOAT, stride, p + interleaved[f].vertexOffset);
-	vertices.enabled = TRUE;
-	colors.enabled = interleaved[f].colors != 0;
-	if (colors.enabled) {
-		setArray(&colors, interleaved[f].colors, interleaved[f].colorBytes ? QGL_UNSIGNED_BYTE : QGL_FLOAT, stride,
+	setArray(&s->vertices, interleaved[f].vertices, QGL_FLOAT, stride, p + interleaved[f].vertexOffset);
+	s->vertices.enabled = TRUE;
+	s->colors.enabled = interleaved[f].colors != 0;
+	if (s->colors.enabled) {
+		setArray(&s->colors, interleaved[f].colors, interleaved[f].colorBytes ? QGL_UNSIGNED_BYTE : QGL_FLOAT, stride,
 			p + interleaved[f].colorOffset);
 	}
-	texCoords[clientUnit].enabled = interleaved[f].texCoords != 0;
-	if (texCoords[clientUnit].enabled) setArray(&texCoords[clientUnit], interleaved[f].texCoords, QGL_FLOAT, stride, p);
-	normals.enabled = interleaved[f].normalOffset != NO_NORMAL;
-	if (normals.enabled) setArray(&normals, 3, QGL_FLOAT, stride, p + interleaved[f].normalOffset);
+	t->enabled = interleaved[f].texCoords != 0;
+	if (t->enabled) setArray(t, interleaved[f].texCoords, QGL_FLOAT, stride, p);
+	s->normals.enabled = interleaved[f].normalOffset != NO_NORMAL;
+	if (s->normals.enabled) setArray(&s->normals, 3, QGL_FLOAT, stride, p + interleaved[f].normalOffset);
 }
 
 /* Edge flags only matter to polygons drawn as lines or points, and colour
@@ -699,41 +699,42 @@ static GLfloat component(const Array *a, int i, int k) {
 	return 0;
 }
 
-static void element(int i) {
-	if (colors.enabled && colors.pointer) {
-		if (colors.type == QGL_UNSIGNED_BYTE) {
-			const UBYTE *p = colors.pointer + i * colors.stride;
-			if (colors.size == 3) _glColor3ub(p[0], p[1], p[2]);
+static void element(const QtMglClient *s, int i) {
+	const Array *colors = &s->colors, *normals = &s->normals, *vertices = &s->vertices;
+	if (colors->enabled && colors->pointer) {
+		if (colors->type == QGL_UNSIGNED_BYTE) {
+			const UBYTE *p = colors->pointer + i * colors->stride;
+			if (colors->size == 3) _glColor3ub(p[0], p[1], p[2]);
 			else _glColor4ub(p[0], p[1], p[2], p[3]);
 		}
-		else if (colors.size == 3) _glColor3f(component(&colors, i, 0), component(&colors, i, 1), component(&colors, i, 2));
-		else _glColor4f(component(&colors, i, 0), component(&colors, i, 1), component(&colors, i, 2), component(&colors, i, 3));
+		else if (colors->size == 3) _glColor3f(component(colors, i, 0), component(colors, i, 1), component(colors, i, 2));
+		else _glColor4f(component(colors, i, 0), component(colors, i, 1), component(colors, i, 2), component(colors, i, 3));
 	}
-	if (texCoords[0].enabled && texCoords[0].pointer) {
-		const Array *t = &texCoords[0];
+	if (s->texCoords[0].enabled && s->texCoords[0].pointer) {
+		const Array *t = &s->texCoords[0];
 		if (t->size == 4) _glTexCoord4f(component(t, i, 0), component(t, i, 1), component(t, i, 2), component(t, i, 3));
 		else _glTexCoord2f(component(t, i, 0), component(t, i, 1));
 	}
-	if (texCoords[1].enabled && texCoords[1].pointer) {
-		multiTexCoord(QGL_TEXTURE1_ARB, component(&texCoords[1], i, 0), component(&texCoords[1], i, 1));
+	if (s->texCoords[1].enabled && s->texCoords[1].pointer) {
+		multiTexCoord(QGL_TEXTURE1_ARB, component(&s->texCoords[1], i, 0), component(&s->texCoords[1], i, 1));
 	}
-	if (normals.enabled && normals.pointer) {
+	if (normals->enabled && normals->pointer) {
 		/* Integer normals map to -1..1. */
-		GLfloat scale = normals.type == QGL_BYTE ? 1 / 127.0f : normals.type == QGL_SHORT ? 1 / 32767.0f
-			: normals.type == QGL_INT ? 1 / 2147483647.0f : 1;
-		_glNormal3f(component(&normals, i, 0) * scale, component(&normals, i, 1) * scale, component(&normals, i, 2) * scale);
+		GLfloat scale = normals->type == QGL_BYTE ? 1 / 127.0f : normals->type == QGL_SHORT ? 1 / 32767.0f
+			: normals->type == QGL_INT ? 1 / 2147483647.0f : 1;
+		_glNormal3f(component(normals, i, 0) * scale, component(normals, i, 1) * scale, component(normals, i, 2) * scale);
 	}
-	if (vertices.enabled && vertices.pointer) {
-		if (vertices.size == 2) _glVertex2f(component(&vertices, i, 0), component(&vertices, i, 1));
-		else if (vertices.size == 4) {
-			_glVertex4f(component(&vertices, i, 0), component(&vertices, i, 1), component(&vertices, i, 2), component(&vertices, i, 3));
+	if (vertices->enabled && vertices->pointer) {
+		if (vertices->size == 2) _glVertex2f(component(vertices, i, 0), component(vertices, i, 1));
+		else if (vertices->size == 4) {
+			_glVertex4f(component(vertices, i, 0), component(vertices, i, 1), component(vertices, i, 2), component(vertices, i, 3));
 		}
-		else _glVertex3f(component(&vertices, i, 0), component(&vertices, i, 1), component(&vertices, i, 2));
+		else _glVertex3f(component(vertices, i, 0), component(vertices, i, 1), component(vertices, i, 2));
 	}
 }
 
 void mgl_GLArrayElement(GLcontext context, GLint i) {
-	element(i);
+	element(client(context), i);
 }
 
 /* glDrawArrays and glDrawElements: the host reads the arrays from Amiga
@@ -748,9 +749,9 @@ static ULONG *arrayWords(ULONG *w, const Array *a) {
 	return w + 5;
 }
 
-static void drawHost(GLenum mode, GLint first, GLsizei count, unsigned int indexType, const GLvoid *indices) {
+static void drawHost(const QtMglClient *s, GLenum mode, GLint first, GLsizei count, unsigned int indexType, const GLvoid *indices) {
 	ULONG *w;
-	if (count <= 0 || !vertices.enabled || !vertices.pointer) return;
+	if (count <= 0 || !s->vertices.enabled || !s->vertices.pointer) return;
 	w = qt_reserve(QT_MGL_DRAW_WORDS);
 	w[0] = ((ULONG) QT_MGL_DRAW << 16) | QT_MGL_DRAW_WORDS;
 	w[1] = mgl_enum(mode);
@@ -758,13 +759,13 @@ static void drawHost(GLenum mode, GLint first, GLsizei count, unsigned int index
 	w[3] = count;
 	w[4] = indexType;
 	w[5] = (ULONG) indices;
-	w = arrayWords(arrayWords(w + 6, &vertices), &colors);
-	arrayWords(arrayWords(arrayWords(w, &texCoords[0]), &texCoords[1]), &normals);
+	w = arrayWords(arrayWords(w + 6, &s->vertices), &s->colors);
+	arrayWords(arrayWords(arrayWords(w, &s->texCoords[0]), &s->texCoords[1]), &s->normals);
 	qt_flush();
 }
 
 void mgl_GLDrawArrays(GLcontext context, GLenum mode, GLint first, GLsizei count) {
-	drawHost(mode, first, count, 0, NULL);
+	drawHost(client(context), mode, first, count, 0, NULL);
 }
 
 void mgl_GLMultiDrawArrays(GLcontext context, GLenum mode, const GLint *first, const GLsizei *count, GLsizei primcount) {
@@ -775,7 +776,7 @@ void mgl_GLMultiDrawArrays(GLcontext context, GLenum mode, const GLint *first, c
 void mgl_GLDrawElements(GLcontext context, GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
 	unsigned int t = mgl_enum(type);
 	if (t != QGL_UNSIGNED_BYTE && t != QGL_UNSIGNED_SHORT) t = QGL_UNSIGNED_INT;
-	if (indices) drawHost(mode, 0, count, t, indices);
+	if (indices) drawHost(client(context), mode, 0, count, t, indices);
 }
 
 /* GL_EXT_compiled_vertex_array: nothing to compile here. */

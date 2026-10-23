@@ -242,9 +242,13 @@ W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCT
 		return NULL;
 	}
 	w3d_describe(context, qt->bitmap ? qt->bitmap : qt->window ? qt->window->RPort->BitMap : NULL, qt->yoffset);
+	/* Several programs may create and destroy contexts at once
+	 * (docs/multitasking.md). */
+	Forbid();
 	patch(qt);
 	qt->next = contexts;
 	contexts = qt;
+	Permit();
 
 	//default states
 	context->state |= W3D_AUTOTEXMANAGEMENT;
@@ -260,6 +264,7 @@ W3D_Context *W3D_CreateContext(__REGA0(ULONG *error),__REGA1(struct TagItem *CCT
 void W3D_DestroyContext(__REGA0(W3D_Context *context)) {
 	QtContext **link;
 	LOG;
+	Forbid();
 	for (link = &contexts; *link; link = &(*link)->next) {
 		if (*link == QT(context)) {
 			*link = QT(context)->next;
@@ -267,6 +272,7 @@ void W3D_DestroyContext(__REGA0(W3D_Context *context)) {
 		}
 	}
 	unpatch(QT(context));
+	Permit();
 	/* The textures the application left (0.53 kept them allocated). */
 	W3D_FreeAllTexObj(context);
 	w3d_select(context);

@@ -50,6 +50,10 @@ static void innerArea(QtMglContext *c) {
 }
 
 static void destroy(QtMglContext *c) {
+	/* Before freeContext: the task's per-task data (gl/gl.c) goes with its
+	 * last context. */
+	mgl_glutForget((GLcontext) c);
+	if (mgl_current == (GLcontext) c) mgl_current = NULL;
 	if (c->host) {
 		selectContext(c->host);
 		freeContext();
@@ -57,8 +61,6 @@ static void destroy(QtMglContext *c) {
 	if (c->window && c->ownWindow) CloseWindow(c->window);
 	if (c->screen) CloseScreen(c->screen);
 	if (c->emptyPointer) FreeVec(c->emptyPointer);
-	mgl_glutForget((GLcontext) c);
-	if (mgl_current == (GLcontext) c) mgl_current = NULL;
 	FreeVec(c);
 }
 
@@ -87,7 +89,7 @@ static void *attach(QtMglContext *c) {
 	_glPixelStorei(QGL_PACK_SWAP_BYTES, 1);
 	_glViewport(0, 0, c->width, c->height);
 	mgl_current = (GLcontext) c;
-	mgl_resetArrays();
+	mgl_resetArrays((GLcontext) c);
 	return c;
 }
 

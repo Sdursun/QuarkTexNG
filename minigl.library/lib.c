@@ -1,4 +1,5 @@
 #include "mgl.h"
+#include <proto/exec.h>
 
 /*
  * The library: one entry point (LVO -30) returning the dispatch table
@@ -17,7 +18,53 @@
 
 extern const MGLDispatchTable mgl_dispatch;
 
-GLcontext mgl_current = NULL;
+/*
+ * The dispatch table, per program: MiniGL 29's applications keep their
+ * current context in the variable the table's currentContext points to,
+ * reading and writing it themselves (MGLD_CTX in <libraries/minigl_
+ * dispatch.h>). With one table, two programs running at once would draw with
+ * each other's contexts (docs/multitasking.md), so each task that asks for
+ * the table gets a copy of its own, pointing to a variable of its own. A
+ * task that has ended leaves its copy to the next one; with all of them
+ * taken by running programs, the shared table (mgl_dispatch) is the
+ * fallback, as before.
+ */
+#define QT_MGL_CLIENTS 16
+
+typedef struct {
+	struct Task *task;
+	MGLDispatchTable table;
+	GLcontext current;
+} Client;
+
+static Client clients[QT_MGL_CLIENTS];
+GLcontext mgl_sharedCurrent = NULL;
+
+/* The calling task's client; NULL if it has none (and make: none free). */
+static Client *client(int make) {
+	struct Task *me = FindTask(NULL);
+	Client *c = NULL;
+	int i;
+	Forbid();
+	for (i = 0; i < QT_MGL_CLIENTS && !c; ++i) if (clients[i].task == me) c = &clients[i];
+	for (i = 0; make && i < QT_MGL_CLIENTS && !c; ++i) {
+		if (!clients[i].task || !qt_alive(clients[i].task)) {
+			c = &clients[i];
+			c->task = me;
+			c->table = mgl_dispatch;
+			c->current = NULL;
+			c->table.currentContext = &c->current;
+		}
+	}
+	Permit();
+	return c;
+}
+
+GLcontext *mgl_currentFor(void) {
+	Client *c = client(0);
+	return c ? &c->current : &mgl_sharedCurrent;
+}
+
 
 void INIT_0_MiniGL(void) {
 	glInit();
@@ -29,7 +76,8 @@ void EXIT_0_MiniGL(void) {
 }
 
 const MGLDispatchTable *MGLGetDispatchTable(void) {
-	return &mgl_dispatch;
+	Client *c = client(1);
+	return c ? &c->table : &mgl_dispatch;
 }
 
 /* An entry the library does not implement yet: logged once per name. */

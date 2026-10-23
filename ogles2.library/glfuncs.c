@@ -251,27 +251,30 @@ void ogles2_GLDeleteBuffers(struct OGLES2Context *ctx, GLsizei n, const GLuint *
 	qt_flush();
 }
 
-/* GL_ARRAY_BUFFER/GL_ELEMENT_ARRAY_BUFFER bindings, kept here (not only on
- * the host) so glBufferData's caller does not have to be told which one is
- * bound, and so glVertexAttribPointer/glDrawElements can send the buffer
- * name that was bound *at that call*, as GLES2 itself requires. */
-static GLuint boundArrayBuffer, boundElementArrayBuffer;
-
+/* GL_ARRAY_BUFFER/GL_ELEMENT_ARRAY_BUFFER bindings: per context, here only.
+ * The host is told the buffer's name with each command that uses one, so
+ * several programs' bindings never meet there (docs/multitasking.md), and
+ * glVertexAttribPointer/glDrawElements send the buffer name that was bound
+ * at that call, as GLES2 itself requires. */
 void ogles2_GLBindBuffer(struct OGLES2Context *ctx, GLenum target, GLuint buffer) {
-	ULONG *w;
-	if (target == GL_ARRAY_BUFFER) boundArrayBuffer = buffer;
-	else if (target == GL_ELEMENT_ARRAY_BUFFER) boundElementArrayBuffer = buffer;
-	w = qt_reserve(QT_OGLES2_BIND_BUFFER_WORDS);
-	w[0] = ((ULONG) QT_OGLES2_BIND_BUFFER << 16) | QT_OGLES2_BIND_BUFFER_WORDS;
-	w[1] = target;
-	w[2] = buffer;
-	qt_flush();
+	if (!ctx) return;
+	if (target == GL_ARRAY_BUFFER) ctx->arrayBuffer = buffer;
+	else if (target == GL_ELEMENT_ARRAY_BUFFER) ctx->elementArrayBuffer = buffer;
+}
+
+/* The buffer bound to target, 0 for none or another target. */
+static GLuint boundBuffer(struct OGLES2Context *ctx, GLenum target) {
+	if (!ctx) return 0;
+	return target == GL_ARRAY_BUFFER ? ctx->arrayBuffer : target == GL_ELEMENT_ARRAY_BUFFER ? ctx->elementArrayBuffer : 0;
 }
 
 void ogles2_GLBufferData(struct OGLES2Context *ctx, GLenum target, GLsizeiptr size, const void *data, GLenum usage) {
-	ULONG *w = qt_reserve(QT_OGLES2_BUFFER_DATA_WORDS);
+	GLuint buffer = boundBuffer(ctx, target);
+	ULONG *w;
+	if (!buffer) return;
+	w = qt_reserve(QT_OGLES2_BUFFER_DATA_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_BUFFER_DATA << 16) | QT_OGLES2_BUFFER_DATA_WORDS;
-	w[1] = target;
+	w[1] = buffer;
 	w[2] = (ULONG) size;
 	w[3] = (ULONG) data;
 	w[4] = usage;
@@ -281,40 +284,28 @@ void ogles2_GLBufferData(struct OGLES2Context *ctx, GLenum target, GLsizeiptr si
 /* glVertexAttribPointer, glEnable/DisableVertexAttribArray: 68k-side only
  * (gl/oglescmd.h); glDrawArrays/glDrawElements send the current state of
  * all QT_OGLES2_MAX_ATTRIBS of them with the draw. */
-typedef struct {
-	GLboolean enabled;
-	GLint size;
-	GLenum type;
-	GLboolean normalized;
-	GLsizei stride;
-	GLuint bufferName;  /* the one bound to GL_ARRAY_BUFFER at the call, or 0 */
-	ULONG pointer;       /* an offset into it, or an Amiga address */
-} Attrib;
-
-static Attrib attribs[QT_OGLES2_MAX_ATTRIBS];
-
 void ogles2_GLVertexAttribPointer(struct OGLES2Context *ctx, GLuint index, GLint size, GLenum type, GLboolean normalized,
 		GLsizei stride, const void *pointer) {
-	Attrib *a;
-	if (index >= QT_OGLES2_MAX_ATTRIBS) return;
-	a = &attribs[index];
+	QtOgles2Attrib *a;
+	if (!ctx || index >= QT_OGLES2_MAX_ATTRIBS) return;
+	a = &ctx->attribs[index];
 	a->size = size;
 	a->type = type;
 	a->normalized = normalized;
 	a->stride = stride;
-	a->bufferName = boundArrayBuffer;
+	a->bufferName = ctx->arrayBuffer;
 	a->pointer = (ULONG) pointer;
 }
 
 void ogles2_GLEnableVertexAttribArray(struct OGLES2Context *ctx, GLuint index) {
-	if (index < QT_OGLES2_MAX_ATTRIBS) attribs[index].enabled = GL_TRUE;
+	if (ctx && index < QT_OGLES2_MAX_ATTRIBS) ctx->attribs[index].enabled = GL_TRUE;
 }
 
 void ogles2_GLDisableVertexAttribArray(struct OGLES2Context *ctx, GLuint index) {
-	if (index < QT_OGLES2_MAX_ATTRIBS) attribs[index].enabled = GL_FALSE;
+	if (ctx && index < QT_OGLES2_MAX_ATTRIBS) ctx->attribs[index].enabled = GL_FALSE;
 }
 
-static ULONG *attribWords(ULONG *w, const Attrib *a) {
+static ULONG *attribWords(ULONG *w, const QtOgles2Attrib *a) {
 	w[0] = a->enabled;
 	w[1] = (ULONG) a->size;
 	w[2] = a->type;
@@ -325,28 +316,29 @@ static ULONG *attribWords(ULONG *w, const Attrib *a) {
 	return w + 7;
 }
 
-static void draw(GLenum mode, GLint first, GLsizei count, GLenum indexType, GLuint indexBuffer, const void *indices) {
+static void draw(struct OGLES2Context *ctx, GLenum mode, GLint first, GLsizei count, GLenum indexType, const void *indices) {
 	ULONG *w;
 	int i;
+	if (!ctx) return;
 	w = qt_reserve(QT_OGLES2_DRAW_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_DRAW << 16) | QT_OGLES2_DRAW_WORDS;
 	w[1] = mode;
 	w[2] = (ULONG) first;
 	w[3] = (ULONG) count;
 	w[4] = indexType;
-	w[5] = indexBuffer;
+	w[5] = indexType ? ctx->elementArrayBuffer : 0;
 	w[6] = (ULONG) indices;
 	w += 7;
-	for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) w = attribWords(w, &attribs[i]);
+	for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) w = attribWords(w, &ctx->attribs[i]);
 	qt_flush();
 }
 
 void ogles2_GLDrawArrays(struct OGLES2Context *ctx, GLenum mode, GLint first, GLsizei count) {
-	draw(mode, first, count, 0, 0, 0);
+	draw(ctx, mode, first, count, 0, 0);
 }
 
 void ogles2_GLDrawElements(struct OGLES2Context *ctx, GLenum mode, GLsizei count, GLenum type, const void *indices) {
-	draw(mode, 0, count, type, boundElementArrayBuffer, indices);
+	draw(ctx, mode, 0, count, type, indices);
 }
 
 /*
@@ -554,45 +546,42 @@ void ogles2_GLGetShaderPrecisionFormat(struct OGLES2Context *ctx, GLenum shadert
 
 /* Generic vertex attributes: their current values, used by a disabled
  * attribute array, live on the host (glVertexAttrib4f there); a copy is
- * kept here for glGetVertexAttribfv. */
-static GLfloat currentAttrib[QT_OGLES2_MAX_ATTRIBS][4] = {
-	{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}
-};
-
-static void vertexAttrib(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+ * kept in the context for glGetVertexAttribfv. */
+static void vertexAttrib(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+	if (!ctx) return;
 	if (index < QT_OGLES2_MAX_ATTRIBS) {
-		currentAttrib[index][0] = x;
-		currentAttrib[index][1] = y;
-		currentAttrib[index][2] = z;
-		currentAttrib[index][3] = w;
+		ctx->currentAttrib[index][0] = x;
+		ctx->currentAttrib[index][1] = y;
+		ctx->currentAttrib[index][2] = z;
+		ctx->currentAttrib[index][3] = w;
 	}
 	call(QT_OGLES2_C_VertexAttrib4f, index, floatWord(x), floatWord(y), floatWord(z), floatWord(w));
 }
 
-void ogles2_GLVertexAttrib1f(struct OGLES2Context *ctx, GLuint index, GLfloat x) { vertexAttrib(index, x, 0, 0, 1); }
-void ogles2_GLVertexAttrib2f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y) { vertexAttrib(index, x, y, 0, 1); }
+void ogles2_GLVertexAttrib1f(struct OGLES2Context *ctx, GLuint index, GLfloat x) { vertexAttrib(ctx, index, x, 0, 0, 1); }
+void ogles2_GLVertexAttrib2f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y) { vertexAttrib(ctx, index, x, y, 0, 1); }
 void ogles2_GLVertexAttrib3f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y, GLfloat z) {
-	vertexAttrib(index, x, y, z, 1);
+	vertexAttrib(ctx, index, x, y, z, 1);
 }
 void ogles2_GLVertexAttrib4f(struct OGLES2Context *ctx, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
-	vertexAttrib(index, x, y, z, w);
+	vertexAttrib(ctx, index, x, y, z, w);
 }
-void ogles2_GLVertexAttrib1fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) { if (v) vertexAttrib(index, v[0], 0, 0, 1); }
+void ogles2_GLVertexAttrib1fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) { if (v) vertexAttrib(ctx, index, v[0], 0, 0, 1); }
 void ogles2_GLVertexAttrib2fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) {
-	if (v) vertexAttrib(index, v[0], v[1], 0, 1);
+	if (v) vertexAttrib(ctx, index, v[0], v[1], 0, 1);
 }
 void ogles2_GLVertexAttrib3fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) {
-	if (v) vertexAttrib(index, v[0], v[1], v[2], 1);
+	if (v) vertexAttrib(ctx, index, v[0], v[1], v[2], 1);
 }
 void ogles2_GLVertexAttrib4fv(struct OGLES2Context *ctx, GLuint index, const GLfloat *v) {
-	if (v) vertexAttrib(index, v[0], v[1], v[2], v[3]);
+	if (v) vertexAttrib(ctx, index, v[0], v[1], v[2], v[3]);
 }
 
-/* glGetVertexAttrib*: the array state is 68k-side only (Attrib above). */
-static int vertexAttribValue(GLuint index, GLenum pname, GLint *value) {
-	const Attrib *a;
-	if (index >= QT_OGLES2_MAX_ATTRIBS) return 0;
-	a = &attribs[index];
+/* glGetVertexAttrib*: the array state is 68k-side only (QtOgles2Attrib). */
+static int vertexAttribValue(struct OGLES2Context *ctx, GLuint index, GLenum pname, GLint *value) {
+	const QtOgles2Attrib *a;
+	if (!ctx || index >= QT_OGLES2_MAX_ATTRIBS) return 0;
+	a = &ctx->attribs[index];
 	switch (pname) {
 	case GL_VERTEX_ATTRIB_ARRAY_ENABLED: *value = a->enabled; return 1;
 	case GL_VERTEX_ATTRIB_ARRAY_SIZE: *value = a->size ? a->size : 4; return 1;
@@ -606,27 +595,29 @@ static int vertexAttribValue(GLuint index, GLenum pname, GLint *value) {
 
 void ogles2_GLGetVertexAttribiv(struct OGLES2Context *ctx, GLuint index, GLenum pname, GLint *params) {
 	int i;
-	if (!params) return;
+	if (!params || !ctx) return;
 	if (pname == GL_CURRENT_VERTEX_ATTRIB) {
-		if (index < QT_OGLES2_MAX_ATTRIBS) for (i = 0; i < 4; ++i) params[i] = (GLint) currentAttrib[index][i];
+		if (index < QT_OGLES2_MAX_ATTRIBS) for (i = 0; i < 4; ++i) params[i] = (GLint) ctx->currentAttrib[index][i];
 		return;
 	}
-	vertexAttribValue(index, pname, params);
+	vertexAttribValue(ctx, index, pname, params);
 }
 
 void ogles2_GLGetVertexAttribfv(struct OGLES2Context *ctx, GLuint index, GLenum pname, GLfloat *params) {
 	GLint value;
 	int i;
-	if (!params) return;
+	if (!params || !ctx) return;
 	if (pname == GL_CURRENT_VERTEX_ATTRIB) {
-		if (index < QT_OGLES2_MAX_ATTRIBS) for (i = 0; i < 4; ++i) params[i] = currentAttrib[index][i];
+		if (index < QT_OGLES2_MAX_ATTRIBS) for (i = 0; i < 4; ++i) params[i] = ctx->currentAttrib[index][i];
 		return;
 	}
-	if (vertexAttribValue(index, pname, &value)) params[0] = (GLfloat) value;
+	if (vertexAttribValue(ctx, index, pname, &value)) params[0] = (GLfloat) value;
 }
 
 void ogles2_GLGetVertexAttribPointerv(struct OGLES2Context *ctx, GLuint index, GLenum pname, void **pointer) {
-	if (pointer && index < QT_OGLES2_MAX_ATTRIBS && pname == GL_VERTEX_ATTRIB_ARRAY_POINTER) *pointer = (void *) attribs[index].pointer;
+	if (ctx && pointer && index < QT_OGLES2_MAX_ATTRIBS && pname == GL_VERTEX_ATTRIB_ARRAY_POINTER) {
+		*pointer = (void *) ctx->attribs[index].pointer;
+	}
 }
 
 static void uniformV(ULONG subop, GLint location, GLsizei count, const void *value) {
@@ -671,10 +662,12 @@ void ogles2_GLUniformMatrix3fv(struct OGLES2Context *ctx, GLint location, GLsize
 	if (!transpose) uniformV(QT_OGLES2_U_M3, location, count, value);
 }
 
-static void bufferCopy(ULONG opcode, GLenum target, ULONG offset, ULONG size, const void *data) {
-	ULONG *w = qt_reserve(QT_OGLES2_BUFFER_SUB_DATA_WORDS);
+static void bufferCopy(ULONG opcode, GLuint buffer, ULONG offset, ULONG size, const void *data) {
+	ULONG *w;
+	if (!buffer) return;
+	w = qt_reserve(QT_OGLES2_BUFFER_SUB_DATA_WORDS);
 	w[0] = (opcode << 16) | QT_OGLES2_BUFFER_SUB_DATA_WORDS;
-	w[1] = target;
+	w[1] = buffer;
 	w[2] = offset;
 	w[3] = size;
 	w[4] = (ULONG) data;
@@ -682,7 +675,7 @@ static void bufferCopy(ULONG opcode, GLenum target, ULONG offset, ULONG size, co
 }
 
 void ogles2_GLBufferSubData(struct OGLES2Context *ctx, GLenum target, GLintptr offset, GLsizeiptr size, const void *data) {
-	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, target, (ULONG) offset, (ULONG) size, data);
+	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, boundBuffer(ctx, target), (ULONG) offset, (ULONG) size, data);
 }
 
 static void getParam(ULONG subop, ULONG w0, ULONG w1, ULONG w2, void *out) {
@@ -703,9 +696,6 @@ static void getParam(ULONG subop, ULONG w0, ULONG w1, ULONG w2, void *out) {
 #define GL_BUFFER_MAPPED_OES 0x88BC
 #define GL_BUFFER_MAP_POINTER_OES 0x88BD
 
-static void *mapped[2];
-static ULONG mappedSize[2];
-
 /* 0 for GL_ARRAY_BUFFER, 1 for GL_ELEMENT_ARRAY_BUFFER, -1 for others. */
 static int bufferSlot(GLenum target) {
 	return target == GL_ARRAY_BUFFER ? 0 : target == GL_ELEMENT_ARRAY_BUFFER ? 1 : -1;
@@ -713,10 +703,10 @@ static int bufferSlot(GLenum target) {
 
 void ogles2_GLGetBufferParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
 	int slot = bufferSlot(target);
-	if (!params || slot < 0) return;
-	if (pname == GL_BUFFER_MAPPED_OES) *params = mapped[slot] != NULL;
+	if (!params || slot < 0 || !ctx) return;
+	if (pname == GL_BUFFER_MAPPED_OES) *params = ctx->mapped[slot] != NULL;
 	else if (pname == GL_BUFFER_ACCESS_OES) *params = GL_WRITE_ONLY_OES;
-	else getParam(QT_OGLES2_P_BufferParameteriv, target, pname, 0, params);
+	else getParam(QT_OGLES2_P_BufferParameteriv, boundBuffer(ctx, target), pname, 0, params);
 }
 void ogles2_GLGetBufferParameterivOES(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
 	ogles2_GLGetBufferParameteriv(ctx, target, pname, params);
@@ -724,29 +714,30 @@ void ogles2_GLGetBufferParameterivOES(struct OGLES2Context *ctx, GLenum target, 
 
 void *ogles2_GLMapBufferOES(struct OGLES2Context *ctx, GLenum target, GLenum access) {
 	int slot = bufferSlot(target);
+	GLuint buffer = boundBuffer(ctx, target);
 	GLint size = 0;
-	if (slot < 0 || mapped[slot]) return NULL;
-	getParam(QT_OGLES2_P_BufferParameteriv, target, GL_BUFFER_SIZE, 0, &size);
+	if (slot < 0 || !buffer || ctx->mapped[slot]) return NULL;
+	getParam(QT_OGLES2_P_BufferParameteriv, buffer, GL_BUFFER_SIZE, 0, &size);
 	if (size <= 0) return NULL;
-	mapped[slot] = AllocVec((ULONG) size, MEMF_ANY);
-	if (!mapped[slot]) return NULL;
-	mappedSize[slot] = (ULONG) size;
-	bufferCopy(QT_OGLES2_READ_BUFFER, target, 0, (ULONG) size, mapped[slot]);
-	return mapped[slot];
+	ctx->mapped[slot] = AllocVec((ULONG) size, MEMF_ANY);
+	if (!ctx->mapped[slot]) return NULL;
+	ctx->mappedSize[slot] = (ULONG) size;
+	bufferCopy(QT_OGLES2_READ_BUFFER, buffer, 0, (ULONG) size, ctx->mapped[slot]);
+	return ctx->mapped[slot];
 }
 
 GLboolean ogles2_GLUnmapBufferOES(struct OGLES2Context *ctx, GLenum target) {
 	int slot = bufferSlot(target);
-	if (slot < 0 || !mapped[slot]) return GL_FALSE;
-	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, target, 0, mappedSize[slot], mapped[slot]);
-	FreeVec(mapped[slot]);
-	mapped[slot] = NULL;
+	if (!ctx || slot < 0 || !ctx->mapped[slot]) return GL_FALSE;
+	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, boundBuffer(ctx, target), 0, ctx->mappedSize[slot], ctx->mapped[slot]);
+	FreeVec(ctx->mapped[slot]);
+	ctx->mapped[slot] = NULL;
 	return GL_TRUE;
 }
 
 void ogles2_GLGetBufferPointervOES(struct OGLES2Context *ctx, GLenum target, GLenum pname, void **params) {
 	int slot = bufferSlot(target);
-	if (params) *params = slot >= 0 && pname == GL_BUFFER_MAP_POINTER_OES ? mapped[slot] : NULL;
+	if (params) *params = ctx && slot >= 0 && pname == GL_BUFFER_MAP_POINTER_OES ? ctx->mapped[slot] : NULL;
 }
 
 void ogles2_GLGetTexParameteriv(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint *params) {
@@ -771,10 +762,10 @@ void ogles2_GLGetUniformiv(struct OGLES2Context *ctx, GLuint program, GLint loca
 
 /* glGet*: the buffer bindings and the attribute count are 68k-side state;
  * the rest is the host's (QT_OGLES2_GET). */
-static int localValue(GLenum pname, GLint *value) {
+static int localValue(struct OGLES2Context *ctx, GLenum pname, GLint *value) {
 	switch (pname) {
-	case GL_ARRAY_BUFFER_BINDING: *value = boundArrayBuffer; return 1;
-	case GL_ELEMENT_ARRAY_BUFFER_BINDING: *value = boundElementArrayBuffer; return 1;
+	case GL_ARRAY_BUFFER_BINDING: *value = ctx ? ctx->arrayBuffer : 0; return 1;
+	case GL_ELEMENT_ARRAY_BUFFER_BINDING: *value = ctx ? ctx->elementArrayBuffer : 0; return 1;
 	case GL_MAX_VERTEX_ATTRIBS: *value = QT_OGLES2_MAX_ATTRIBS; return 1;
 	}
 	return 0;
@@ -790,18 +781,18 @@ static void get(ULONG kind, GLenum pname, void *data) {
 }
 
 void ogles2_GLGetIntegerv(struct OGLES2Context *ctx, GLenum pname, GLint *data) {
-	if (data && !localValue(pname, data)) get(QT_OGLES2_GET_Integer, pname, data);
+	if (data && !localValue(ctx, pname, data)) get(QT_OGLES2_GET_Integer, pname, data);
 }
 void ogles2_GLGetFloatv(struct OGLES2Context *ctx, GLenum pname, GLfloat *data) {
 	GLint value;
 	if (!data) return;
-	if (localValue(pname, &value)) *data = (GLfloat) value;
+	if (localValue(ctx, pname, &value)) *data = (GLfloat) value;
 	else get(QT_OGLES2_GET_Float, pname, data);
 }
 void ogles2_GLGetBooleanv(struct OGLES2Context *ctx, GLenum pname, GLboolean *data) {
 	GLint value;
 	if (!data) return;
-	if (localValue(pname, &value)) *data = value != 0;
+	if (localValue(ctx, pname, &value)) *data = value != 0;
 	else get(QT_OGLES2_GET_Boolean, pname, data);
 }
 
@@ -884,13 +875,13 @@ void ogles2_GLDrawBuffersEXT(struct OGLES2Context *ctx, GLsizei n, const GLenum 
 /* start/end are only a hint. */
 void ogles2_GLDrawRangeElements(struct OGLES2Context *ctx, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type,
 		const void *indices) {
-	draw(mode, 0, count, type, boundElementArrayBuffer, indices);
+	draw(ctx, mode, 0, count, type, indices);
 }
 
 /* QT_OGLES2_DRAW's first is the base vertex of an indexed draw. */
 void ogles2_GLDrawElementsBaseVertexOES(struct OGLES2Context *ctx, GLenum mode, GLsizei count, GLenum type, const void *indices,
 		GLint basevertex) {
-	draw(mode, basevertex, count, type, boundElementArrayBuffer, indices);
+	draw(ctx, mode, basevertex, count, type, indices);
 }
 
 /* lib.c: an entry the library does not implement yet. */

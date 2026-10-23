@@ -43,11 +43,11 @@
 #define QT_OGLES2_DELETE_BUFFERS 0xA002
 #define QT_OGLES2_DELETE_BUFFERS_WORDS 3
 
-/* glBindBuffer: target, buffer (0 unbinds, as GLES2 has it). */
-#define QT_OGLES2_BIND_BUFFER 0xA003
-#define QT_OGLES2_BIND_BUFFER_WORDS 3
-
-/* glBufferData: the buffer bound to target, size, address of size bytes
+/* glBindBuffer: 68k-side only (ogles2.library keeps the bindings per
+ * context, docs/multitasking.md); the commands below name the buffer.
+ * 0xA003 was QT_OGLES2_BIND_BUFFER up to protocol 10.
+ *
+ * glBufferData: buffer name, size, address of size bytes
  * (big-endian, kept as given -- converted at draw time), usage (ignored,
  * nothing here streams). */
 #define QT_OGLES2_BUFFER_DATA 0xA004
@@ -194,9 +194,9 @@ enum {
 #define QT_OGLES2_UNIFORM_V_WORDS 5
 enum { QT_OGLES2_U_M2 = QT_OGLES2_U_4I + 1, QT_OGLES2_U_M3, QT_OGLES2_U_M4 };
 
-/* glBufferSubData: target (its bound fake buffer), offset, size, address of
- * size bytes, kept big-endian as glBufferData's are. QT_OGLES2_READ_BUFFER
- * is the reverse, for glMapBufferOES: the bound buffer's bytes offset to
+/* glBufferSubData: buffer name, offset, size, address of size bytes, kept
+ * big-endian as glBufferData's are. QT_OGLES2_READ_BUFFER is the reverse,
+ * for glMapBufferOES: the buffer's bytes offset to
  * offset + size copied to the address. */
 #define QT_OGLES2_BUFFER_SUB_DATA 0xA01B
 #define QT_OGLES2_BUFFER_SUB_DATA_WORDS 5
@@ -214,7 +214,8 @@ enum { QT_OGLES2_GET_Integer, QT_OGLES2_GET_Float, QT_OGLES2_GET_Boolean };
 /* glGetTexParameter{i,f}v, glGetRenderbufferParameteriv, glGetFramebuffer-
  * AttachmentParameteriv, glGetBufferParameteriv (a fake buffer's), glGet-
  * Uniform{f,i}v: subop, w0..w2 (their scalar arguments in order: target,
- * pname; target, attachment, pname; program, location), address of the
+ * pname; target, attachment, pname; buffer name, pname; program,
+ * location), address of the
  * result(s), big-endian. A uniform's value count comes from its type. */
 #define QT_OGLES2_GET_PARAM 0xA01E
 #define QT_OGLES2_GET_PARAM_WORDS 6

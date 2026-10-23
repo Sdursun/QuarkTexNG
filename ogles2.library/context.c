@@ -25,8 +25,6 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *P96Base;
 
-struct OGLES2Context *ogles2_current;
-
 static void openLibraries(void) {
 	if (!IntuitionBase) IntuitionBase = (struct IntuitionBase *) OpenLibrary("intuition.library", 39);
 	if (!GfxBase) GfxBase = (struct GfxBase *) OpenLibrary("graphics.library", 39);
@@ -34,11 +32,15 @@ static void openLibraries(void) {
 }
 
 static void destroy(struct OGLES2Context *c) {
+	int i;
+	/* Before freeContext: the task's slot (gl/gl.c) goes with its last
+	 * context, and qt_taskData would make it a new one. */
+	if (ogles2_current == c) ogles2_current = NULL;
 	if (c->host) {
 		selectContext(c->host);
 		freeContext();
 	}
-	if (ogles2_current == c) ogles2_current = NULL;
+	for (i = 0; i < 2; ++i) if (c->mapped[i]) FreeVec(c->mapped[i]);
 	FreeVec(c);
 }
 
@@ -92,6 +94,10 @@ struct OGLES2Context *ogles2_aglCreateContext2(ULONG *errcode, struct TagItem *t
 	if (!(c = (struct OGLES2Context *) AllocVec(sizeof(struct OGLES2Context), MEMF_ANY | MEMF_CLEAR))) {
 		if (errcode) *errcode = OGLES2_CCE_NOMEM;
 		return NULL;
+	}
+	{
+		int i;
+		for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) c->currentAttrib[i][3] = 1; /* GLES2's (0, 0, 0, 1) */
 	}
 	window = (struct Window *) tagValue(tags, OGLES2_CCT_WINDOW, 0);
 	if (!window) {
