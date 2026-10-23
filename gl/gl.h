@@ -16,6 +16,7 @@ typedef float GLclampf;
 typedef double GLdouble;
 typedef double GLclampd;
 typedef void GLvoid;
+typedef char GLchar; /* GLES2 shader/program names and text (ogles2.library) */
 
 #include <exec/libraries.h>
 

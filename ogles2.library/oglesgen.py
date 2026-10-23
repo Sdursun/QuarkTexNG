@@ -29,9 +29,20 @@ entries = re.findall(r"^\s*([^\n(;{]+?)\s*\(\*(\w+)\)\s*\(([^\n]*)\);", struct, 
 # it. Keep in sync with the ogles2_<Name> functions those files define.
 AGL = ["aglCreateContext2", "aglDestroyContext", "aglMakeCurrent", "aglSwapBuffers", "aglSetParams2", "aglSetBitmap"]
 HANDWRITTEN = {
+    # Stage 1: no pointer argument, forwarded to the existing command buffer.
     "GLGetError", "GLGetString", "GLClear", "GLClearColor", "GLClearDepthf", "GLClearStencil",
     "GLViewport", "GLFlush", "GLFinish", "GLEnable", "GLDisable", "GLColorMask", "GLDepthMask",
     "GLDepthFunc", "GLCullFace", "GLFrontFace", "GLIsEnabled", "GLHint", "GLLineWidth", "GLScissor",
+    # Stage 2: shaders, programs, uniforms, buffers, vertex attributes and
+    # drawing (gl/oglescmd.h, host/ogles2.cpp).
+    "GLCreateShader", "GLDeleteShader", "GLCompileShader", "GLAttachShader", "GLDetachShader",
+    "GLCreateProgram", "GLDeleteProgram", "GLLinkProgram", "GLUseProgram", "GLValidateProgram",
+    "GLIsShader", "GLIsProgram", "GLShaderSource", "GLBindAttribLocation", "GLGetAttribLocation",
+    "GLGetUniformLocation", "GLUniform1f", "GLUniform2f", "GLUniform3f", "GLUniform4f",
+    "GLUniform1i", "GLUniform2i", "GLUniform3i", "GLUniform4i", "GLGetShaderiv", "GLGetProgramiv",
+    "GLGetShaderInfoLog", "GLGetProgramInfoLog", "GLGenBuffers", "GLDeleteBuffers", "GLBindBuffer",
+    "GLBufferData", "GLVertexAttribPointer", "GLEnableVertexAttribArray", "GLDisableVertexAttribArray",
+    "GLDrawArrays", "GLDrawElements",
 }
 
 os.makedirs(out, exist_ok=True)

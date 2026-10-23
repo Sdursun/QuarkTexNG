@@ -47,14 +47,24 @@ typedef ptrdiff_t GLsizeiptr;
 	F(void, DeleteShader, (GLuint shader)) \
 	F(GLuint, CreateProgram, (void)) \
 	F(void, AttachShader, (GLuint program, GLuint shader)) \
+	F(void, DetachShader, (GLuint program, GLuint shader)) \
 	F(void, LinkProgram, (GLuint program)) \
 	F(void, GetProgramiv, (GLuint program, GLenum pname, GLint* params)) \
 	F(void, GetProgramInfoLog, (GLuint program, GLsizei size, GLsizei* length, GLchar* log)) \
 	F(void, UseProgram, (GLuint program)) \
 	F(void, DeleteProgram, (GLuint program)) \
+	F(void, ValidateProgram, (GLuint program)) \
+	F(GLboolean, IsShader, (GLuint shader)) \
+	F(GLboolean, IsProgram, (GLuint program)) \
+	F(void, BindAttribLocation, (GLuint program, GLuint index, const GLchar* name)) \
+	F(GLint, GetAttribLocation, (GLuint program, const GLchar* name)) \
 	F(GLint, GetUniformLocation, (GLuint program, const GLchar* name)) \
 	F(void, Uniform1i, (GLint location, GLint v0)) \
+	F(void, Uniform2i, (GLint location, GLint v0, GLint v1)) \
+	F(void, Uniform3i, (GLint location, GLint v0, GLint v1, GLint v2)) \
+	F(void, Uniform4i, (GLint location, GLint v0, GLint v1, GLint v2, GLint v3)) \
 	F(void, Uniform1f, (GLint location, GLfloat v0)) \
+	F(void, Uniform2f, (GLint location, GLfloat v0, GLfloat v1)) \
 	F(void, Uniform3f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2)) \
 	F(void, Uniform4f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)) \
 	F(void, UniformMatrix4fv, (GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)) \
@@ -67,6 +77,7 @@ typedef ptrdiff_t GLsizeiptr;
 	F(void, DeleteBuffers, (GLsizei n, const GLuint* buffers)) \
 	F(void, VertexAttribPointer, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer)) \
 	F(void, EnableVertexAttribArray, (GLuint index)) \
+	F(void, DisableVertexAttribArray, (GLuint index)) \
 	F(void, GenerateMipmap, (GLenum target))
 
 namespace gl3 {

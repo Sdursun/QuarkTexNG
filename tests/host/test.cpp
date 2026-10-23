@@ -30,6 +30,7 @@ typedef float GLclampf;
 typedef double GLdouble;
 typedef double GLclampd;
 typedef void GLvoid;
+typedef char GLchar;
 #include "../../gl/gldefines.h"
 
 // Stand-in for Amiga memory: address a is arena + a.
@@ -176,6 +177,7 @@ void qt_report(const char* message) {
 #include "../../host/gldecode.cpp"
 #include "../../host/w3d.cpp"
 #include "../../host/mgl.cpp"
+#include "../../host/ogles2.cpp"
 #include "../../host/present.h"
 
 // --- 68k side ----------------------------------------------------------------

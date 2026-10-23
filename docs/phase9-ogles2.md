@@ -1,8 +1,8 @@
 # Phase 9: a QuarkTex ogles2.library
 
-Status: stage 1 done (2026-10-23). A context opens, clears to a colour and
-shows it in Amiga display memory, verified in WinUAE with a program built
-against the real PiStorm/Emu68 SDK's import library.
+Status: stage 2 done (2026-10-23): a GLSL ES shader compiles, a program
+links, a vertex buffer uploads, and a real triangle draws and animates in
+WinUAE, through the SDK's own `triangle` example unmodified.
 
 ## Why
 
@@ -117,6 +117,70 @@ same as `MINIGL_SDK`.
   freshly opened window once, which a single swap loses the race against.
   `m01_minigl` already drew three frames before checking for the same
   reason; `o01_ogles2` now does too (`FRAMES` from `tests/window.h`).
+
+## Stage 2 (done)
+
+Shaders, programs, uniforms, buffers, vertex attributes and drawing
+(gl/oglescmd.h, `host/ogles2.cpp`, `ogles2.library/glfuncs.c`):
+
+- **Shaders and programs are real host OpenGL 2.0 objects** -- the same
+  dynamically loaded set `host/ffp.cpp` already uses
+  (`host/gl3.h`/`gl3.cpp`: `opengl32.dll` only exports OpenGL 1.1 statically,
+  so `glCreateShader` and everything past it is fetched through
+  `wglGetProcAddress` at runtime, not linked). Every entry here is scalar or
+  takes `GLchar*` text (plain bytes, no order to convert), so they share a
+  handful of generic opcodes by subop (`QT_OGLES2_SIMPLE`/`NAME`/`UNIFORM`/
+  `GET_IV`/`GET_LOG`) instead of one each: `glCreateShader`/`DeleteShader`/
+  `CompileShader`/`AttachShader`/`DetachShader`/`CreateProgram`/
+  `DeleteProgram`/`LinkProgram`/`UseProgram`/`ValidateProgram`/`IsShader`/
+  `IsProgram` (`SIMPLE`); `glBindAttribLocation`/`GetAttribLocation`/
+  `GetUniformLocation` (`NAME`, a program/index plus one Amiga string
+  address); `glUniform1f`..`4f`/`1i`..`4i` (`UNIFORM`); `glGetShaderiv`/
+  `GetProgramiv` and `glGetShaderInfoLog`/`GetProgramInfoLog` (`GET_IV`/
+  `GET_LOG` -- the host swaps the result into the Amiga address it is given
+  itself, unlike the generic command buffer's raw pointer forwarding, see
+  gl/glgen.cpp, which would leave a host-native value there). `glShaderSource`
+  is its own opcode: one whole, NUL-terminated GLSL ES string (every known
+  caller passes exactly that; several chunks or an explicit length are
+  logged as missing).
+- **Buffers are QuarkTex's own**, not real GL buffer objects: `glGenBuffers`
+  hands out small integers and `glBufferData` keeps the bytes as given (still
+  big-endian) in a `std::map<name, vector<uint8_t>>` on the host. A vertex
+  attribute's element type is not known until `glVertexAttribPointer` names
+  it, nor whether the application changes it again before the next draw, so
+  converting to host order happens at `QT_OGLES2_DRAW` time, per attribute --
+  the same reason minigl.library's vertex arrays convert at draw time rather
+  than when the application hands them over (`host/mgl.cpp`).
+- **`glVertexAttribPointer`/`glEnable`/`DisableVertexAttribArray` are 68k-side
+  only** (`ogles2.library/glfuncs.c`): no opcode of their own, just local
+  state (up to `QT_OGLES2_MAX_ATTRIBS`, 8); `glDrawArrays`/`glDrawElements`
+  send all of it with the draw, the same shape minigl.library's own
+  `QT_MGL_DRAW` uses for its arrays.
+- **At draw time**, the host converts each enabled attribute's elements (from
+  a fake buffer's bytes or straight from Amiga memory) into a flat host
+  `float` array, **uploads it into a real, temporary host buffer object**
+  (`glGenBuffers`/`BufferData`, deleted again right after the draw) and
+  calls `glVertexAttribPointer` with an offset into *that*, not a bare
+  client-side pointer. Plain client-side arrays (no `GL_ARRAY_BUFFER` bound)
+  reliably hung this project's test machine's Intel Iris Xe driver's
+  `glDrawArrays` outright under a core profile -- confirmed by bisecting with
+  `logString()` calls (below) down to exactly that one call, with a correctly
+  bound VAO (`ffp.cpp` already creates and binds one for every
+  `QT_CONTEXT_CORE` context, Warp3D's included) and a provably correct
+  pointer and size. Uploading into a real buffer object first is the
+  ordinary modern-GL way regardless, and does not hang.
+- Index buffers (`glDrawElements`) follow the same buffer-or-Amiga-address
+  rule as vertex attributes; `GL_UNSIGNED_BYTE`/`SHORT` indices are read and
+  widened to `GLuint` for the real `glDrawElements` call (GLES2 has no
+  `GL_UNSIGNED_INT` index type itself, but the host's desktop GL does, and
+  widening avoids a second, byte/short-sized temporary index buffer).
+
+Verified with the SDK's own `SDK/examples/triangle.c`, built unmodified
+against the real import library (`-logles2`) and copied to a live WinUAE: a
+GLSL ES vertex and fragment shader compile and link, a two-attribute
+(position, colour) interleaved vertex buffer uploads, and a smoothly
+rotating, correctly gradient-shaded triangle draws every frame. The
+Warp3D/agl reference suite (`tests/run.ps1`) is unaffected (0 FAIL).
 
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 

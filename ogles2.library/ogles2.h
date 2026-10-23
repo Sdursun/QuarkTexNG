@@ -13,6 +13,7 @@
 #include <libraries/ogles2.h>
 #include <libraries/ogles2_dispatch.h>
 #include <intuition/intuition.h>
+#include "oglescmd.h"
 
 /* GLES2 has no double-precision entries, so <GLES2/gl2.h> defines neither:
  * gl/gldeclarations.auto.h (desktop GL 1.1's full set, Warp3D/agl's own)
@@ -35,6 +36,11 @@ int presentable(struct BitMap *bitmap);
 void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height, int wait);
 void finishFrame(void);
 void logString(char *c);
+/* Command buffer (gl/gl.c): qt_reserve returns room for words 32-bit words
+ * (the header word, (opcode << 16) | words, and the arguments, big-endian);
+ * qt_flush executes the buffer on the host and returns the last result. */
+ULONG *qt_reserve(ULONG words);
+ULONG qt_flush(void);
 #define QT_CONTEXT_CORE 1
 #define QT_CONTEXT_OFFSCREEN 4
 

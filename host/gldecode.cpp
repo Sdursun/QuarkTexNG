@@ -14,6 +14,7 @@
 #include "gldecode.h"
 #include "w3dcmd.h"
 #include "mglcmd.h"
+#include "oglescmd.h"
 
 namespace {
 	int32_t qt_bad_command(const Command& c) {
@@ -150,7 +151,9 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		switch (opcode) {
 #include "gldecode.auto.inc"
 		default:
-			if (opcode >= QT_MGL_FIRST) {
+			if (opcode >= QT_OGLES2_FIRST) {
+				if (!qt_ogles2_decode(c, result)) return qt_bad_command(c);
+			} else if (opcode >= QT_MGL_FIRST) {
 				if (!qt_mgl_decode(c, result)) return qt_bad_command(c);
 			} else if (opcode < QT_W3D_FIRST || !qt_w3d_decode(c, result)) return qt_bad_command(c);
 			break;

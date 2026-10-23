@@ -79,6 +79,11 @@ bool qt_w3d_decode(const Command& c, int32_t& result);
 // up, host/mgl.cpp). Returns false for an unknown opcode or a wrong word count.
 bool qt_mgl_decode(const Command& c, int32_t& result);
 
+// Executes a command of QuarkTex's ogles2.library (opcode QT_OGLES2_FIRST
+// and up, host/ogles2.cpp). Returns false for an unknown opcode or a wrong
+// word count.
+bool qt_ogles2_decode(const Command& c, int32_t& result);
+
 // Draws what the Warp3D commands have batched (ffp::flush), before an OpenGL
 // command runs.
 void qt_w3d_sync();
