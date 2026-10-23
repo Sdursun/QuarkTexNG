@@ -21,10 +21,16 @@ MINIGL_SDK ?= /sdk
 MGL_CFLAGS  = $(CPU) -O2 -Wall -Wno-pointer-sign -Werror=implicit-function-declaration \
               -Iminigl.library/sdk-shim -I$(MINIGL_SDK)
 MGL_BUILT   = $(if $(wildcard $(MINIGL_SDK)/libraries/minigl_dispatch.h),$(MGL_TESTS))
+# ogles2.library checks (oNN_*), when the ogles2 SDK is there.
+OGL_TESTS   = $(basename $(notdir $(wildcard tests/o[0-9][0-9]_*.c)))
+OGLES2_SDK ?= /sdk-ogles2
+OGL_CFLAGS  = $(CPU) -O2 -Wall -Wno-pointer-sign -Werror=implicit-function-declaration \
+              -I$(OGLES2_SDK)/include -Itests
+OGL_BUILT   = $(if $(wildcard $(OGLES2_SDK)/include/libraries/ogles2_dispatch.h),$(OGL_TESTS))
 W3D_HEADERS = tests/common.h tests/window.h tests/include/warp3d_calls.h Warp3D.library/Warp3D.h
 AGL_HEADERS = tests/agl_common.h tests/window.h $(BUILD)/agl_calls.h gl/gl.h gl/gldefines.h
 
-all: $(addprefix $(BUILD)/,$(W3D_TESTS) $(AGL_TESTS) $(W_TESTS) $(MGL_BUILT))
+all: $(addprefix $(BUILD)/,$(W3D_TESTS) $(AGL_TESTS) $(W_TESTS) $(MGL_BUILT) $(OGL_BUILT))
 
 $(BUILD)/agl_calls.h: agl.library/agl_lib.fd tests/aglcalls.py | $(BUILD)
 	$(PYTHON) tests/aglcalls.py $< $@
@@ -55,6 +61,12 @@ $(BUILD)/w%: tests/w%.c tests/include/warp3d_calls.h Warp3D.library/Warp3D.h | $
 
 $(BUILD)/m%: tests/m%.c minigl.library/sdk-shim/mgl/context.h | $(BUILD)
 	$(CC) $(MGL_CFLAGS) -o $@ $<
+
+$(BUILD)/o%.o: tests/o%.c tests/window.h | $(BUILD)
+	$(CC) $(OGL_CFLAGS) -c -o $@ $<
+
+$(BUILD)/o%: $(BUILD)/o%.o $(BUILD)/window.o
+	$(CC) $(LDFLAGS) -o $@ $^ -L$(OGLES2_SDK)/lib -logles2
 
 $(BUILD):
 	mkdir -p $@

@@ -1,0 +1,12 @@
+* QuarkTex ogles2.library: the PiStorm/Emu68 ogles2.library's shared library
+* interface (dispatch ABI 1, stage 1: a context clears and shows a colour;
+* most GL entries are stubs, see docs/phase9-ogles2.md).
+* LVO -30 returns the dispatch table; -36 is called by OGLES2Close() before
+* CloseLibrary (found by disassembling libogles2.a's OGLES2Close -- it is
+* undocumented in the SDK headers, presumably flushing a debug log the real
+* PiStorm library keeps; a no-op here).
+##base _OGLES2Base
+##bias 30
+OGLES2GetDispatchTable()()
+OGLES2PrivateLogFlush()()
+##end

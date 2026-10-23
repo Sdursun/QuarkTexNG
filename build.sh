@@ -50,16 +50,31 @@ unittest() {
 # MiniGL's 29 SDK include directory (SDK/minigl-shared-library/include of the
 # PiStorm3D 29 archive) for minigl.library; without it that library is not
 # built. A program built on an older SDK is not supported (minigl.library/lib.c).
+#
+# OGLES2_SDK: the root of the PiStorm/Emu68 ogles2.library SDK (ogles2/ of
+# ogles2-1.3.1-sdk.lha, holding both SDK/include and SDK/lib,
+# docs/phase9-ogles2.md); without it ogles2.library and its tests are not
+# built. Neither SDK is part of QuarkTex.
+mount_dir() {
+	if command -v cygpath >/dev/null 2>&1; then echo "-v $(cygpath -w "$1"):$2:ro"
+	else echo "-v $1:$2:ro"; fi
+}
 SDK_MOUNT=
 if [ -n "$MINIGL_SDK" ] && [ -f "$MINIGL_SDK/libraries/minigl_dispatch.h" ]; then
-	if command -v cygpath >/dev/null 2>&1; then SDK_MOUNT="-v $(cygpath -w "$MINIGL_SDK"):/sdk:ro"
-	else SDK_MOUNT="-v $MINIGL_SDK:/sdk:ro"; fi
+	SDK_MOUNT="$(mount_dir "$MINIGL_SDK" /sdk)"
+fi
+if [ -n "$OGLES2_SDK" ] && [ -f "$OGLES2_SDK/include/libraries/ogles2_dispatch.h" ]; then
+	SDK_MOUNT="$SDK_MOUNT $(mount_dir "$OGLES2_SDK" /sdk-ogles2)"
 fi
 
 amiga() {
-	if [ -n "$SDK_MOUNT" ]; then
+	if [ -n "$MINIGL_SDK" ] && [ -f "$MINIGL_SDK/libraries/minigl_dispatch.h" ]; then
 		host_image
 		run "$HOST_IMAGE" "python3 minigl.library/mglgen.py /sdk gl build/amiga/minigl minigl.library/*.c"
+	fi
+	if [ -n "$OGLES2_SDK" ] && [ -f "$OGLES2_SDK/include/libraries/ogles2_dispatch.h" ]; then
+		host_image
+		run "$HOST_IMAGE" "python3 ogles2.library/oglesgen.py /sdk-ogles2/include build/amiga/ogles2 ogles2.library/*.c"
 	fi
 	run "$AMIGA_IMAGE" "make -f amiga/Makefile"
 }
