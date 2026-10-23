@@ -43,6 +43,11 @@ HANDWRITTEN = {
     "GLGetShaderInfoLog", "GLGetProgramInfoLog", "GLGenBuffers", "GLDeleteBuffers", "GLBindBuffer",
     "GLBufferData", "GLVertexAttribPointer", "GLEnableVertexAttribArray", "GLDisableVertexAttribArray",
     "GLDrawArrays", "GLDrawElements",
+    # Textures and framebuffers (cube/boingocean).
+    "GLGenTextures", "GLDeleteTextures", "GLBindTexture", "GLActiveTexture", "GLGenerateMipmap",
+    "GLTexParameteri", "GLTexImage2D", "GLUniformMatrix4fv", "GLGenFramebuffers", "GLDeleteFramebuffers",
+    "GLBindFramebuffer", "GLFramebufferTexture2D", "GLCheckFramebufferStatus", "GLGenRenderbuffers",
+    "GLDeleteRenderbuffers", "GLBindRenderbuffer", "GLRenderbufferStorage", "GLFramebufferRenderbuffer",
 }
 
 os.makedirs(out, exist_ok=True)

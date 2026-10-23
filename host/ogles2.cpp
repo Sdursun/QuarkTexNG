@@ -68,6 +68,19 @@ namespace gl3test {
 	inline void BindBuffer(GLenum, GLuint) {}
 	inline void BufferData(GLenum, GLsizeiptr, const void*, GLenum) {}
 	inline void DeleteBuffers(GLsizei, const GLuint*) {}
+	inline void ActiveTexture(GLenum) {}
+	inline void GenFramebuffers(GLsizei, GLuint* fb) { if (fb) *fb = 1; }
+	inline void DeleteFramebuffers(GLsizei, const GLuint*) {}
+	inline void BindFramebuffer(GLenum, GLuint) {}
+	inline void FramebufferTexture2D(GLenum, GLenum, GLenum, GLuint, GLint) {}
+	inline GLenum CheckFramebufferStatus(GLenum) { return 0x8CD5; }
+	inline void GenRenderbuffers(GLsizei, GLuint* rb) { if (rb) *rb = 1; }
+	inline void DeleteRenderbuffers(GLsizei, const GLuint*) {}
+	inline void BindRenderbuffer(GLenum, GLuint) {}
+	inline void RenderbufferStorage(GLenum, GLenum, GLsizei, GLsizei) {}
+	inline void FramebufferRenderbuffer(GLenum, GLenum, GLenum, GLuint) {}
+	inline void GenerateMipmap(GLenum) {}
+	inline void UniformMatrix4fv(GLint, GLsizei, GLboolean, const GLfloat*) {}
 }
 #define QT_GL3(name) gl3test::name
 #endif
@@ -391,6 +404,111 @@ namespace ogles2 {
 		}
 		return 0;
 	}
+
+	// glGenTextures/glDeleteTextures are real OpenGL 1.1 exports (QT_GL);
+	// glGenFramebuffers/DeleteFramebuffers/glGenRenderbuffers/
+	// DeleteRenderbuffers are not (QT_GL3). Real host objects throughout,
+	// unlike QT_OGLES2_GEN_BUFFERS's fake ones: a texture or framebuffer
+	// does not need converting from big-endian at draw time the way buffer
+	// data does.
+	bool genObjects(const Command& c) {
+		uint32_t kind = c.u(1), n = c.u(2);
+		uint8_t* out = c.p(3);
+		GLuint names[64];
+		if (!out || n > 64) return true;
+		switch (kind) {
+		case QT_OGLES2_K_Texture: QT_GL(GenTextures)(static_cast<GLsizei>(n), names); break;
+		case QT_OGLES2_K_Framebuffer: QT_GL3(GenFramebuffers)(static_cast<GLsizei>(n), names); break;
+		case QT_OGLES2_K_Renderbuffer: QT_GL3(GenRenderbuffers)(static_cast<GLsizei>(n), names); break;
+		default: return true;
+		}
+		for (uint32_t i = 0; i < n; ++i) {
+			uint32_t big = qt_swap32(names[i]);
+			memcpy(out + 4 * i, &big, 4);
+		}
+		return true;
+	}
+
+	bool deleteObjects(const Command& c) {
+		uint32_t kind = c.u(1), n = c.u(2);
+		const uint8_t* in = c.p(3);
+		GLuint names[64];
+		if (!in || n > 64) return true;
+		for (uint32_t i = 0; i < n; ++i) {
+			uint32_t big;
+			memcpy(&big, in + 4 * i, 4);
+			names[i] = qt_swap32(big);
+		}
+		switch (kind) {
+		case QT_OGLES2_K_Texture: QT_GL(DeleteTextures)(static_cast<GLsizei>(n), names); break;
+		case QT_OGLES2_K_Framebuffer: QT_GL3(DeleteFramebuffers)(static_cast<GLsizei>(n), names); break;
+		case QT_OGLES2_K_Renderbuffer: QT_GL3(DeleteRenderbuffers)(static_cast<GLsizei>(n), names); break;
+		}
+		return true;
+	}
+
+	int32_t call(const Command& c) {
+		uint32_t w0 = c.u(2), w1 = c.u(3), w2 = c.u(4), w3 = c.u(5), w4 = c.u(6);
+		switch (c.u(1)) {
+		case QT_OGLES2_C_BindTexture: QT_GL(BindTexture)(static_cast<GLenum>(w0), static_cast<GLuint>(w1)); break;
+		case QT_OGLES2_C_ActiveTexture: QT_GL3(ActiveTexture)(static_cast<GLenum>(w0)); break;
+		case QT_OGLES2_C_GenerateMipmap: QT_GL3(GenerateMipmap)(static_cast<GLenum>(w0)); break;
+		case QT_OGLES2_C_TexParameteri:
+			QT_GL(TexParameteri)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLint>(w2));
+			break;
+		case QT_OGLES2_C_BindFramebuffer: QT_GL3(BindFramebuffer)(static_cast<GLenum>(w0), static_cast<GLuint>(w1)); break;
+		case QT_OGLES2_C_BindRenderbuffer: QT_GL3(BindRenderbuffer)(static_cast<GLenum>(w0), static_cast<GLuint>(w1)); break;
+		case QT_OGLES2_C_FramebufferTexture2D:
+			QT_GL3(FramebufferTexture2D)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLenum>(w2),
+				static_cast<GLuint>(w3), static_cast<GLint>(w4));
+			break;
+		case QT_OGLES2_C_FramebufferRenderbuffer:
+			QT_GL3(FramebufferRenderbuffer)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLenum>(w2),
+				static_cast<GLuint>(w3));
+			break;
+		case QT_OGLES2_C_CheckFramebufferStatus: return static_cast<int32_t>(QT_GL3(CheckFramebufferStatus)(static_cast<GLenum>(w0)));
+		case QT_OGLES2_C_RenderbufferStorage:
+			QT_GL3(RenderbufferStorage)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLsizei>(w2),
+				static_cast<GLsizei>(w3));
+			break;
+		}
+		return 0;
+	}
+
+	// GL_UNSIGNED_BYTE in every known caller -- byte-granular, so the pixel
+	// data needs no order conversion, forwarded as given (data may be NULL,
+	// a render target's own storage, allocated by the driver).
+	bool texImage2D(const Command& c) {
+		GLenum target = static_cast<GLenum>(c.u(1));
+		GLint level = static_cast<GLint>(c.u(2)), internalformat = static_cast<GLint>(c.u(3));
+		GLsizei width = static_cast<GLsizei>(c.u(4)), height = static_cast<GLsizei>(c.u(5));
+		GLint border = static_cast<GLint>(c.u(6));
+		GLenum format = static_cast<GLenum>(c.u(7)), type = static_cast<GLenum>(c.u(8));
+		const uint8_t* data = c.p(9);
+		if (type != GL_UNSIGNED_BYTE) {
+			qt_report("ogles2: GLTexImage2D: only GL_UNSIGNED_BYTE pixels are supported so far");
+			return true;
+		}
+		QT_GL(TexImage2D)(target, level, internalformat, width, height, border, format, type, const_cast<uint8_t*>(data));
+		return true;
+	}
+
+	int32_t uniformMatrix4fv(const Command& c) {
+		GLint location = static_cast<GLint>(c.u(1));
+		uint32_t count = c.u(2);
+		const uint8_t* in = c.p(4);
+		std::vector<float> m;
+		uint32_t i;
+		if (!in || count > 64) return 0;
+		m.resize(static_cast<size_t>(count) * 16);
+		for (i = 0; i < count * 16; ++i) {
+			uint32_t bits = (uint32_t(in[4 * i]) << 24) | (uint32_t(in[4 * i + 1]) << 16) |
+				(uint32_t(in[4 * i + 2]) << 8) | in[4 * i + 3];
+			memcpy(&m[i], &bits, 4);
+		}
+		QT_GL3(UniformMatrix4fv)(location, static_cast<GLsizei>(count), GL_FALSE, &m[0]);
+		return 0;
+	}
 }
 
 bool qt_ogles2_decode(const Command& c, int32_t& result) {
@@ -433,6 +551,23 @@ bool qt_ogles2_decode(const Command& c, int32_t& result) {
 	case QT_OGLES2_GET_LOG:
 		if (c.words != QT_OGLES2_GET_LOG_WORDS) return false;
 		result = ogles2::getLog(c);
+		return true;
+	case QT_OGLES2_GEN:
+		if (c.words != QT_OGLES2_GEN_WORDS) return false;
+		return ogles2::genObjects(c);
+	case QT_OGLES2_DELETE:
+		if (c.words != QT_OGLES2_DELETE_WORDS) return false;
+		return ogles2::deleteObjects(c);
+	case QT_OGLES2_CALL:
+		if (c.words != QT_OGLES2_CALL_WORDS) return false;
+		result = ogles2::call(c);
+		return true;
+	case QT_OGLES2_TEX_IMAGE_2D:
+		if (c.words != QT_OGLES2_TEX_IMAGE_2D_WORDS) return false;
+		return ogles2::texImage2D(c);
+	case QT_OGLES2_UNIFORM_MATRIX4FV:
+		if (c.words != QT_OGLES2_UNIFORM_MATRIX4FV_WORDS) return false;
+		result = ogles2::uniformMatrix4fv(c);
 		return true;
 	}
 	return false;

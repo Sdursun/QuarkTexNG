@@ -341,6 +341,122 @@ void ogles2_GLDrawElements(struct OGLES2Context *ctx, GLenum mode, GLsizei count
 	draw(mode, 0, count, type, boundElementArrayBuffer, indices);
 }
 
+/*
+ * Textures and framebuffers (stage 2, cube/boingocean): real host objects
+ * (gl/oglescmd.h, host/ogles2.cpp), reached generically like shaders and
+ * programs -- QT_OGLES2_GEN/DELETE (glGenTextures and the rest give back
+ * real GLuint names, host-swapped, unlike QT_OGLES2_GEN_BUFFERS's fake
+ * ones) and QT_OGLES2_CALL (the scalar entries, by subop).
+ */
+
+static void genObjects(ULONG kind, GLsizei n, GLuint *names) {
+	ULONG *w = qt_reserve(QT_OGLES2_GEN_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_GEN << 16) | QT_OGLES2_GEN_WORDS;
+	w[1] = kind;
+	w[2] = (ULONG) n;
+	w[3] = (ULONG) names;
+	qt_flush();
+}
+
+static void deleteObjects(ULONG kind, GLsizei n, const GLuint *names) {
+	ULONG *w = qt_reserve(QT_OGLES2_DELETE_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_DELETE << 16) | QT_OGLES2_DELETE_WORDS;
+	w[1] = kind;
+	w[2] = (ULONG) n;
+	w[3] = (ULONG) names;
+	qt_flush();
+}
+
+void ogles2_GLGenTextures(struct OGLES2Context *ctx, GLsizei n, GLuint *textures) { genObjects(QT_OGLES2_K_Texture, n, textures); }
+void ogles2_GLDeleteTextures(struct OGLES2Context *ctx, GLsizei n, const GLuint *textures) {
+	deleteObjects(QT_OGLES2_K_Texture, n, textures);
+}
+void ogles2_GLGenFramebuffers(struct OGLES2Context *ctx, GLsizei n, GLuint *framebuffers) {
+	genObjects(QT_OGLES2_K_Framebuffer, n, framebuffers);
+}
+void ogles2_GLDeleteFramebuffers(struct OGLES2Context *ctx, GLsizei n, const GLuint *framebuffers) {
+	deleteObjects(QT_OGLES2_K_Framebuffer, n, framebuffers);
+}
+void ogles2_GLGenRenderbuffers(struct OGLES2Context *ctx, GLsizei n, GLuint *renderbuffers) {
+	genObjects(QT_OGLES2_K_Renderbuffer, n, renderbuffers);
+}
+void ogles2_GLDeleteRenderbuffers(struct OGLES2Context *ctx, GLsizei n, const GLuint *renderbuffers) {
+	deleteObjects(QT_OGLES2_K_Renderbuffer, n, renderbuffers);
+}
+
+static LONG call(ULONG subop, ULONG w0, ULONG w1, ULONG w2, ULONG w3, ULONG w4) {
+	ULONG *w = qt_reserve(QT_OGLES2_CALL_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_CALL << 16) | QT_OGLES2_CALL_WORDS;
+	w[1] = subop;
+	w[2] = w0;
+	w[3] = w1;
+	w[4] = w2;
+	w[5] = w3;
+	w[6] = w4;
+	return (LONG) qt_flush();
+}
+
+void ogles2_GLBindTexture(struct OGLES2Context *ctx, GLenum target, GLuint texture) {
+	call(QT_OGLES2_C_BindTexture, target, texture, 0, 0, 0);
+}
+void ogles2_GLActiveTexture(struct OGLES2Context *ctx, GLenum texture) { call(QT_OGLES2_C_ActiveTexture, texture, 0, 0, 0, 0); }
+void ogles2_GLGenerateMipmap(struct OGLES2Context *ctx, GLenum target) { call(QT_OGLES2_C_GenerateMipmap, target, 0, 0, 0, 0); }
+void ogles2_GLTexParameteri(struct OGLES2Context *ctx, GLenum target, GLenum pname, GLint param) {
+	call(QT_OGLES2_C_TexParameteri, target, pname, (ULONG) param, 0, 0);
+}
+void ogles2_GLBindFramebuffer(struct OGLES2Context *ctx, GLenum target, GLuint framebuffer) {
+	call(QT_OGLES2_C_BindFramebuffer, target, framebuffer, 0, 0, 0);
+}
+void ogles2_GLBindRenderbuffer(struct OGLES2Context *ctx, GLenum target, GLuint renderbuffer) {
+	call(QT_OGLES2_C_BindRenderbuffer, target, renderbuffer, 0, 0, 0);
+}
+void ogles2_GLFramebufferTexture2D(struct OGLES2Context *ctx, GLenum target, GLenum attachment, GLenum textarget, GLuint texture,
+		GLint level) {
+	call(QT_OGLES2_C_FramebufferTexture2D, target, attachment, textarget, texture, (ULONG) level);
+}
+void ogles2_GLFramebufferRenderbuffer(struct OGLES2Context *ctx, GLenum target, GLenum attachment, GLenum renderbuffertarget,
+		GLuint renderbuffer) {
+	call(QT_OGLES2_C_FramebufferRenderbuffer, target, attachment, renderbuffertarget, renderbuffer, 0);
+}
+GLenum ogles2_GLCheckFramebufferStatus(struct OGLES2Context *ctx, GLenum target) {
+	return (GLenum) call(QT_OGLES2_C_CheckFramebufferStatus, target, 0, 0, 0, 0);
+}
+void ogles2_GLRenderbufferStorage(struct OGLES2Context *ctx, GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
+	call(QT_OGLES2_C_RenderbufferStorage, target, internalformat, (ULONG) width, (ULONG) height, 0);
+}
+
+/* GL_UNSIGNED_BYTE pixels only so far (host/ogles2.cpp). */
+void ogles2_GLTexImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
+		GLint border, GLenum format, GLenum type, const void *pixels) {
+	ULONG *w = qt_reserve(QT_OGLES2_TEX_IMAGE_2D_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_TEX_IMAGE_2D << 16) | QT_OGLES2_TEX_IMAGE_2D_WORDS;
+	w[1] = target;
+	w[2] = (ULONG) level;
+	w[3] = (ULONG) internalformat;
+	w[4] = (ULONG) width;
+	w[5] = (ULONG) height;
+	w[6] = (ULONG) border;
+	w[7] = format;
+	w[8] = type;
+	w[9] = (ULONG) pixels;
+	qt_flush();
+}
+
+void ogles2_GLUniformMatrix4fv(struct OGLES2Context *ctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
+	ULONG *w;
+	if (transpose) {
+		ogles2_missing("GLUniformMatrix4fv (transpose)");
+		return;
+	}
+	w = qt_reserve(QT_OGLES2_UNIFORM_MATRIX4FV_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_UNIFORM_MATRIX4FV << 16) | QT_OGLES2_UNIFORM_MATRIX4FV_WORDS;
+	w[1] = (ULONG) location;
+	w[2] = (ULONG) count;
+	w[3] = 0;
+	w[4] = (ULONG) value;
+	qt_flush();
+}
+
 /* lib.c: an entry the library does not implement yet. */
 void ogles2_missing(const char *name) {
 	static const char *logged[64];

@@ -119,4 +119,49 @@ enum { QT_OGLES2_G_Shader, QT_OGLES2_G_Program };
 #define QT_OGLES2_GET_LOG 0xA014
 #define QT_OGLES2_GET_LOG_WORDS 6
 
+/*
+ * Textures and framebuffers (stage 2, cube/boingocean): real host OpenGL
+ * objects, the same as shaders and programs (above). glTexImage2D's pixel
+ * data is GL_UNSIGNED_BYTE in every known caller -- byte-granular, so no
+ * order to convert, forwarded as given; another type is logged as missing.
+ */
+
+/* glGenTextures/glDeleteTextures, glGenFramebuffers/glDeleteFramebuffers,
+ * glGenRenderbuffers/glDeleteRenderbuffers: kind (QT_OGLES2_K_*), n, address
+ * of n big-endian GLuint names (real host ones here, unlike QT_OGLES2_GEN_
+ * BUFFERS's fake ones -- textures and framebuffers do not need converting
+ * at draw time the way buffer data does). */
+#define QT_OGLES2_GEN 0xA015
+#define QT_OGLES2_GEN_WORDS 4
+#define QT_OGLES2_DELETE 0xA016
+#define QT_OGLES2_DELETE_WORDS 4
+enum { QT_OGLES2_K_Texture, QT_OGLES2_K_Framebuffer, QT_OGLES2_K_Renderbuffer };
+
+/* glBindTexture, glActiveTexture, glGenerateMipmap, glTexParameteri,
+ * glBindFramebuffer, glBindRenderbuffer, glFramebufferTexture2D,
+ * glFramebufferRenderbuffer, glCheckFramebufferStatus (result: its return
+ * value): subop, w0..w4 (an enum/int/uint as given; unused trailing words
+ * ignored). */
+#define QT_OGLES2_CALL 0xA017
+#define QT_OGLES2_CALL_WORDS 7
+enum {
+	QT_OGLES2_C_BindTexture, QT_OGLES2_C_ActiveTexture, QT_OGLES2_C_GenerateMipmap, QT_OGLES2_C_TexParameteri,
+	QT_OGLES2_C_BindFramebuffer, QT_OGLES2_C_BindRenderbuffer, QT_OGLES2_C_FramebufferTexture2D,
+	QT_OGLES2_C_FramebufferRenderbuffer, QT_OGLES2_C_CheckFramebufferStatus, QT_OGLES2_C_RenderbufferStorage
+};
+
+/* glTexImage2D: target, level, internalformat, width, height, border,
+ * format, type, address of the pixel data (0: NULL, as for a render
+ * target's own storage). */
+#define QT_OGLES2_TEX_IMAGE_2D 0xA018
+#define QT_OGLES2_TEX_IMAGE_2D_WORDS 10
+
+/* glUniformMatrix4fv: location, count, transpose (ignored: always sent
+ * column-major, as OpenGL's own uniforms are, so a transposed matrix is
+ * swapped on the 68k side instead, gl/gl.c's LoadMatrixf/MultMatrixf
+ * already do for the fixed-function matrix stack), address of 16 * count
+ * big-endian floats. */
+#define QT_OGLES2_UNIFORM_MATRIX4FV 0xA019
+#define QT_OGLES2_UNIFORM_MATRIX4FV_WORDS 5
+
 #endif

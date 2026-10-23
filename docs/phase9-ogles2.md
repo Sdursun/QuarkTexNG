@@ -182,6 +182,26 @@ GLSL ES vertex and fragment shader compile and link, a two-attribute
 rotating, correctly gradient-shaded triangle draws every frame. The
 Warp3D/agl reference suite (`tests/run.ps1`) is unaffected (0 FAIL).
 
+## Stage 2b: textures and framebuffers (done)
+
+- Textures, framebuffers and renderbuffers are real host OpenGL objects,
+  as shaders and programs are: `QT_OGLES2_GEN`/`QT_OGLES2_DELETE` (by kind)
+  create and delete them. Their names come back as big-endian `GLuint`s.
+  The scalar calls (`glBindTexture`, `glActiveTexture`, `glGenerateMipmap`,
+  `glTexParameteri`, `glBindFramebuffer`, `glFramebufferTexture2D`,
+  `glCheckFramebufferStatus`, renderbuffer storage and attachment) share one
+  opcode, `QT_OGLES2_CALL`, and are selected by subop.
+- `glTexImage2D` forwards `GL_UNSIGNED_BYTE` pixel data as given, because
+  byte data has no byte order. A NULL pointer allocates a render target.
+  Every other type is logged as missing for now.
+- `glUniformMatrix4fv` swaps the floats on the host. `transpose` is not
+  supported; GLES2 requires it to be `GL_FALSE`.
+
+Verified live in WinUAE with two SDK examples, built unmodified:
+`cube.c` (a textured, mipmapped, rotating cube with an MVP matrix uniform)
+and `boingocean.c` (a render-to-texture reflection effect, 660 fps at
+640x480). The reference suite (`tests/run.ps1`) still shows no FAIL.
+
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 
 `aglSwapBuffers()` and everything before it worked on the first real run

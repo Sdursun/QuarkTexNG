@@ -78,7 +78,18 @@ typedef ptrdiff_t GLsizeiptr;
 	F(void, VertexAttribPointer, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer)) \
 	F(void, EnableVertexAttribArray, (GLuint index)) \
 	F(void, DisableVertexAttribArray, (GLuint index)) \
-	F(void, GenerateMipmap, (GLenum target))
+	F(void, GenerateMipmap, (GLenum target)) \
+	F(void, ActiveTexture, (GLenum texture)) \
+	F(void, GenFramebuffers, (GLsizei n, GLuint* framebuffers)) \
+	F(void, DeleteFramebuffers, (GLsizei n, const GLuint* framebuffers)) \
+	F(void, BindFramebuffer, (GLenum target, GLuint framebuffer)) \
+	F(void, FramebufferTexture2D, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
+	F(GLenum, CheckFramebufferStatus, (GLenum target)) \
+	F(void, GenRenderbuffers, (GLsizei n, GLuint* renderbuffers)) \
+	F(void, DeleteRenderbuffers, (GLsizei n, const GLuint* renderbuffers)) \
+	F(void, BindRenderbuffer, (GLenum target, GLuint renderbuffer)) \
+	F(void, RenderbufferStorage, (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
+	F(void, FramebufferRenderbuffer, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer))
 
 namespace gl3 {
 #define QT_GL3_DECLARE(result, name, parameters) extern result (APIENTRY* name) parameters;
