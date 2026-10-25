@@ -115,19 +115,44 @@ void ogles2_GLValidateProgram(struct OGLES2Context *ctx, GLuint program) { simpl
 GLboolean ogles2_GLIsShader(struct OGLES2Context *ctx, GLuint shader) { return (GLboolean) simple(QT_OGLES2_S_IsShader, shader, 0); }
 GLboolean ogles2_GLIsProgram(struct OGLES2Context *ctx, GLuint program) { return (GLboolean) simple(QT_OGLES2_S_IsProgram, program, 0); }
 
-/* count > 1 or an explicit length: not supported yet (QT_OGLES2_SHADER_
- * SOURCE), see gl/oglescmd.h. */
+/* A chunk's length: given, or up to its NUL. */
+static ULONG chunkLength(const GLchar *text, const GLint *length, GLsizei i) {
+	ULONG n = 0;
+	if (length && length[i] >= 0) return (ULONG) length[i];
+	while (text[n]) ++n;
+	return n;
+}
+
+/* The host takes one NUL-terminated text (QT_OGLES2_SHADER_SOURCE): several
+ * chunks, or chunks with an explicit length (ioquake3's renderer), are
+ * joined into one first. */
 void ogles2_GLShaderSource(struct OGLES2Context *ctx, GLuint shader, GLsizei count, const GLchar *const *string, const GLint *length) {
 	ULONG *w;
-	if (count != 1 || length || !string || !string[0]) {
-		ogles2_missing("GLShaderSource (several chunks or an explicit length)");
-		return;
+	char *joined = NULL;
+	const char *text;
+	GLsizei i;
+	if (count < 1 || !string) return;
+	if (count == 1 && !length && string[0]) text = string[0];
+	else {
+		ULONG size = 1, at = 0;
+		for (i = 0; i < count; ++i) if (string[i]) size += chunkLength(string[i], length, i);
+		if (!(joined = AllocVec(size, MEMF_ANY))) return;
+		for (i = 0; i < count; ++i) {
+			ULONG n;
+			if (!string[i]) continue;
+			n = chunkLength(string[i], length, i);
+			CopyMem((APTR) string[i], joined + at, n);
+			at += n;
+		}
+		joined[at] = 0;
+		text = joined;
 	}
 	w = qt_reserve(QT_OGLES2_SHADER_SOURCE_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_SHADER_SOURCE << 16) | QT_OGLES2_SHADER_SOURCE_WORDS;
 	w[1] = shader;
-	w[2] = (ULONG) string[0];
+	w[2] = (ULONG) text;
 	qt_flush();
+	if (joined) FreeVec(joined);
 }
 
 static LONG nameCall(ULONG subop, ULONG program, ULONG index, const char *text) {

@@ -166,7 +166,7 @@ $(OGLES2_DIR)/functable.h: ogles2.library/ogles2.fd amiga/fd2functable.py | $(OG
 	$(PYTHON) amiga/fd2functable.py $< $@
 
 OGLES2_VERSION  = 1
-OGLES2_REVISION = 0
+OGLES2_REVISION = 3
 
 $(OGLES2_DIR)/libheader.o: amiga/libheader.c $(OGLES2_DIR)/functable.h
 	$(CC) $(CFLAGS) -I$(OGLES2_DIR) -DLIB_NAME='"ogles2.library"' \

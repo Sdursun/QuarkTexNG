@@ -1,9 +1,11 @@
 # Phase 9: a QuarkTex ogles2.library
 
-Status: stage 3 done (2026-10-24). All of GLES2 is implemented except
+Status: stage 4 done (2026-10-25). All of GLES2 is implemented except
 compressed textures, shader and program binaries and glClipControlEXT,
-which stay logging stubs. The SDK's four examples run unmodified in WinUAE:
-`triangle`, `cube`, `boingocean` and `boing2026`.
+which stay logging stubs, and every surface of `aglCreateContext2`. The
+SDK's four examples run unmodified in WinUAE (`triangle`, `cube`,
+`boingocean` and `boing2026`), and so does the PiStorm port of Quake III
+Arena with ioquake3's GLES2 renderer.
 
 ## Why
 
@@ -141,9 +143,9 @@ Shaders, programs, uniforms, buffers, vertex attributes and drawing
   `GET_LOG` -- the host swaps the result into the Amiga address it is given
   itself, unlike the generic command buffer's raw pointer forwarding, see
   gl/glgen.cpp, which would leave a host-native value there). `glShaderSource`
-  is its own opcode: one whole, NUL-terminated GLSL ES string (every known
-  caller passes exactly that; several chunks or an explicit length are
-  logged as missing).
+  is its own opcode: one whole, NUL-terminated GLSL ES string. (Since
+  stage 4 the library joins several chunks, or chunks with an explicit
+  length, into one first.)
 - **Buffers are QuarkTex's own**, not real GL buffer objects: `glGenBuffers`
   hands out small integers and `glBufferData` keeps the bytes as given (still
   big-endian) in a `std::map<name, vector<uint8_t>>` on the host. A vertex
@@ -263,6 +265,51 @@ Verification:
 
 **Several programs at once:** this was a limit of stage 3 and of every
 QuarkTex library; fixed afterwards, see docs/multitasking.md.
+
+## Stage 4: every context surface, and Quake III (done)
+
+The PiStorm port of Quake III Arena (`Quake3-GLES2`, ioquake3's renderergl2
+on ogles2.library) did not start in WinUAE, for three reasons:
+
+- **The version.** It opens `ogles2.library` and wants 1.1 or newer; ours
+  said 1.0. Its own drawer carries the PiStorm library in `libs/` and uses
+  that one unless `LIBS:` has 1.3 or newer. The library implements the 1.3
+  SDK's interface, so it is now 1.3 (`OGLES2_REVISION` in amiga/Makefile).
+- **The surfaces.** `aglCreateContext2` only took `OGLES2_CCT_WINDOW`, and
+  the game passes none (windowed) or `OGLES2_CCT_MODEID` (fullscreen):
+  `OGLES2_CCE_BAD_TAGS`. All of the SDK's are there now
+  (`ogles2.library/context.c`):
+  - none of `WINDOW`, `BITMAP`, `MODEID`: a window of the library's own on
+    the default public screen, 640 x 480 or `OGLES2_CCT_PISTORM_WIDTH`/
+    `_HEIGHT`, without a close gadget or IDCMP;
+  - `OGLES2_CCT_MODEID` (or `_CONTEXT_FOR_MODEID`): a 24-bit screen in that
+    mode, of its size or the PiStorm size tags, with a backdrop window for
+    input, as minigl.library's fullscreen contexts;
+  - `OGLES2_CCT_BITMAP`: the program's bitmap, written at each
+    `aglSwapBuffers` (only a Picasso96 bitmap the host can write:
+    `OGLES2_CCE_NO_DISPLAY` otherwise); `aglSetBitmap` moves to another
+    one, after writing the open frame into the old;
+  - `OGLES2_CCT_PISTORM_GET_WINDOW` answers with the window that gets
+    input; `aglSetParams2` takes a new or resized program window, answers
+    the size and window tags and ignores `OGLES2_CCT_VSYNC`.
+  `aglDestroyContext` closes the window and screen the library opened.
+- **`glShaderSource` with lengths.** ioquake3 passes each shader with an
+  explicit length.
+
+Verification, in the user's WinUAE with the library loaded from RAM:, not
+installed in `LIBS:`:
+- Quake III windowed: the menu and a game in the library's window; all 95
+  GLSL shaders compile; the renderer restart at start-up (a context
+  destroyed and made again) works.
+- `timedemo four` at 640 x 480: 79.0 fps windowed, 83.6 fps fullscreen
+  (the README of the PiStorm build gives 80.4 on an A1200 with a Pi 4).
+  The fullscreen screen shows the game; both quit cleanly (`+set nextdemo
+  quit`).
+- `o02_ogles2_api` passes; `boingocean` runs in a window and with its
+  `FULLSCREEN` switch (a `MODEID` context).
+
+Breaking the game with Ctrl-C in the middle of play reset the Amiga, with no
+alert recorded; a normal quit does not. Not looked into yet.
 
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 
