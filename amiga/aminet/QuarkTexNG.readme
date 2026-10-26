@@ -1,4 +1,4 @@
-Short:        Hardware 3D for WinUAE (Warp3D/MiniGL/GLES2)
+Short:        WinUAE hardware 3D: Warp3D/MiniGL/GLES2
 Author:       Serkan DURSUN, based on QuarkTex by Robert Konrad
 Uploader:     Serkan DURSUN <blasterreal@gmail.com>
 Type:         driver/video
