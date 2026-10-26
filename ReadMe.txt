@@ -1,9 +1,9 @@
-QuarkTex NG 1.0 beta 2
+QuarkTex NG 1.0 beta 3
 ======================
 
-QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA (agl)
-and MiniGL programs inside the emulated Amiga draw with the host's OpenGL on
-Windows.
+QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA
+(agl), MiniGL and OpenGL ES 2.0 (ogles2) programs inside the emulated Amiga
+draw with the host's OpenGL on Windows.
 
 It is an independent continuation of QuarkTex, the 3D graphics
 virtualization solution Robert Konrad first released in 2003.
@@ -31,16 +31,16 @@ Installing
 - Copy quarktexng-windows-x86.dll and quarktexng-windows-x86-64.dll into the
   WinUAE directory (or its plugins directory). Older quarktex-windows-*.dll
   files are no longer used and can be deleted.
-- Copy Warp3D.library, agl.library (for StormMESA) and minigl.library (for
-  MiniGL) to LIBS: in AmigaOS.
+- Copy Warp3D.library, agl.library (for StormMESA), minigl.library (for
+  MiniGL) and ogles2.library (for OpenGL ES 2.0) to LIBS: in AmigaOS. The
+  libraries and DLLs of one release belong together.
 - Required: Settings, Host, Miscellaneous: tick "Allow native code"
   (native_code=true in the configuration).
 - Required: Settings, Hardware, CPU and FPU: FPU "CPU internal" with the
   precision "Host (80-bit)" (fpu_msvc_long_double=true). With the default
   64 bits games compute wrong values that a real 68k FPU does not: in JK2
   the first person weapon never shows, in RTCW it vanishes during play.
-  minigl.library tells so in a requester, all three libraries in
-  QuarkTexNGLog.txt.
+  The libraries write a warning into QuarkTexNGLog.txt.
 - Recommended on the same page: a 68040 or 68060 at "Fastest possible",
   JIT on with the largest cache size (16 MB, cachesize=16384) and the JIT's
   "FPU support" on (compfpu=true). The games run on the emulated 68k; with
@@ -58,9 +58,11 @@ Everything is built in Docker; Docker and a POSIX shell (Git Bash on Windows)
 are all that is needed:
 
   ./build.sh            builds everything and collects the release in dist/
-  ./build.sh amiga      Warp3D.library and agl.library, and minigl.library
+  ./build.sh amiga      Warp3D.library and agl.library, minigl.library
                         when MINIGL_SDK names MiniGL's SDK headers
-                        (see docs/phase7-minigl.md) (m68k-amigaos-gcc)
+                        (see docs/phase7-minigl.md), and ogles2.library
+                        when OGLES2_SDK names the ogles2 SDK
+                        (see docs/phase9-ogles2.md) (m68k-amigaos-gcc)
   ./build.sh host       quarktexng-windows-x86.dll and -x86-64.dll (MinGW-w64)
   ./build.sh tests      the reference tests, see tests/README.md
   ./build.sh generate   regenerates gl/*.auto.* after editing gl/glFuncs.txt
@@ -76,6 +78,7 @@ Layout:
   Warp3D.library/   Warp3D 4 API on top of OpenGL (68k)
   agl.library/      StormMESA API on top of OpenGL (68k)
   minigl.library/   MiniGL's shared library interface on top of OpenGL (68k)
+  ogles2.library/   the ogles2 SDK's OpenGL ES 2.0 interface on OpenGL (68k)
   gl/               68k bridge to the host, generated from glFuncs.txt
   amiga/            library skeleton and build files for the 68k side
   host/             host library: window and OpenGL context inside WinUAE

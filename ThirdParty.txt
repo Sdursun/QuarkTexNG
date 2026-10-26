@@ -92,7 +92,18 @@ community; QuarkTex NG's source is in Source/. The SDK is not part of this
 release (see docs/phase7-minigl.md in Source/ for building).
 
 
-6. Picasso96 and AmigaOS include files (not included)
+6. ogles2 SDK (not included)
+----------------------------
+
+ogles2.library is QuarkTex NG's own implementation of the interface of the
+PiStorm ogles2.library (github.com/ladislawv/ogles2). Building it reads
+the SDK's include files (include/libraries/), which are under the MIT
+License; its GLES2 and KHR headers are Khronos', MIT or Apache-2.0. None of
+the PiStorm library's code is in QuarkTex NG. The SDK is not part of this
+release (see docs/phase9-ogles2.md in Source/ for building).
+
+
+7. Picasso96 and AmigaOS include files (not included)
 -----------------------------------------------------
 
 The Amiga libraries are built with the AmigaOS and Picasso96 include files

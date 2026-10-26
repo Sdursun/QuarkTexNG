@@ -1,22 +1,44 @@
-Short:        Hardware 3D for WinUAE (Warp3D/MiniGL)
+Short:        Hardware 3D for WinUAE (Warp3D/MiniGL/GLES2)
 Author:       Serkan DURSUN, based on QuarkTex by Robert Konrad
 Uploader:     Serkan DURSUN <blasterreal@gmail.com>
 Type:         driver/video
-Version:      1.0beta2
+Version:      1.0beta3
 Architecture: m68k-amigaos >= 3.0
 Distribution: Aminet
 Requires:     WinUAE with native code, Picasso96 RTG, 68020+ with FPU
 
-QuarkTex NG 1.0 beta 2
+QuarkTex NG 1.0 beta 3
 ======================
 
 QuarkTex NG gives AmigaOS in WinUAE hardware accelerated 3D: Warp3D,
-StormMESA (agl.library) and MiniGL programs draw with the PC's graphics card
-through OpenGL, instead of the emulated CPU drawing every pixel.
+StormMESA (agl.library), MiniGL and OpenGL ES 2.0 (ogles2.library) programs
+draw with the PC's graphics card through OpenGL, instead of the emulated CPU
+drawing every pixel.
 
 It is an independent continuation of QuarkTex, the 3D virtualization
 solution Robert Konrad released in 2003 (driver/video/QuarkTex, last
 version 0.53), under the same license, the GNU LGPL v3.
+
+What is new in 1.0 beta 3
+------------------------
+
+- New ogles2.library: the OpenGL ES 2.0 API of the PiStorm ogles2 SDK
+  (1.3), GLSL ES shaders included, on the PC's OpenGL 3.3. Programs built
+  against that SDK run unchanged, among them the PiStorm port of Quake III
+  Arena with ioquake3's shader renderer: 79 fps in a window and 84 fps
+  fullscreen in "timedemo four" at 640x480.
+- Several 3D programs can draw at the same time, each in its own window.
+- Fullscreen screens get the screen mode of their size. minigl.library and
+  W3D_BestModeID asked Picasso96 for 24-bit modes, which uaegfx does not
+  have; an 800x600 screen then got a 640x480 mode and WinUAE showed only
+  its top left (Open Golf, RTCW).
+- Warp3D: W3D_GetScreenmodeList ends its list properly, W3D_BestModeID
+  leaves the caller's tags alone, W3D_RequestMode offers 32-bit modes for
+  24-bit formats.
+- No more requester about the FPU's precision at every MiniGL game start;
+  the warning stays in QuarkTexNGLog.txt.
+- Libraries and DLLs of this release only work with each other: install
+  all of them.
 
 What is new since QuarkTex 0.53
 -------------------------------
@@ -45,6 +67,8 @@ Performance (Intel Iris Xe, 68040/68060 with JIT)
   RTCW at 640x480, no frame cap  MiniGL Classic on Warp3D 157 fps,
                                  QuarkTex NG minigl.library about 170 fps
   RTCW, data per frame to host   1.37 MB before, 22 KB now
+  Quake III GLES2, timedemo four PiStorm with Raspberry Pi 4 80.4 fps,
+  at 640x480                     QuarkTex NG 79.0 (window), 83.6 (full)
 
 Requirements
 ------------
@@ -60,8 +84,8 @@ Installation
 1. Copy the two files in WinUAE/ (quarktexng-windows-x86.dll and
    quarktexng-windows-x86-64.dll) into your WinUAE directory, next to
    winuae.exe and winuae64.exe.
-2. Copy the three files in Libs/ (Warp3D.library, agl.library,
-   minigl.library) to LIBS: on your Amiga. Keep copies of the libraries you
+2. Copy the four files in Libs/ (Warp3D.library, agl.library,
+   minigl.library, ogles2.library) to LIBS: on your Amiga. Keep copies of the libraries you
    replace. The libraries and the DLLs belong together.
 3. Set up WinUAE as below.
 
@@ -74,7 +98,7 @@ Required:
   "Host (80-bit)" (fpu_msvc_long_double=true). With the default 64-bit
   emulation games compute values a real 68k FPU does not: in Jedi Knight II
   the first person weapon never shows, in RTCW it disappears. The libraries
-  check this; minigl.library warns in a requester.
+  check this and write a warning into QuarkTexNGLog.txt.
 
 Recommended:
 - CPU 68040 or 68060 at "Fastest possible".
@@ -95,6 +119,11 @@ Known issues
 - On planar or 8-bit screens the 3D picture is drawn in a window of its own
   over WinUAE, which shows only while WinUAE runs in a window.
 - The rotating passport in OpenLara's menu draws dark.
+- Overlapping windows: each program writes its frame over its whole
+  window, also over windows in front of it.
+- ogles2.library: no object sharing between contexts, no compressed
+  textures, no shader or program binaries; VSYNC and multisampling of the
+  default framebuffer are ignored.
 
 License and source
 ------------------
@@ -116,7 +145,8 @@ them from QuarkTex's original repository, as
 Source/Warp3D.library/Warp3D-includes.txt explains. Amigamesa.h is from
 Mesa 1.2, (C) 1995 Brian Paul, LGPL v2 or later. Building minigl.library
 needs MiniGL's SDK, (C) Hyperion under the Hyperion MiniGL Open Source
-License, which is not included.
+License, which is not included; building ogles2.library needs the ogles2
+SDK (github.com/ladislawv/ogles2, MIT headers), not included either.
 
 Archive contents
 ----------------
@@ -127,7 +157,8 @@ Archive contents
   QuarkTexNG/License.txt        GNU LGPL v3
   QuarkTexNG/COPYING            GNU GPL v3
   QuarkTexNG/ThirdParty.txt     notices of the parts made by others
-  QuarkTexNG/Libs/              Warp3D.library, agl.library, minigl.library
+  QuarkTexNG/Libs/              Warp3D.library, agl.library, minigl.library,
+                                ogles2.library
   QuarkTexNG/WinUAE/            the host DLLs for 32- and 64-bit WinUAE
   QuarkTexNG/Source/            source code of this release (without the
                                 Warp3D API includes, see above)
@@ -135,6 +166,9 @@ Archive contents
 History
 -------
 
+1.0beta3  New ogles2.library (OpenGL ES 2.0); several 3D programs at once;
+          fullscreen screens in the mode of their size; Warp3D screen mode
+          fixes; no FPU requester.
 1.0beta2  minigl.library moved to MiniGL's 29 SDK (PiStorm3D 29.1): lighting,
           normal arrays, a GLU and GLUT subset. Programs built on an older
           MiniGL SDK need recompiling against the 29 SDK.

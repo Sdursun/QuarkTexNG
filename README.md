@@ -1,9 +1,9 @@
 # QuarkTex NG
 
-**Hardware-accelerated 3D for AmigaOS in WinUAE.** Warp3D, StormMESA (agl)
-and MiniGL programs running in the emulated Amiga draw with the PC's
-graphics card through OpenGL, instead of the emulated CPU drawing every
-pixel in software.
+**Hardware-accelerated 3D for AmigaOS in WinUAE.** Warp3D, StormMESA (agl),
+MiniGL and OpenGL ES 2.0 (ogles2) programs running in the emulated Amiga
+draw with the PC's graphics card through OpenGL, instead of the emulated
+CPU drawing every pixel in software.
 
 QuarkTex NG is an independent continuation of
 [QuarkTex](https://github.com/RobDangerous/QuarkTex), the 3D virtualization
@@ -11,22 +11,46 @@ solution Robert Konrad released in 2003 (last version 0.53). It keeps its
 license, the GNU LGPL v3, and its idea, and rebuilds the rest: a 64-bit
 capable host library, a command buffer instead of one emulator call per
 OpenGL function, a modern OpenGL 3.3 renderer for Warp3D, a new
-minigl.library, and frames written into Amiga display memory so they show
-in fullscreen too.
+minigl.library and ogles2.library, and frames written into Amiga display
+memory so they show in fullscreen too.
 
-Status: **1.0 beta 2**, in development.
+Status: **1.0 beta 3**, in development.
+
+## What's new in 1.0 beta 3
+
+- **ogles2.library**: the OpenGL ES 2.0 API of the PiStorm ogles2 SDK
+  (1.3), with GLSL ES shaders, on the host's OpenGL 3.3. Programs built
+  against that SDK run unchanged: its examples, and the PiStorm port of
+  Quake III Arena with ioquake3's shader renderer (79 fps windowed and 84
+  fps fullscreen in `timedemo four` at 640 × 480). Shaders are compiled
+  from source; compressed textures and shader binaries are not supported.
+- **Several programs at once**: every library keeps its state per program,
+  so two or more 3D programs can draw at the same time, each in its own
+  window ([docs/multitasking.md](docs/multitasking.md)).
+- **Fullscreen in the right screen mode**: minigl.library and Warp3D's
+  `W3D_BestModeID` asked Picasso96 for 24-bit modes, which WinUAE's RTG
+  board does not have (its true colour modes are 32-bit). An 800 × 600
+  screen then got a 640 × 480 mode, and WinUAE showed only its top left
+  (Open Golf, RTCW). They now get the mode of their size.
+- Warp3D: `W3D_GetScreenmodeList` ends its list properly (it ended in an
+  uninitialised entry), `W3D_BestModeID` leaves the caller's tags as they
+  are, `W3D_RequestMode` offers 32-bit modes for 24-bit formats.
+- minigl.library no longer stops every game start with a requester about
+  the FPU's precision; the warning stays in `QuarkTexNGLog.txt`.
+- The protocol between libraries and DLLs changed: install the libraries
+  and DLLs of this release together.
 
 ## What's new compared to QuarkTex 0.53
 
-| | QuarkTex 0.53 (2003) | QuarkTex NG 1.0 beta 2 |
+| | QuarkTex 0.53 (2003) | QuarkTex NG 1.0 beta 3 |
 | --- | --- | --- |
 | WinUAE | 32-bit only (old uaelib traps) | 32-bit and **64-bit** (native code interface) |
 | Host communication | one emulator call per OpenGL function | commands batched in a buffer |
 | Warp3D | drawn from the 68k, vertex by vertex, OpenGL 1.1 | drawn on the host, batched, OpenGL 3.3 core |
-| APIs | Warp3D, StormMESA | Warp3D, StormMESA, **MiniGL** (new minigl.library) |
+| APIs | Warp3D, StormMESA | Warp3D, StormMESA, **MiniGL** and **OpenGL ES 2.0** (new minigl.library and ogles2.library) |
 | Display | a host window over the emulator: windowed mode only | frames written into Amiga RTG memory: window, full window and **fullscreen**, with WinUAE's scaling, filters and recording |
 | Stencil buffer, chroma key, mipmaps | missing | supported |
-| Several 3D contexts at once | no | yes |
+| Several 3D contexts at once | no | yes, also in several programs at the same time |
 | Fog | drawn black | correct |
 | Paletted textures, texture colours, texture updates | wrong | correct |
 | Z-buffer reads and writes | garbage | correct |
@@ -83,6 +107,23 @@ runs at its own 90 fps cap.
 | Star Wars Jedi Knight II | MiniGL | intro, cutscenes with lip sync, levels |
 | OpenLara (Tomb Raider) | MiniGL | intro videos, menu, levels |
 | Hurrican | MiniGL | cracktro, menu, levels |
+| Open Golf | MiniGL | menu and game, in a window and fullscreen |
+| Quake III Arena (PiStorm GLES2 port) | ogles2 | menu, game and `timedemo four`, in a window and fullscreen |
+| ogles2 SDK examples (triangle, cube, boingocean, boing2026) | ogles2 | render-to-texture, shadow maps, MSAA framebuffers |
+
+### OpenGL ES 2.0: Quake III Arena
+
+The PiStorm port of Quake III Arena with ioquake3's GLES2 renderer
+(`Quake3-GLES2`), `timedemo four` at 640 × 480:
+
+| Path | fps |
+| --- | --- |
+| A1200 with PiStorm and a Raspberry Pi 4 (the port's own figure) | 80.4 |
+| QuarkTex NG ogles2.library, WinUAE window | **79.0** |
+| QuarkTex NG ogles2.library, fullscreen | **83.6** |
+
+`quake3-gl2 +set sys_nostdout 0 +set nextdemo quit +timedemo 1 +demo four`
+prints the result in the Shell.
 
 ## Requirements
 
@@ -96,8 +137,8 @@ runs at its own 90 fps cap.
 1. Copy `quarktexng-windows-x86.dll` and `quarktexng-windows-x86-64.dll` into
    the WinUAE directory (or its `plugins` directory). Older
    `quarktex-windows-*.dll` files are not used any more.
-2. Copy `Warp3D.library`, `agl.library` (StormMESA) and `minigl.library`
-   (MiniGL) to `LIBS:` in AmigaOS. The libraries and the DLLs belong
+2. Copy `Warp3D.library`, `agl.library` (StormMESA), `minigl.library`
+   (MiniGL) and `ogles2.library` (OpenGL ES 2.0) to `LIBS:` in AmigaOS. The libraries and the DLLs belong
    together: a library of one release does not work with a DLL of another.
 3. Set up WinUAE as below.
 
@@ -171,8 +212,14 @@ shows only while WinUAE runs in a window.
 - MiniGL Classic (the Warp3D-based minigl.library) in fullscreen crashes on
   QuarkTex NG's Warp3D. QuarkTex NG's own minigl.library runs the same games.
 - The rotating passport in OpenLara's menu draws dark.
-- As in 0.53, a library is not meant to be used by two tasks drawing at the
-  same time.
+- Windows that overlap: each program writes its frame over its whole
+  window rectangle, also over windows in front of it.
+- ogles2.library: objects are not shared between contexts
+  (`OGLES2_CCT_SHARE_WITH`); compressed textures, shader and program
+  binaries and `glClipControlEXT` are missing; `OGLES2_CCT_VSYNC` and
+  multisampling of the default framebuffer are ignored.
+- Breaking Quake III (ogles2) with Ctrl-C during play reset the Amiga; a
+  normal quit does not.
 
 ## Building
 
@@ -181,7 +228,7 @@ are all that is needed:
 
 ```sh
 ./build.sh            # everything, collected in dist/
-./build.sh amiga      # Warp3D.library, agl.library; minigl.library when MINIGL_SDK is set
+./build.sh amiga      # Warp3D.library, agl.library; minigl.library and ogles2.library with MINIGL_SDK and OGLES2_SDK
 ./build.sh host       # quarktexng-windows-x86.dll and -x86-64.dll (MinGW-w64)
 ./build.sh tests      # test programs, see tests/README.md
 ./build.sh unittest   # the OpenGL command buffer encoder/decoder on the build host
@@ -190,7 +237,9 @@ are all that is needed:
 
 `minigl.library` needs MiniGL's SDK headers, which are not part of this
 repository (they are under the Hyperion MiniGL Open Source License):
-`MINIGL_SDK=<sdk>/dev/include ./build.sh amiga`.
+`MINIGL_SDK=<sdk>/dev/include ./build.sh amiga`. `ogles2.library` needs the
+ogles2 SDK (github.com/ladislawv/ogles2, its headers are MIT):
+`OGLES2_SDK=<ogles2-sdk>/ogles2/SDK ./build.sh amiga`.
 
 The host DLLs also build with Visual Studio 2022:
 `cmake -S . -B build/host-x64 -A x64` and `cmake --build build/host-x64 --config Release`
@@ -217,6 +266,7 @@ WinUAE, with frame capture, profiling (`-Profile`), command tracing
 | `Warp3D.library/` | Warp3D 4 API on the host renderer (68k) |
 | `agl.library/` | StormMESA API on OpenGL (68k) |
 | `minigl.library/` | MiniGL's shared library interface on OpenGL (68k) |
+| `ogles2.library/` | the ogles2 SDK's OpenGL ES 2.0 interface on the host's OpenGL 3.3 (68k) |
 | `gl/` | 68k bridge to the host, partly generated from `glFuncs.txt` |
 | `amiga/` | library skeleton and build files for the 68k side |
 | `host/` | host DLL: OpenGL contexts, Warp3D renderer, presenting into Amiga memory |

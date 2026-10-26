@@ -3,7 +3,8 @@
 # Windows) are needed.
 #
 #   ./build.sh            Amiga libraries + host DLLs, collected in dist/
-#   ./build.sh amiga      Warp3D.library and agl.library only
+#   ./build.sh amiga      Warp3D.library and agl.library; minigl.library and
+#                         ogles2.library when MINIGL_SDK and OGLES2_SDK are set
 #   ./build.sh host       quarktexng-windows-x86.dll and -x86-64.dll only
 #   ./build.sh tests      Warp3D test programs and the legacy QuarkTex.alib
 #                         the 0.53 reference libraries need (see tests/run.ps1)
@@ -107,6 +108,7 @@ dist() {
 	mkdir -p dist
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
 	if [ -f build/amiga/minigl.library ]; then cp build/amiga/minigl.library dist/; fi
+	if [ -f build/amiga/ogles2.library ]; then cp build/amiga/ogles2.library dist/; fi
 	cp build/host-x86/quarktexng-windows-x86.dll build/host-x64/quarktexng-windows-x86-64.dll dist/
 	cp License.txt COPYING ThirdParty.txt ReadMe.txt dist/
 	echo "dist/:"
@@ -117,21 +119,22 @@ dist() {
 # (amiga/aminet/QuarkTexNG.readme). The archive holds the libraries and DLLs
 # of dist/, the documents and licenses, and the source of the commit they
 # were built from, which the LGPL asks for; so the tree must be committed.
-# minigl.library must be in dist/ (MINIGL_SDK set for the build).
+# minigl.library and ogles2.library must be in dist/ (MINIGL_SDK and
+# OGLES2_SDK set for the build).
 aminet() {
 	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 		echo "aminet: commit first, the archive carries the source of HEAD" >&2
 		exit 1
 	fi
-	for f in Warp3D.library agl.library minigl.library quarktexng-windows-x86.dll quarktexng-windows-x86-64.dll; do
-		if [ ! -f "dist/$f" ]; then echo "aminet: dist/$f missing (./build.sh with MINIGL_SDK set)" >&2; exit 1; fi
+	for f in Warp3D.library agl.library minigl.library ogles2.library quarktexng-windows-x86.dll quarktexng-windows-x86-64.dll; do
+		if [ ! -f "dist/$f" ]; then echo "aminet: dist/$f missing (./build.sh with MINIGL_SDK and OGLES2_SDK set)" >&2; exit 1; fi
 	done
 	package=build/aminet/QuarkTexNG
 	# The contents, not the directory, which Explorer or OneDrive may hold open.
 	mkdir -p build/aminet
 	rm -rf build/aminet/QuarkTexNG build/aminet/QuarkTexNG.lha build/aminet/QuarkTexNG.readme
 	mkdir -p "$package/Libs" "$package/WinUAE" "$package/Source"
-	cp dist/Warp3D.library dist/agl.library dist/minigl.library "$package/Libs/"
+	cp dist/Warp3D.library dist/agl.library dist/minigl.library dist/ogles2.library "$package/Libs/"
 	cp dist/quarktexng-windows-x86.dll dist/quarktexng-windows-x86-64.dll "$package/WinUAE/"
 	# Text files with Amiga (LF) line ends.
 	for f in ReadMe.txt README.md License.txt COPYING ThirdParty.txt amiga/aminet/QuarkTexNG.readme; do
