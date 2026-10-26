@@ -121,8 +121,9 @@ traced frame has a NaN.
 `gl/gl.c` checks at library initialisation whether 1 + 2^-60 differs from 1
 (only with the 64-bit mantissa of extended precision; in WinUAE 0 by default,
 1 with "Host (80-bit)", with the JIT FPU as well, and with Softfloat). If
-not, all libraries log a warning, and minigl.library shows a requester
-before its first screen opens. The test configuration sets
+not, all libraries log a warning. (minigl.library also showed a requester
+before its first screen opened; it was removed again, as it interrupted
+every game start.) The test configuration sets
 `fpu_msvc_long_double=true`; the reference tests are unchanged by it.
 
 ## agl.library and Warp3D.library

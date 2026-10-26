@@ -43,7 +43,6 @@ int presentable(struct BitMap *bitmap);
  * applications that may stop drawing after any frame (agl, Warp3D). */
 void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height, int wait);
 void logString(char *c);
-extern int qt_fpu_extended; /* as in gl/gl.h */
 ULONG *qt_reserve(ULONG words);
 ULONG qt_flush(void);
 /* Two pointers kept per task (gl/gl.c): [1] is its GLUT state (glu.c). */

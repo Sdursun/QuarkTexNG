@@ -137,8 +137,8 @@ Why these matter:
   Amiga does not: in Jedi Knight II the first person weapon never appears,
   in Return to Castle Wolfenstein it disappears during play (their matrices
   become NaN). With *Host (80-bit)* both show. QuarkTex NG checks the
-  precision when a library opens: minigl.library shows a requester, and all
-  three libraries write a warning into `QuarkTexNGLog.txt`. *Softfloat
+  precision when a library opens and writes a warning into
+  `QuarkTexNGLog.txt`. *Softfloat
   (80-bit)* is precise too, but WinUAE cannot combine it with the JIT's FPU
   support, so it is much slower.
 - **JIT and JIT FPU support.** The 3D work runs on the PC, but the game
