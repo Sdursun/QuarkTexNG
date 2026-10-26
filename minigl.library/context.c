@@ -150,6 +150,14 @@ static void *openScreen(QtMglContext *c, ULONG mode, int width, int height) {
 		if (P96Base) {
 			mode = p96BestModeIDTags(P96BIDTAG_NominalWidth, width, P96BIDTAG_NominalHeight, height,
 				P96BIDTAG_Depth, depth, TAG_DONE);
+			/* A board whose true colour modes are all 32-bit (uaegfx) has
+			 * none of depth 24 for Picasso96: then BestModeID gave Open
+			 * Golf's 800 x 600 screen a 640 x 480 mode, of which WinUAE
+			 * showed the top left. */
+			if (mode == INVALID_ID && depth == 24) {
+				mode = p96BestModeIDTags(P96BIDTAG_NominalWidth, width, P96BIDTAG_NominalHeight, height,
+					P96BIDTAG_Depth, 32, TAG_DONE);
+			}
 		}
 		if (mode == INVALID_ID) {
 			mode = BestModeID(BIDTAG_DesiredWidth, width, BIDTAG_DesiredHeight, height,
