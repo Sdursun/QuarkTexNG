@@ -122,8 +122,10 @@ ULONG W3D_RequestMode(__REGA0(struct TagItem *taglist)) {
 			if (taglist[i].ti_Data & W3D_FMT_B5G6R5) fmt |= RGBFF_HICOLOR;
 			if (taglist[i].ti_Data & W3D_FMT_R5G6B5PC) fmt |= RGBFF_HICOLOR;
 			if (taglist[i].ti_Data & W3D_FMT_B5G6R5PC) fmt |= RGBFF_HICOLOR;
-			if (taglist[i].ti_Data & W3D_FMT_R8G8B8) fmt |= RGBFF_TRUECOLOR;
-			if (taglist[i].ti_Data & W3D_FMT_B8G8R8) fmt |= RGBFF_TRUECOLOR;
+			/* 24-bit as well as 32-bit: the host writes frames into either,
+			 * and uaegfx's true colour modes are all 32-bit. */
+			if (taglist[i].ti_Data & W3D_FMT_R8G8B8) fmt |= RGBFF_TRUECOLOR | RGBFF_TRUEALPHA;
+			if (taglist[i].ti_Data & W3D_FMT_B8G8R8) fmt |= RGBFF_TRUECOLOR | RGBFF_TRUEALPHA;
 			if (taglist[i].ti_Data & W3D_FMT_A8R8G8B8) fmt |= RGBFF_TRUEALPHA;
 			if (taglist[i].ti_Data & W3D_FMT_A8B8G8R8) fmt |= RGBFF_TRUEALPHA;
 			if (taglist[i].ti_Data & W3D_FMT_R8G8B8A8) fmt |= RGBFF_TRUEALPHA;
@@ -135,7 +137,7 @@ ULONG W3D_RequestMode(__REGA0(struct TagItem *taglist)) {
 		case ASLSM_MinWidth: taglist[i].ti_Tag = P96MA_MinWidth; break;
 		case ASLSM_MinHeight: taglist[i].ti_Tag = P96MA_MinHeight; break;
 		case ASLSM_MaxWidth: taglist[i].ti_Tag = P96MA_MaxWidth; break;
-		case ASL_MaxHeight: taglist[i].ti_Tag = P96MA_MaxHeight; break;
+		case ASLSM_MaxHeight: taglist[i].ti_Tag = P96MA_MaxHeight; break;
 		case ASLSM_MinDepth: taglist[i].ti_Tag = P96MA_MinDepth; break;
 		case ASLSM_MaxDepth: taglist[i].ti_Tag = P96MA_MaxDepth; break;
 		}

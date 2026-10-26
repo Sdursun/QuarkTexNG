@@ -23,29 +23,31 @@ struct P96Mode {
 	ULONG			DisplayID;
 };
 */
+/* Picasso96's modes of 15 bits or more (the ones the host can write frames
+ * into, phase 8), as a NULL-terminated list; NULL if there is none. The
+ * list used to end in an extra, uninitialised entry. */
 W3D_ScreenMode *W3D_GetScreenmodeList(void) {
-	struct List		*ml;
-	W3D_ScreenMode* smstart = malloc(sizeof(W3D_ScreenMode));
-	W3D_ScreenMode* sm = smstart;
+	struct List *ml;
+	W3D_ScreenMode *first = NULL, **link = &first;
 	LOG;
-	//p96AllocModeListTagList
-	if (ml = p96AllocModeListTags(TAG_DONE)) {
-		struct P96Mode	*mn;
-		int i;
-		for (mn = (struct P96Mode *)(ml->lh_Head); mn->Node.ln_Succ; mn = (struct P96Mode *)mn->Node.ln_Succ) {
-			//printf("%s\n",mn->Description);
+	if ((ml = p96AllocModeListTags(P96MA_MinDepth, 15, TAG_DONE))) {
+		struct P96Mode *mn;
+		for (mn = (struct P96Mode *) ml->lh_Head; mn->Node.ln_Succ; mn = (struct P96Mode *) mn->Node.ln_Succ) {
+			W3D_ScreenMode *sm = calloc(1, sizeof(W3D_ScreenMode));
+			int i;
+			if (!sm) break;
 			sm->ModeID = mn->DisplayID;
 			sm->Width = mn->Width;
 			sm->Height = mn->Height;
 			sm->Depth = mn->Depth;
 			sm->Driver = drivers[0];
-			for (i = 0; i < MODENAMELENGTH && i < DISPLAYNAMELEN; ++i) sm->DisplayName[i] = mn->Description[i];
-			sm->Next = malloc(sizeof(W3D_ScreenMode));
-			sm = sm->Next;
+			for (i = 0; i < MODENAMELENGTH && i < DISPLAYNAMELEN - 1 && mn->Description[i]; ++i) sm->DisplayName[i] = mn->Description[i];
+			*link = sm;
+			link = (W3D_ScreenMode **) &sm->Next;
 		}
 		p96FreeModeList(ml);
 	}
-	return smstart;
+	return first;
 }
 
 void W3D_FreeScreenmodeList(__REGA0(W3D_ScreenMode *list)) {
@@ -59,16 +61,29 @@ void W3D_FreeScreenmodeList(__REGA0(W3D_ScreenMode *list)) {
 	}
 }
 
+/* The Warp3D tags as Picasso96's, in a copy (the caller's list stays as it
+ * is). A board whose true colour modes are all 32-bit (WinUAE's uaegfx) has
+ * none of depth 24 for Picasso96, so 24 is tried as 32 too. */
 ULONG W3D_BestModeID(__REGA0(struct TagItem *tags)) {
-	int i;
+	struct TagItem copy[16];
+	ULONG mode;
+	int i, n = 0, depth = -1;
 	LOG;
-	for (i = 0; tags[i].ti_Tag != TAG_DONE; ++i) {
+	for (i = 0; tags && tags[i].ti_Tag != TAG_DONE && n < 15; ++i) {
 		switch (tags[i].ti_Tag) {
-		case W3D_BMI_DRIVER: tags[i].ti_Tag = TAG_IGNORE; break;
-		case W3D_BMI_WIDTH: tags[i].ti_Tag = P96BIDTAG_NominalWidth; break;
-		case W3D_BMI_HEIGHT: tags[i].ti_Tag = P96BIDTAG_NominalHeight; break;
-		case W3D_BMI_DEPTH: tags[i].ti_Tag = P96BIDTAG_Depth; break;
+		case W3D_BMI_DRIVER: continue;
+		case W3D_BMI_WIDTH: copy[n].ti_Tag = P96BIDTAG_NominalWidth; break;
+		case W3D_BMI_HEIGHT: copy[n].ti_Tag = P96BIDTAG_NominalHeight; break;
+		case W3D_BMI_DEPTH: copy[n].ti_Tag = P96BIDTAG_Depth; depth = n; break;
+		default: copy[n].ti_Tag = tags[i].ti_Tag;
 		}
+		copy[n++].ti_Data = tags[i].ti_Data;
 	}
-	return p96BestModeIDTagList(tags);
+	copy[n].ti_Tag = TAG_DONE;
+	mode = p96BestModeIDTagList(copy);
+	if (mode == INVALID_ID && depth >= 0 && copy[depth].ti_Data == 24) {
+		copy[depth].ti_Data = 32;
+		mode = p96BestModeIDTagList(copy);
+	}
+	return mode;
 }
