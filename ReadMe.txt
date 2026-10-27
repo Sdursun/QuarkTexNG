@@ -78,7 +78,8 @@ Layout:
   Warp3D.library/   Warp3D 4 API on top of OpenGL (68k)
   agl.library/      StormMESA API on top of OpenGL (68k)
   minigl.library/   MiniGL's shared library interface on top of OpenGL (68k)
-  ogles2.library/   the ogles2 SDK's OpenGL ES 2.0 interface on OpenGL (68k)
+  ogles2.library/   the OpenGL ES 2.0 interface of the ogles2 SDK by R-Typer
+                    and Ladislawv, on OpenGL (68k)
   gl/               68k bridge to the host, generated from glFuncs.txt
   amiga/            library skeleton and build files for the 68k side
   host/             host library: window and OpenGL context inside WinUAE

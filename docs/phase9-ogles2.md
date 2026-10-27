@@ -9,7 +9,7 @@ Arena with ioquake3's GLES2 renderer.
 
 ## Why
 
-`ogles2.library` (PiStorm3D family, by the ogles2 SDK's maintainers) gives
+`ogles2.library` (PiStorm3D family, by R-Typer and Ladislawv) gives
 AmigaOS 3.x programs OpenGL ES 2.0, drawn by a Raspberry Pi 4's V3D GPU
 reached through PiStorm and Emu68 (`device: v3d_init failed (-5: no
 devicetree.resource (not running on Emu68?))` is the library's own message
