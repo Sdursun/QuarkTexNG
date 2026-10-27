@@ -19,7 +19,8 @@ Status: **1.0 beta 3**, in development.
 ## What's new in 1.0 beta 3
 
 - **ogles2.library**: the OpenGL ES 2.0 API of the PiStorm ogles2 SDK
-  (1.3) by R-Typer and Ladislawv, with GLSL ES shaders, on the host's OpenGL 3.3. Programs built
+  (1.3) by R-Typer and Ladislawv, with GLSL ES shaders, on the host's
+  OpenGL 3.3. Programs built
   against that SDK run unchanged: its examples, and the PiStorm port of
   Quake III Arena with ioquake3's shader renderer (79 fps windowed and 84
   fps fullscreen in `timedemo four` at 640 × 480). Shaders are compiled
