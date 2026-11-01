@@ -74,10 +74,11 @@ namespace {
 	// that GetPointerv can return them; GetString would return a host pointer.
 	// DrawBuffer and ReadBuffer name the framebuffer object's colour buffer
 	// for the front and back buffers when the context draws offscreen.
+	// TexImage2D and TexSubImage2D take minigl.library's packed formats.
 	const std::set<string> manual = {
 		"GetPointerv", "VertexPointer", "NormalPointer", "ColorPointer", "IndexPointer",
 		"TexCoordPointer", "EdgeFlagPointer", "InterleavedArrays", "FeedbackBuffer",
-		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer"
+		"SelectBuffer", "GetString", "DrawBuffer", "ReadBuffer", "TexImage2D", "TexSubImage2D"
 	};
 
 	string trim(const string& s) {

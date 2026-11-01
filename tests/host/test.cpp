@@ -295,10 +295,11 @@ int main() {
 	check(pointer == 0x12340, "GetPointerv returned " + std::to_string(pointer));
 	check(joined() == "VertexPointer(3,5126,12,@12340)", "VertexPointer: " + joined());
 
-	// A NULL pointer arrives as NULL.
+	// A NULL pointer arrives as NULL. A level 0 image gets its mipmaps made
+	// (GL_GENERATE_MIPMAP, host/gldecode.cpp) as MiniGL makes them.
 	records.clear();
 	_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-	check(joined() == "TexImage2D(3553,0,6408,4,4,0,6408,5121,NULL)", "NULL pointer: " + joined());
+	check(joined() == "TexParameteri(3553,33169,1) TexImage2D(3553,0,6408,4,4,0,6408,5121,NULL)", "NULL pointer: " + joined());
 
 	// --- Warp3D commands: the OpenGL calls the 0.53 68k code made ---
 

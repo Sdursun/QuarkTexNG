@@ -1205,7 +1205,7 @@ case 301: /* TexImage1D */
 	break;
 case 302: /* TexImage2D */
 	if (c.words != 10) return qt_bad_command(c);
-	QT_GL(TexImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLsizei) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLint) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
+	result = qt_manual_TexImage2D(c);
 	break;
 case 303: /* TexParameterf */
 	if (c.words != 4) return qt_bad_command(c);
@@ -1229,7 +1229,7 @@ case 307: /* TexSubImage1D */
 	break;
 case 308: /* TexSubImage2D */
 	if (c.words != 10) return qt_bad_command(c);
-	QT_GL(TexSubImage2D)((GLenum) c.u(1), (GLint) (int32_t) c.u(2), (GLint) (int32_t) c.u(3), (GLint) (int32_t) c.u(4), (GLsizei) (int32_t) c.u(5), (GLsizei) (int32_t) c.u(6), (GLenum) c.u(7), (GLenum) c.u(8), c.p(9));
+	result = qt_manual_TexSubImage2D(c);
 	break;
 case 309: /* Translated */
 	if (c.words != 7) return qt_bad_command(c);

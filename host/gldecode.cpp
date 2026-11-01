@@ -11,12 +11,107 @@
 #define QT_GL(name) gl##name
 #endif
 #include <cstdio>
+#include <vector>
 #include "gldecode.h"
 #include "w3dcmd.h"
 #include "mglcmd.h"
 #include "oglescmd.h"
 
 namespace {
+	// minigl.library passes MiniGL's packed texel formats, MGL_UNSIGNED_SHORT_
+	// 4_4_4_4 and MGL_UNSIGNED_SHORT_5_6_5 (OpenGL's packed type values), as
+	// the format and the internal format, with GL_UNSIGNED_BYTE: GLQuake's
+	// lightmaps. Each texel is a big-endian word, a r g b 4 bits each or
+	// r g b 5 6 5. OpenGL has no such format and refused them (the lightmaps
+	// were missing); they are uploaded as RGBA bytes.
+	const GLenum mglPacked4444 = 0x8033, mglPacked565 = 0x8363;
+
+	bool packedFormat(GLenum format) {
+		return format == mglPacked4444 || format == mglPacked565;
+	}
+
+	// Rows as the unpack state lays them out; the upload's state is set to
+	// tight RGBA rows and put back by uploadPacked.
+	std::vector<uint8_t> packedToRgba(GLenum format, GLsizei width, GLsizei height, const uint8_t* pixels) {
+		std::vector<uint8_t> rgba;
+		if (!pixels || width <= 0 || height <= 0) return rgba;
+		GLint rowLength = 0, alignment = 4;
+		QT_GL(GetIntegerv)(0x0CF2, &rowLength); // GL_UNPACK_ROW_LENGTH
+		QT_GL(GetIntegerv)(GL_UNPACK_ALIGNMENT, &alignment);
+		size_t row = static_cast<size_t>(rowLength > 0 ? rowLength : width) * 2;
+		if (alignment > 1) row = (row + alignment - 1) / alignment * alignment;
+		rgba.resize(static_cast<size_t>(width) * height * 4);
+		uint8_t* out = &rgba[0];
+		for (GLsizei y = 0; y < height; ++y) {
+			const uint8_t* p = pixels + row * y;
+			for (GLsizei x = 0; x < width; ++x, p += 2, out += 4) {
+				uint32_t v = static_cast<uint32_t>(p[0]) << 8 | p[1];
+				if (format == mglPacked4444) {
+					out[0] = static_cast<uint8_t>(((v >> 8) & 15) * 17);
+					out[1] = static_cast<uint8_t>(((v >> 4) & 15) * 17);
+					out[2] = static_cast<uint8_t>((v & 15) * 17);
+					out[3] = static_cast<uint8_t>((v >> 12) * 17);
+				}
+				else {
+					out[0] = static_cast<uint8_t>((v >> 11) * 255 / 31);
+					out[1] = static_cast<uint8_t>(((v >> 5) & 63) * 255 / 63);
+					out[2] = static_cast<uint8_t>((v & 31) * 255 / 31);
+					out[3] = 255;
+				}
+			}
+		}
+		return rgba;
+	}
+
+	void uploadPacked(bool sub, const Command& c, GLenum format) {
+		GLenum target = static_cast<GLenum>(c.u(1));
+		GLint level = static_cast<GLint>(c.u(2));
+		GLsizei width = static_cast<GLsizei>(c.u(sub ? 5 : 4)), height = static_cast<GLsizei>(c.u(sub ? 6 : 5));
+		std::vector<uint8_t> rgba = packedToRgba(format, width, height, c.p(9));
+		GLint rowLength = 0, alignment = 4;
+		QT_GL(GetIntegerv)(0x0CF2, &rowLength);
+		QT_GL(GetIntegerv)(GL_UNPACK_ALIGNMENT, &alignment);
+		QT_GL(PixelStorei)(0x0CF2, 0);
+		QT_GL(PixelStorei)(GL_UNPACK_ALIGNMENT, 4);
+		void* data = rgba.empty() ? 0 : &rgba[0];
+		if (sub) QT_GL(TexSubImage2D)(target, level, static_cast<GLint>(c.u(3)), static_cast<GLint>(c.u(4)), width, height,
+			GL_RGBA, GL_UNSIGNED_BYTE, data);
+		else QT_GL(TexImage2D)(target, level, GL_RGBA, width, height, static_cast<GLint>(c.u(6)), GL_RGBA, GL_UNSIGNED_BYTE, data);
+		QT_GL(PixelStorei)(0x0CF2, rowLength);
+		QT_GL(PixelStorei)(GL_UNPACK_ALIGNMENT, alignment);
+	}
+
+	// MiniGL (and Warp3D) make the mipmaps a program does not supply; OpenGL
+	// takes a texture with a mipmap filter but only its level 0 as incomplete
+	// and draws without it. GLQuake's font is such a texture, and came out as
+	// white squares. OpenGL 1.4 makes them on every level 0 upload, where
+	// a program's own levels still replace them.
+	void generateMipmaps(const Command& c) {
+		if (static_cast<GLenum>(c.u(1)) == GL_TEXTURE_2D && c.u(2) == 0)
+			QT_GL(TexParameteri)(GL_TEXTURE_2D, 0x8191, GL_TRUE); // GL_GENERATE_MIPMAP
+	}
+
+	int32_t qt_manual_TexImage2D(const Command& c) {
+		GLenum format = static_cast<GLenum>(c.u(7));
+		GLint internalformat = static_cast<GLint>(c.u(3));
+		generateMipmaps(c);
+		if (packedFormat(format)) uploadPacked(false, c, format);
+		else QT_GL(TexImage2D)(static_cast<GLenum>(c.u(1)), static_cast<GLint>(c.u(2)),
+			packedFormat(static_cast<GLenum>(internalformat)) ? GL_RGBA : internalformat,
+			static_cast<GLsizei>(c.u(4)), static_cast<GLsizei>(c.u(5)), static_cast<GLint>(c.u(6)), format,
+			static_cast<GLenum>(c.u(8)), c.p(9));
+		return 0;
+	}
+
+	int32_t qt_manual_TexSubImage2D(const Command& c) {
+		GLenum format = static_cast<GLenum>(c.u(7));
+		if (packedFormat(format)) uploadPacked(true, c, format);
+		else QT_GL(TexSubImage2D)(static_cast<GLenum>(c.u(1)), static_cast<GLint>(c.u(2)), static_cast<GLint>(c.u(3)),
+			static_cast<GLint>(c.u(4)), static_cast<GLsizei>(c.u(5)), static_cast<GLsizei>(c.u(6)), format,
+			static_cast<GLenum>(c.u(8)), c.p(9));
+		return 0;
+	}
+
 	int32_t qt_bad_command(const Command& c) {
 		char message[96];
 		snprintf(message, sizeof(message), "Bad command: opcode %u, %u words",
