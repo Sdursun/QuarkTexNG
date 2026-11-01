@@ -112,9 +112,26 @@ namespace mgl {
 		std::vector<uint8_t> bytes;
 	};
 
+	// MiniGL's colour types (mgl/gl.h): MGL_UBYTE_ARGB (no OpenGL value, so
+	// marked by mglgen.py as 0x7F007019) and MGL_UBYTE_BGRA (GL_BGRA), four
+	// bytes a colour. GLQuake's models are lit with MGL_UBYTE_ARGB; read as
+	// numbers they were 0 to 255, which OpenGL clamps (the models drawn
+	// unlit) and gl4es does not (the models drawn white).
+	const uint32_t mglUbyteArgb = 0x7F007019, mglUbyteBgra = 0x80E1;
+
 	bool convert(const Command& c, const Array& a, uint32_t count, Converted& out, bool normalise = false) {
 		const uint8_t* base = static_cast<const uint8_t*>(c.resolve(a.address));
 		if (!base || a.size < 1 || a.size > 4) return false;
+		if (a.type == mglUbyteArgb || a.type == mglUbyteBgra) { // as RGBA bytes
+			out.bytes.resize(static_cast<size_t>(count) * 4);
+			for (uint32_t i = 0; i < count; ++i) {
+				const uint8_t* p = base + i * a.stride;
+				uint8_t* q = &out.bytes[i * 4];
+				if (a.type == mglUbyteArgb) { q[0] = p[1]; q[1] = p[2]; q[2] = p[3]; q[3] = p[0]; }
+				else { q[0] = p[2]; q[1] = p[1]; q[2] = p[0]; q[3] = p[3]; }
+			}
+			return true;
+		}
 		if (a.type == GL_UNSIGNED_BYTE && !normalise) {
 			out.bytes.resize(static_cast<size_t>(count) * a.size);
 			for (uint32_t i = 0; i < count; ++i) memcpy(&out.bytes[i * a.size], base + i * a.stride, a.size);
@@ -240,7 +257,8 @@ namespace mgl {
 		for (int k = 0; k < Arrays; ++k) {
 			bool bytes = !converted[k].bytes.empty();
 			const void* data = !on[k] ? 0 : bytes ? static_cast<const void*>(&converted[k].bytes[0]) : static_cast<const void*>(&converted[k].floats[0]);
-			setArray(k, on[k], static_cast<GLint>(arrays[k].size), bytes ? GL_UNSIGNED_BYTE : GL_FLOAT, data);
+			GLint size = static_cast<GLint>(arrays[k].type == mglUbyteArgb || arrays[k].type == mglUbyteBgra ? 4 : arrays[k].size);
+			setArray(k, on[k], size, bytes ? GL_UNSIGNED_BYTE : GL_FLOAT, data);
 		}
 		QT_GL(DisableClientState)(GL_INDEX_ARRAY);
 		QT_GL(DisableClientState)(GL_EDGE_FLAG_ARRAY);

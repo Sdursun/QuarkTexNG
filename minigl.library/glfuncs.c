@@ -180,15 +180,38 @@ void mgl_GLULookAt(GLfloat ex, GLfloat ey, GLfloat ez, GLfloat cx, GLfloat cy, G
 	_glTranslatef(-ex, -ey, -ez);
 }
 
-/* MiniGL's rotation about one axis: xyz 0 = x, 1 = y, 2 = z. */
-void mgl_GLRotatefEXT(GLcontext context, GLfloat angle, const GLint xyz) {
-	_glRotatef(angle, xyz == 0, xyz == 1, xyz == 2);
+/* MiniGL's rotation about axes given as bits (mgl/gl.h): GLROT_100 x,
+ * GLROT_010 y, GLROT_001 z, and the combinations GLROT_011 to GLROT_111.
+ * GLQuake turns its view with GLROT_100, GLROT_010 and GLROT_001; taken as
+ * 0, 1 and 2 they gave no axis at all, and the camera no rotation (NVIDIA)
+ * or a broken matrix (gl4es). 0, 1 and 2 still mean x, y and z. */
+#define MGL_ROT_001 0x800
+#define MGL_ROT_010 0x1000
+#define MGL_ROT_100 0x2000
+#define MGL_ROT_011 0x4000
+#define MGL_ROT_101 0x8000
+#define MGL_ROT_110 0x10000
+#define MGL_ROT_111 0x20000
+
+static void rotationAxis(GLint xyz, GLfloat *x, GLfloat *y, GLfloat *z) {
+	*x = (xyz == 0 || xyz == MGL_ROT_100 || xyz == MGL_ROT_101 || xyz == MGL_ROT_110 || xyz == MGL_ROT_111) ? 1.0f : 0.0f;
+	*y = (xyz == 1 || xyz == MGL_ROT_010 || xyz == MGL_ROT_011 || xyz == MGL_ROT_110 || xyz == MGL_ROT_111) ? 1.0f : 0.0f;
+	*z = (xyz == 2 || xyz == MGL_ROT_001 || xyz == MGL_ROT_011 || xyz == MGL_ROT_101 || xyz == MGL_ROT_111) ? 1.0f : 0.0f;
 }
 
-/* The same with the angle given as its sine and cosine. */
+void mgl_GLRotatefEXT(GLcontext context, GLfloat angle, const GLint xyz) {
+	GLfloat x, y, z;
+	rotationAxis(xyz, &x, &y, &z);
+	_glRotatef(angle, x, y, z);
+}
+
+/* The same with the angle given as its sine and cosine, about one axis. */
 void mgl_GLRotatefEXTs(GLcontext context, GLfloat sin_an, GLfloat cos_an, const GLint xyz) {
-	GLfloat m[16];
-	int i, a = xyz == 0 ? 1 : 0, b = xyz == 2 ? 1 : 2;
+	GLfloat m[16], x, y, z;
+	int i, a, b;
+	rotationAxis(xyz, &x, &y, &z);
+	a = x != 0.0f ? 1 : 0;
+	b = z != 0.0f ? 1 : 2;
 	for (i = 0; i < 16; ++i) m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
 	m[a * 4 + a] = cos_an;
 	m[b * 4 + b] = cos_an;
