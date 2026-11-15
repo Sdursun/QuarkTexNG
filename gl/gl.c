@@ -258,9 +258,20 @@ static inline ULONG qt_dlo(double d) {
  */
 int qt_fpu_extended = 1;
 
+/* The check runs in the task that opens the library first, with its FPCR:
+ * a program that set the rounding precision to double (Doom 3 does) made
+ * it say 64 bits although WinUAE computed with 80. So the FPCR is set to
+ * extended precision and rounding to nearest for the sum, and given back
+ * after it. */
 static int fpuExtended(void) {
 	volatile long double one = 1.0L, step = 8.673617379884035472e-19L; /* 2^-60 */
-	long double sum = one + step;
+	volatile long double sum; /* stored before the FPCR goes back */
+	ULONG fpcr, test;
+	__asm__ volatile ("fmove.l %%fpcr,%0" : "=d" (fpcr) : : "memory");
+	test = fpcr & ~0xF0UL; /* precision (bits 7-6) extended, rounding (5-4) to nearest */
+	__asm__ volatile ("fmove.l %0,%%fpcr" : : "d" (test) : "memory");
+	sum = one + step;
+	__asm__ volatile ("fmove.l %0,%%fpcr" : : "d" (fpcr) : "memory");
 	return sum != one;
 }
 
