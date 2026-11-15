@@ -188,12 +188,19 @@ int main(void) {
 	{
 		GLint n = 0, formats[32], found = 0, i;
 		glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &n);
-		check("GL_NUM_COMPRESSED_TEXTURE_FORMATS has ES 3.0's ten and ETC1", n == 11);
+		check("GL_NUM_COMPRESSED_TEXTURE_FORMATS has S3TC's four, ES 3.0's ten and ETC1", n == 15);
 		if (n > 0 && n <= 32) {
 			glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, formats);
-			for (i = 0; i < n; ++i) if (formats[i] == GL_COMPRESSED_RGBA8_ETC2_EAC || formats[i] == GL_ETC1_RGB8_OES) ++found;
+			for (i = 0; i < n; ++i)
+				if (formats[i] == GL_COMPRESSED_RGBA8_ETC2_EAC || formats[i] == GL_ETC1_RGB8_OES || formats[i] == 0x83F0 ||
+					formats[i] == 0x83F3) ++found;
 		}
-		check("GL_COMPRESSED_TEXTURE_FORMATS lists RGBA8_ETC2_EAC and ETC1", found == 2);
+		check("GL_COMPRESSED_TEXTURE_FORMATS lists RGBA8_ETC2_EAC, ETC1, DXT1 and DXT5", found == 4);
+		check("GL_EXTENSIONS has GL_EXT_texture_compression_s3tc and _dxt1",
+			strstr((const char *) glGetString(GL_EXTENSIONS), "GL_EXT_texture_compression_s3tc") != NULL &&
+			strstr((const char *) glGetString(GL_EXTENSIONS), "GL_EXT_texture_compression_dxt1") != NULL);
+		check("GL_EXTENSIONS has GL_EXT_texture_filter_anisotropic",
+			strstr((const char *) glGetString(GL_EXTENSIONS), "GL_EXT_texture_filter_anisotropic") != NULL);
 		check("GL_EXTENSIONS has GL_OES_compressed_ETC1_RGB8_texture",
 			strstr((const char *) glGetString(GL_EXTENSIONS), "GL_OES_compressed_ETC1_RGB8_texture") != NULL);
 	}
@@ -212,6 +219,33 @@ int main(void) {
 	glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_ETC1_RGB8_OES, 4, 4, 0, 8, block);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	expectAt("an ETC1 texture (blue block)", WIDTH / 2, HEIGHT / 2, 2, 2, 255);
+	/* S3TC: a DXT1 block of one colour (colour 0 = RGB565 yellow, little
+	 * endian, colour 1 black, every index 0), and a DXT5 block (alpha 255,
+	 * then a DXT1-style colour block of magenta). */
+	memset(block, 0, sizeof(block));
+	block[0] = 0xE0; block[1] = 0xFF; /* 0xFFE0: yellow */
+	glCompressedTexImage2D(GL_TEXTURE_2D, 0, 0x83F0, 4, 4, 0, 8, block);
+	checkInt("glCompressedTexImage2D DXT1: no error", (GLint) glGetError(), GL_NO_ERROR);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	expectAt("a DXT1 texture (yellow block)", WIDTH / 2, HEIGHT / 2, 255, 255, 0);
+	memset(block, 0, sizeof(block));
+	block[0] = 0xFF; block[1] = 0xFF; /* alpha 0 and 1: 255; every alpha index 0 */
+	block[8] = 0x1F; block[9] = 0xF8; /* 0xF81F: magenta */
+	glCompressedTexImage2D(GL_TEXTURE_2D, 0, 0x83F3, 4, 4, 0, 16, block);
+	checkInt("glCompressedTexImage2D DXT5: no error", (GLint) glGetError(), GL_NO_ERROR);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	expectAt("a DXT5 texture (magenta block)", WIDTH / 2, HEIGHT / 2, 255, 0, 255);
+	/* Anisotropic filtering: the limit, and a value set and read back. */
+	{
+		GLfloat maxAniso = 0, aniso = 0;
+		glGetFloatv(0x84FF, &maxAniso); /* MAX_TEXTURE_MAX_ANISOTROPY_EXT */
+		check("GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT is at least 2", maxAniso >= 2.0f);
+		glTexParameterf(GL_TEXTURE_2D, 0x84FE, 4.0f); /* TEXTURE_MAX_ANISOTROPY_EXT */
+		glGetTexParameterfv(GL_TEXTURE_2D, 0x84FE, &aniso);
+		check("GL_TEXTURE_MAX_ANISOTROPY_EXT set to 4 reads back 4", aniso == 4.0f);
+		checkInt("anisotropy: no error", (GLint) glGetError(), GL_NO_ERROR);
+		glTexParameterf(GL_TEXTURE_2D, 0x84FE, 1.0f);
+	}
 	/* glCompressedTexSubImage2D: an 8x4 texture, its right block green. */
 	{
 		GLubyte two[16];

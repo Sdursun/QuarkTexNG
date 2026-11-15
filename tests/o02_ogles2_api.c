@@ -134,8 +134,16 @@ static void queries(void) {
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, v);
 	check("GL_MAX_TEXTURE_SIZE >= 64", v[0] >= 64);
 	glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, v);
-	/* ETC1 and OpenGL ES 3.0's ETC2/EAC formats (an OpenGL 4.3 host). */
-	checkInt("GL_NUM_COMPRESSED_TEXTURE_FORMATS", v[0], 11);
+	/* S3TC's DXT1/3/5, ETC1 and OpenGL ES 3.0's ETC2/EAC formats (an OpenGL
+	 * 4.3 host). */
+	checkInt("GL_NUM_COMPRESSED_TEXTURE_FORMATS", v[0], 15);
+	{
+		const char *ext = (const char *) glGetString(GL_EXTENSIONS);
+		check("GL_EXTENSIONS: anisotropic filtering, S3TC and DXT1", ext && strstr(ext, "GL_EXT_texture_filter_anisotropic") &&
+			strstr(ext, "GL_EXT_texture_compression_s3tc") && strstr(ext, "GL_EXT_texture_compression_dxt1"));
+	}
+	glGetFloatv(0x84FF, f); /* MAX_TEXTURE_MAX_ANISOTROPY_EXT */
+	check("GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT >= 2", f[0] >= 2.0f);
 	glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
 	glGetFloatv(GL_COLOR_CLEAR_VALUE, f);
 	check("GL_COLOR_CLEAR_VALUE", near(f[0], 0.25f) && near(f[1], 0.5f) && near(f[2], 0.75f) && near(f[3], 1));

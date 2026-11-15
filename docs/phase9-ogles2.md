@@ -394,6 +394,37 @@ buffers) are read back only for the context that wrote them.
 Verified in the user's WinUAE with the libraries from RAM: and the new DLLs:
 o01-o04 and e01-e05 pass, as do m01, a03, v01 and v04.
 
+## Version 1.4, anisotropic filtering and S3TC (2026-11-15)
+
+The PiStorm ogles2.library went to 1.4 (github.com/ladislawv/ogles2pi3,
+1.4 beta 2: the Raspberry Pi 3 as well). Its SDK's headers and dispatch
+table are 1.3.2's, unchanged; but its `OGLES2Open()` takes a copy beside
+the program with a higher version.revision than the installed one first.
+Doom 3 for AmigaOS 3 brings 1.4 beta 2 in its libs/ drawer, so with our
+1.3 in LIBS: it would open PiStorm's library, which finds no Pi in WinUAE.
+This library is 1.4 now (`OGLES2_REVISION`), built against the 1.4 beta 2
+SDK, and `GL_VERSION` reads "OpenGL ES 2.0 ogles2.library 1.4": an equal
+version keeps the installed one.
+
+Doom 3 also asks for two extensions the library did not offer:
+
+- `GL_EXT_texture_filter_anisotropic`: the host already passed
+  `GL_TEXTURE_MAX_ANISOTROPY_EXT` (glTexParameterf, glSamplerParameterf)
+  and `GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT` (glGetFloatv) on; only the
+  extension string was missing.
+- `GL_EXT_texture_compression_s3tc` and `_dxt1`: DXT1 (RGB and RGBA),
+  DXT3 and DXT5 go to the host's `glCompressedTex*` as they are, as ETC
+  does. `GL_COMPRESSED_TEXTURE_FORMATS` lists them first (15 formats with
+  an OpenGL 4.3 host, the four S3TC ones with 3.3). Every desktop driver
+  has S3TC, so the extension is offered without asking the host. A library
+  with an older DLL still draws them; only the format list is the old one.
+
+Doom 3 (1.0 beta 3, its libs/ removed), `timedemo demo1`, 1280x720 Low,
+12 lights, in the user's WinUAE: 48.0 fps with ogles2.library 1.3, 49.8
+with 1.4, which uses 16x anisotropic filtering and the DXT textures.
+e05 draws a DXT1 and a DXT5 block and sets and reads back the anisotropy;
+o02 checks the extensions and the 15 formats.
+
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 
 `aglSwapBuffers()` and everything before it worked on the first real run

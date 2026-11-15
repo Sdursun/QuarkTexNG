@@ -1828,14 +1828,18 @@ namespace ogles2 {
 		return true;
 	}
 
-	// The compressed formats offered (gl/oglescmd.h): OpenGL ES 3.0's ETC2/EAC
-	// ones, which OpenGL 4.3 has too (GL_ARB_ES3_compatibility), and ETC1.
+	// The compressed formats offered (gl/oglescmd.h): S3TC's DXT1/3/5
+	// (GL_EXT_texture_compression_s3tc, which every desktop driver has), then
+	// OpenGL ES 3.0's ETC2/EAC ones, which OpenGL 4.3 has too
+	// (GL_ARB_ES3_compatibility), and ETC1: these only with OpenGL 4.3.
 	const GLint compressedFormats[] = {
+		0x83F0, 0x83F1, 0x83F2, 0x83F3, // RGB_S3TC_DXT1, RGBA_S3TC_DXT1, RGBA_S3TC_DXT3, RGBA_S3TC_DXT5
 		0x9270, 0x9271, 0x9272, 0x9273, 0x9274, 0x9275, 0x9276, 0x9277, 0x9278, 0x9279, // R11_EAC .. SRGB8_ALPHA8_ETC2_EAC
 		0x8D64 // ETC1_RGB8_OES
 	};
+	const uint32_t s3tcFormats = 4;
 	uint32_t compressedFormatCount() {
-		return gl3::has43() ? sizeof(compressedFormats) / sizeof(compressedFormats[0]) : 0;
+		return gl3::has43() ? sizeof(compressedFormats) / sizeof(compressedFormats[0]) : s3tcFormats;
 	}
 
 	bool compressedTex(const Command& c) {

@@ -82,18 +82,23 @@ static const char shadingVersion31[] = "OpenGL ES GLSL ES 3.10";
  * (host/ogles2.cpp): non-power-of-two textures, 32-bit indices, depth
  * textures, the shaders' derivative functions (core in the GLSL 3.30 the
  * host compiles them as), the renderbuffer formats it shares,
- * glMapBufferOES and the base vertex draw. */
+ * glMapBufferOES and the base vertex draw; anisotropic filtering and the
+ * S3TC (DXT1/3/5) compressed formats, which every desktop driver has (the
+ * host passes GL_TEXTURE_MAX_ANISOTROPY_EXT and the DXT formats on as they
+ * are). */
 static const char extensions[] = "GL_OES_texture_npot GL_OES_element_index_uint GL_OES_depth_texture "
 	"GL_OES_standard_derivatives GL_OES_depth24 "
 	"GL_OES_packed_depth_stencil GL_OES_rgb8_rgba8 GL_OES_mapbuffer GL_OES_draw_elements_base_vertex "
-	"GL_EXT_discard_framebuffer GL_OES_compressed_ETC1_RGB8_texture";
+	"GL_EXT_discard_framebuffer GL_OES_compressed_ETC1_RGB8_texture GL_EXT_texture_filter_anisotropic "
+	"GL_EXT_texture_compression_s3tc GL_EXT_texture_compression_dxt1";
 /* OpenGL ES 3.0 contexts (ogles3.library) add what desktop OpenGL 3.3 has
  * of the ES 3.0 extensions: float and half float colour buffers. */
 static const char extensions3[] = "GL_OES_texture_npot GL_OES_element_index_uint GL_OES_depth_texture "
 	"GL_OES_standard_derivatives GL_OES_depth24 "
 	"GL_OES_packed_depth_stencil GL_OES_rgb8_rgba8 GL_OES_mapbuffer GL_OES_draw_elements_base_vertex "
 	"GL_EXT_discard_framebuffer GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float "
-	"GL_OES_compressed_ETC1_RGB8_texture GL_EXT_draw_elements_base_vertex GL_EXT_multi_draw_arrays";
+	"GL_OES_compressed_ETC1_RGB8_texture GL_EXT_draw_elements_base_vertex GL_EXT_multi_draw_arrays "
+	"GL_EXT_texture_filter_anisotropic GL_EXT_texture_compression_s3tc GL_EXT_texture_compression_dxt1";
 
 const GLubyte *ogles2_GLGetString(struct OGLES2Context *ctx, GLenum name) {
 	switch (name) {
@@ -1067,8 +1072,9 @@ void ogles2_GLDrawElementsBaseVertexOES(struct OGLES2Context *ctx, GLenum mode, 
 }
 
 /*
- * Compressed textures (gl/oglescmd.h, QT_OGLES2_COMPRESSED_TEX): ETC1, and
- * OpenGL ES 3.0's ETC2/EAC formats, passed to the host as they are.
+ * Compressed textures (gl/oglescmd.h, QT_OGLES2_COMPRESSED_TEX): ETC1,
+ * OpenGL ES 3.0's ETC2/EAC formats and S3TC's DXT1/3/5, passed to the host
+ * as they are.
  */
 void ogles2_compressedTex(ULONG subop, GLenum target, GLint level, ULONG xOrFormat, GLint y, GLint z, GLsizei width,
 		GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void *data) {
