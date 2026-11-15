@@ -420,8 +420,10 @@ Doom 3 also asks for two extensions the library did not offer:
   with an older DLL still draws them; only the format list is the old one.
 
 Doom 3 (1.0 beta 3, its libs/ removed), `timedemo demo1`, 1280x720 Low,
-12 lights, in the user's WinUAE: 48.0 fps with ogles2.library 1.3, 49.8
-with 1.4, which uses 16x anisotropic filtering and the DXT textures.
+12 lights, in the user's WinUAE: first single runs 48.0 fps with
+ogles2.library 1.3 and 49.8 with 1.4; then alternated 1.4, 1.3, 1.4:
+55.1, 45.1, 54.8 fps. 1.4 uses 16x anisotropic filtering and the DXT
+textures, which the game no longer decompresses on the 68k.
 e05 draws a DXT1 and a DXT5 block and sets and reads back the anisotropy;
 o02 checks the extensions and the 15 formats.
 
