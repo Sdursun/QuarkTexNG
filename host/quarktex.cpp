@@ -20,7 +20,7 @@
 #include "present.h"
 
 // Must match QT_PROTOCOL_VERSION in gl/gl.c.
-#define QT_PROTOCOL_VERSION 11
+#define QT_PROTOCOL_VERSION 12
 
 extern "C" {
 	__declspec(dllexport) uni_resolve_function uni_resolve = 0;
@@ -151,6 +151,12 @@ namespace {
 	}
 }
 
+// The framebuffer an OpenGL ES program's framebuffer 0 stands for: the
+// current offscreen context's framebuffer object, 0 for a window's own.
+unsigned int qt_default_framebuffer() {
+	return active && active->offscreen ? active->framebuffer.fbo : 0;
+}
+
 // Frame capture for the reference tests in tests/. Off unless the environment
 // variable QUARKTEX_CAPTURE_DIR names a directory: every swap then writes
 // <label>_<frame>.bmp there. The label is the first line of label.txt in that
@@ -211,9 +217,14 @@ namespace {
 			glPushAttrib(GL_PIXEL_MODE_BIT);
 		}
 		for (int i = 0; i < 5; ++i) glPixelStorei(packs[i], packValues[i]);
-		glReadBuffer(c->offscreen ? 0x8CE0 /* GL_COLOR_ATTACHMENT0 */ : GL_BACK);
+		// The picture is the offscreen context's framebuffer object, whatever
+		// framebuffer the application has bound for reading.
+		present::Reading reading;
+		if (c->offscreen) present::beginRead(c->framebuffer, reading);
+		else glReadBuffer(GL_BACK);
 		// Bottom-up BGR rows padded to 4 bytes are exactly what BMP stores.
 		glReadPixels(0, 0, width, height, GL_BGR_EXT, GL_UNSIGNED_BYTE, &pixels[0]);
+		if (c->offscreen) present::endRead(reading);
 		if (core) {
 			for (int i = 0; i < 5; ++i) glPixelStorei(packs[i], saved[i]);
 			glReadBuffer(static_cast<GLenum>(readBuffer));
@@ -252,6 +263,7 @@ namespace {
 			if (wglMakeCurrent(c->deviceContext, c->gl)) {
 				if (c->ffp) ffp::destroy(c->ffp);
 				present::destroy(c->framebuffer);
+				qt_ogles2_forget_context();
 				ffp::makeCurrent(0);
 			}
 			wglMakeCurrent(0, 0);
@@ -325,10 +337,17 @@ QT_EXPORT int32_t __cdecl qt_free_context(struct uni* uni) {
 
 // d1 = left, d2 = top, d3 = width, d4 = height of the drawing area inside the
 // Amiga display; width 0 means the whole display. d5 = flags (contextCore).
+// a1 = a core context whose objects the new (core) one shares, or 0
+// (ogles2.library's OGLES2_CCT_SHARE_WITH); older libraries pass 0.
 // Returns the new context's id, 0 on failure.
 QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	int left = uni->d1, top = uni->d2, width = uni->d3, height = uni->d4;
 	bool core = (uni->d5 & contextCore) != 0;
+	Context* shareWith = uni->a1 ? find(uni->a1) : 0;
+	if (uni->a1 && (!core || !shareWith || !shareWith->ffp)) {
+		logString("Warning: a context can only share the objects of a core context that exists");
+		return 0;
+	}
 
 	if (!instance) instance = GetModuleHandleA(0);
 	HWND amigaWindow = findAmigaWindow();
@@ -385,8 +404,9 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	if ((pixelformat = ChoosePixelFormat(c->deviceContext, &pfd)) == 0) { logString("Warning: Could not choose pixel format"); destroy(c); return 0; }
 	if (!SetPixelFormat(c->deviceContext, pixelformat, &pfd)) { logString("Warning: Could not set pixel format"); destroy(c); return 0; }
 
-	if (!(c->gl = core ? gl3::createCoreContext(c->deviceContext) : wglCreateContext(c->deviceContext))) {
-		logString(core ? "Warning: Could not create an OpenGL 3.3 core rendering context" : "Warning: Could not create rendering context");
+	int coreVersion = 0;
+	if (!(c->gl = core ? gl3::createCoreContext(c->deviceContext, &coreVersion, shareWith ? shareWith->gl : 0) : wglCreateContext(c->deviceContext))) {
+		logString(core ? "Warning: Could not create an OpenGL 4.3 or 3.3 core rendering context" : "Warning: Could not create rendering context");
 		destroy(c);
 		return 0;
 	}
@@ -403,11 +423,15 @@ QT_EXPORT int32_t __cdecl qt_create_context(struct uni* uni) {
 	if (core) {
 		if (!gl3::load()) { logString("Warning: OpenGL 3.3 functions missing"); destroy(c); return 0; }
 		if (!(c->ffp = ffp::create(width, height))) { destroy(c); return 0; }
+		qt_ogles2_share_context(reinterpret_cast<uintptr_t>(c->gl), shareWith ? reinterpret_cast<uintptr_t>(shareWith->gl) : 0);
 		static bool logged = false;
 		if (!logged) {
 			logged = true;
 			logString((std::string("OpenGL ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)) + ", " +
 				reinterpret_cast<const char*>(glGetString(GL_RENDERER))).c_str());
+			if (coreVersion < 43 || !gl3::has43())
+				logString("Warning: no OpenGL 4.3 core profile, QuarkTex NG needs it; with this 3.3 one OpenGL ES 3.1 "
+					"(ogles3.library) does not run. Update the graphics driver.");
 		}
 	}
 	else if (!(uni->d5 & contextPlain)) {
@@ -469,6 +493,20 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 		}
 		present::Target t = {w[0], w[1], w[2], w[3], w[4], static_cast<int32_t>(w[5]), static_cast<int32_t>(w[6]),
 			static_cast<int32_t>(w[7]), static_cast<int32_t>(w[8])};
+		// gl/gl.c's QtClipTarget: the window's visible parts follow (a
+		// library of before has no magic word there).
+		uint32_t magic, rects;
+		memcpy(&magic, words + 36, 4);
+		memcpy(&rects, words + 40, 4);
+		if (qt_swap32(magic) == present::clipMagic && qt_swap32(rects) <= static_cast<uint32_t>(present::maxRects)) {
+			t.rects = static_cast<int32_t>(qt_swap32(rects));
+			for (int32_t r = 0; r < t.rects; ++r)
+				for (int k = 0; k < 4; ++k) {
+					uint32_t v;
+					memcpy(&v, words + 44 + 16 * r + 4 * k, 4);
+					t.rect[r][k] = static_cast<int32_t>(qt_swap32(v));
+				}
+		}
 		present::start(c->framebuffer, t, uni_resolve);
 	}
 	if (c->profile.on) {

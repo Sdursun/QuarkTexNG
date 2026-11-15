@@ -84,6 +84,20 @@ bool qt_mgl_decode(const Command& c, int32_t& result);
 // word count.
 bool qt_ogles2_decode(const Command& c, int32_t& result);
 
+// Forgets what host/ogles2.cpp keeps for the current OpenGL context (its
+// converted vertex buffers and shader sources); called while it is still
+// current, before it is deleted.
+void qt_ogles2_forget_context();
+
+// A new core OpenGL context (an HGLRC), sharing the objects of with's (0:
+// none): host/ogles2.cpp keeps shader sources per group of contexts that
+// share objects.
+void qt_ogles2_share_context(uintptr_t gl, uintptr_t with);
+
+// The host framebuffer an OpenGL ES program's framebuffer 0 stands for: the
+// current offscreen context's framebuffer object, or 0 (host/quarktex.cpp).
+unsigned int qt_default_framebuffer();
+
 // Draws what the Warp3D commands have batched (ffp::flush), before an OpenGL
 // command runs.
 void qt_w3d_sync();

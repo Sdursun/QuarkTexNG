@@ -88,17 +88,24 @@ namespace present {
 	}
 
 	// Where a frame goes: the words of a QtTarget, already in host order.
+	// gl/gl.c's QtClipTarget: the visible parts of a window, in bitmap
+	// coordinates (MinX, MinY, MaxX, MaxY); rects 0: all of the rectangle.
+	const uint32_t clipMagic = 0x51544352; // 'QTCR'
+	const int maxRects = 32;
 	struct Target {
 		uint32_t address, bytesPerRow, format, bitmapWidth, bitmapHeight;
 		int32_t left, top, width, height;
+		int32_t rects;
+		int32_t rect[maxRects][4];
 	};
 
-	// Writes a bottom-up picture of width x height BGRA pixels into the
-	// target's rectangle, clipped to the bitmap and to the picture; resolve
-	// maps an Amiga address to a host pointer (0 if there is no memory).
-	// Returns false if the target's format is not one we write.
+	// Writes a bottom-up (or topDown) picture of width x height BGRA pixels into the
+	// target's rectangle, clipped to the bitmap, to the picture and to the
+	// target's visible parts; resolve maps an Amiga address to a host
+	// pointer (0 if there is no memory). Returns false if the target's
+	// format is not one we write.
 	template <typename Resolve>
-	bool write(const uint8_t* bgra, int width, int height, const Target& t, Resolve resolve) {
+	bool write(const uint8_t* bgra, int width, int height, const Target& t, Resolve resolve, bool topDown = false) {
 		int bpp = bytesPerPixel(t.format);
 		if (!bpp) return false;
 		int x0 = t.left < 0 ? -t.left : 0, y0 = t.top < 0 ? -t.top : 0;
@@ -106,11 +113,26 @@ namespace present {
 		if (t.left + w > static_cast<int>(t.bitmapWidth)) w = static_cast<int>(t.bitmapWidth) - t.left;
 		if (t.top + h > static_cast<int>(t.bitmapHeight)) h = static_cast<int>(t.bitmapHeight) - t.top;
 		for (int y = y0; y < h; ++y) {
-			uint32_t row = t.address + static_cast<uint32_t>(t.top + y) * t.bytesPerRow + static_cast<uint32_t>(t.left + x0) * bpp;
-			uint8_t* dest = static_cast<uint8_t*>(resolve(row));
-			if (!dest || x0 >= w) continue;
 			// The picture's rows run from the bottom up.
-			convertRow(bgra + (static_cast<size_t>(height - 1 - y) * width + x0) * 4, dest, w - x0, t.format);
+			size_t line = static_cast<size_t>(topDown ? y : height - 1 - y);
+			const uint8_t* from = bgra + line * width * 4;
+			int32_t row = t.top + y;
+			if (!t.rects) {
+				uint8_t* dest = static_cast<uint8_t*>(resolve(t.address + static_cast<uint32_t>(row) * t.bytesPerRow +
+					static_cast<uint32_t>(t.left + x0) * bpp));
+				if (dest && x0 < w) convertRow(from + x0 * 4, dest, w - x0, t.format);
+				continue;
+			}
+			for (int32_t r = 0; r < t.rects && r < maxRects; ++r) {
+				const int32_t* box = t.rect[r];
+				if (row < box[1] || row > box[3]) continue;
+				int32_t a = t.left + x0 > box[0] ? t.left + x0 : box[0];
+				int32_t e = t.left + w - 1 < box[2] ? t.left + w - 1 : box[2];
+				if (a > e) continue;
+				uint8_t* dest = static_cast<uint8_t*>(resolve(t.address + static_cast<uint32_t>(row) * t.bytesPerRow +
+					static_cast<uint32_t>(a) * bpp));
+				if (dest) convertRow(from + (a - t.left) * 4, dest, e - a + 1, t.format);
+			}
 		}
 		return true;
 	}
@@ -134,6 +156,15 @@ namespace present {
 	// picture is written first.
 	bool resize(Framebuffer& f, int width, int height, void* (*resolve)(uint32_t));
 	void destroy(Framebuffer& f);
+
+	// Binds the framebuffer object for reading with its colour buffer as the
+	// read buffer, whatever the application has bound; endRead puts back the
+	// application's framebuffer and the object's read buffer.
+	struct Reading {
+		int binding, buffer;
+	};
+	void beginRead(const Framebuffer& f, Reading& saved);
+	void endRead(const Reading& saved);
 
 	// Starts reading the picture back for the target (at a swap); a picture
 	// still pending is written first. Leaves the application's pack state as

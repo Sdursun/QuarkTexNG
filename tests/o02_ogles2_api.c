@@ -128,13 +128,14 @@ static void queries(void) {
 	glGetIntegerv(GL_VIEWPORT, v);
 	check("GL_VIEWPORT", v[0] == 0 && v[1] == 0 && v[2] == WIDTH && v[3] == HEIGHT);
 	glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, v);
-	checkInt("GL_MAX_VERTEX_ATTRIBS", v[0], 8);
+	check("GL_MAX_VERTEX_ATTRIBS >= 8 (16 since protocol 12)", v[0] >= 8);
 	glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, v);
 	check("GL_MAX_VERTEX_UNIFORM_VECTORS >= 128", v[0] >= 128);
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, v);
 	check("GL_MAX_TEXTURE_SIZE >= 64", v[0] >= 64);
 	glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, v);
-	checkInt("GL_NUM_COMPRESSED_TEXTURE_FORMATS", v[0], 0);
+	/* ETC1 and OpenGL ES 3.0's ETC2/EAC formats (an OpenGL 4.3 host). */
+	checkInt("GL_NUM_COMPRESSED_TEXTURE_FORMATS", v[0], 11);
 	glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
 	glGetFloatv(GL_COLOR_CLEAR_VALUE, f);
 	check("GL_COLOR_CLEAR_VALUE", near(f[0], 0.25f) && near(f[1], 0.5f) && near(f[2], 0.75f) && near(f[3], 1));

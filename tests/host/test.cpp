@@ -174,6 +174,11 @@ void qt_report(const char* message) {
 	++reports;
 }
 
+// No offscreen contexts here: framebuffer 0 is the host's 0.
+unsigned int qt_default_framebuffer() {
+	return 0;
+}
+
 #include "../../host/gldecode.cpp"
 #include "../../host/w3d.cpp"
 #include "../../host/mgl.cpp"

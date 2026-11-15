@@ -1,9 +1,13 @@
-QuarkTex NG 1.0 beta 3
-======================
+QuarkTex NG 1.1
+===============
 
 QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA
-(agl), MiniGL and OpenGL ES 2.0 (ogles2) programs inside the emulated Amiga
-draw with the host's OpenGL on Windows.
+(agl), MiniGL, OpenGL ES 2.0 (ogles2) and OpenGL ES 3.0/3.1 (ogles3)
+programs inside the emulated Amiga draw with the host's OpenGL on Windows.
+
+ogles2.library and ogles3.library implement the interfaces of the PiStorm
+libraries and SDKs by R-Typer and Ladislawv (github.com/ladislawv/ogles2,
+github.com/ladislawv/ogles3).
 
 It is an independent continuation of QuarkTex, the 3D graphics
 virtualization solution Robert Konrad first released in 2003.
@@ -28,12 +32,18 @@ README.md, next to this file and on GitHub.
 Installing
 ----------
 
+- First run QuarkTexNGCheck.exe on the PC: it shows the graphics card,
+  driver and OpenGL versions and says "QuarkTex NG support = PASS" if the
+  driver can run QuarkTex NG (OpenGL 4.3 core profile), or FAIL and why.
+  Double-clicked it opens a window; in a command prompt it prints the
+  report.
 - Copy quarktexng-windows-x86.dll and quarktexng-windows-x86-64.dll into the
   WinUAE directory (or its plugins directory). Older quarktex-windows-*.dll
   files are no longer used and can be deleted.
 - Copy Warp3D.library, agl.library (for StormMESA), minigl.library (for
-  MiniGL) and ogles2.library (for OpenGL ES 2.0) to LIBS: in AmigaOS. The
-  libraries and DLLs of one release belong together.
+  MiniGL), ogles2.library (for OpenGL ES 2.0) and ogles3.library (for
+  OpenGL ES 3.0/3.1) to LIBS: in AmigaOS. The libraries and DLLs of one
+  release belong together.
 - Required: Settings, Host, Miscellaneous: tick "Allow native code"
   (native_code=true in the configuration).
 - Required: Settings, Hardware, CPU and FPU: FPU "CPU internal" with the
@@ -60,9 +70,11 @@ are all that is needed:
   ./build.sh            builds everything and collects the release in dist/
   ./build.sh amiga      Warp3D.library and agl.library, minigl.library
                         when MINIGL_SDK names MiniGL's SDK headers
-                        (see docs/phase7-minigl.md), and ogles2.library
+                        (see docs/phase7-minigl.md), ogles2.library
                         when OGLES2_SDK names the ogles2 SDK
-                        (see docs/phase9-ogles2.md) (m68k-amigaos-gcc)
+                        (see docs/phase9-ogles2.md) and ogles3.library
+                        when OGLES3_SDK names the ogles3 SDK
+                        (see docs/phase10-ogles3.md) (m68k-amigaos-gcc)
   ./build.sh host       quarktexng-windows-x86.dll and -x86-64.dll (MinGW-w64)
   ./build.sh tests      the reference tests, see tests/README.md
   ./build.sh generate   regenerates gl/*.auto.* after editing gl/glFuncs.txt
@@ -80,6 +92,8 @@ Layout:
   minigl.library/   MiniGL's shared library interface on top of OpenGL (68k)
   ogles2.library/   the OpenGL ES 2.0 interface of the ogles2 SDK by R-Typer
                     and Ladislawv, on OpenGL (68k)
+  ogles3.library/   OpenGL ES 3.0/3.1 of the ogles3 SDK by R-Typer and
+                    Ladislawv, built with ogles2.library's sources (68k)
   gl/               68k bridge to the host, generated from glFuncs.txt
   amiga/            library skeleton and build files for the 68k side
   host/             host library: window and OpenGL context inside WinUAE

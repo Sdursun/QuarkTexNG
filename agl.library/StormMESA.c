@@ -3,6 +3,8 @@
 #include <exec/memory.h>
 #include <proto/exec.h>
 #include <proto/utility.h>
+#include <graphics/rastport.h>
+#include <graphics/clip.h>
 //#include <intuition/intuitionbase.h>
 #include "Amigamesa.h"
 #include <math.h>
@@ -44,11 +46,32 @@ void swapBuffer (struct amigamesa_context *c){}
  */
 struct AglContext {
 	ULONG host;
-	struct Window *window;
+	struct Window *window;     /* AMA_Window, or NULL: */
+	struct RastPort *rastPort; /* AMA_RastPort (with AMA_Screen) */
 	int fullscreen;
 	int offscreen; /* frames go into the window's Picasso96 bitmap (phase 8) */
 	int left, top, width, height;
 };
+
+/* A rastport's drawing area, as StormMESA took it: AMA_Width x AMA_Height
+ * (default: all of the rastport) with its lower left corner AMA_Left,
+ * AMA_Bottom pixels from the rastport's lower left one. In bitmap
+ * coordinates: a layered rastport's are its layer's. */
+static void rastPortArea(struct AglContext *agl, struct RastPort *rp, struct TagItem *tagList) {
+	LONG originX = 0, originY = 0, areaW, areaH;
+	struct Layer *layer = rp->Layer;
+	if (layer) {
+		originX = layer->bounds.MinX;
+		originY = layer->bounds.MinY;
+		areaW = layer->bounds.MaxX - layer->bounds.MinX + 1;
+		areaH = layer->bounds.MaxY - layer->bounds.MinY + 1;
+	}
+	else bitmapSize(rp->BitMap, &areaW, &areaH);
+	agl->width = (int) GetTagData(AMA_Width, (ULONG) areaW, tagList);
+	agl->height = (int) GetTagData(AMA_Height, (ULONG) areaH, tagList);
+	agl->left = (int) (originX + (LONG) GetTagData(AMA_Left, 0, tagList));
+	agl->top = (int) (originY + areaH - (LONG) GetTagData(AMA_Bottom, 0, tagList) - agl->height);
+}
 
 #define AGL(c) ((struct AglContext*) (c)->gl_ctx)
 
@@ -61,18 +84,34 @@ struct amigamesa_context *AmigaMesaCreateContext(struct TagItem *tagList __asm("
 	if (!agl) return NULL;
 	window = (struct Window*) GetTagData(AMA_Window, NULL, tagList);
 	agl->window = window;
-	agl->fullscreen = GetTagData(AMA_Fullscreen, 0, tagList);
+	if (window) {
+		agl->fullscreen = GetTagData(AMA_Fullscreen, 0, tagList);
+		agl->left = window->LeftEdge + window->BorderLeft;
+		agl->top = window->TopEdge + window->BorderTop;
+		agl->width = window->Width - (window->BorderLeft + window->BorderRight);
+		agl->height = window->Height - (window->BorderTop + window->BorderBottom);
+	}
+	else {
+		/* AMA_RastPort (and AMA_Screen, which the rastport's bitmap
+		 * belongs to): its area, presented into its bitmap. */
+		agl->rastPort = (struct RastPort*) GetTagData(AMA_RastPort, NULL, tagList);
+		if (!agl->rastPort || !agl->rastPort->BitMap) {
+			FreeVec(agl);
+			return NULL;
+		}
+		rastPortArea(agl, agl->rastPort, tagList);
+		if (agl->width <= 0 || agl->height <= 0) {
+			FreeVec(agl);
+			return NULL;
+		}
+	}
 	/* On a Picasso96 bitmap the host draws offscreen and swapping writes the
 	 * frame into the window (gl/gl.h), so it shows in WinUAE's fullscreen as
 	 * well; else (planar screens) into a host window over the Amiga one. */
-	agl->offscreen = presentable(window->RPort->BitMap);
-	if (agl->offscreen) {
-		agl->host = createContext(0, 0, window->Width - (window->BorderLeft + window->BorderRight),
-			window->Height - (window->BorderTop + window->BorderBottom), QT_CONTEXT_OFFSCREEN);
-	}
+	agl->offscreen = presentable(window ? window->RPort->BitMap : agl->rastPort->BitMap);
+	if (agl->offscreen) agl->host = createContext(0, 0, agl->width, agl->height, QT_CONTEXT_OFFSCREEN);
 	else if (agl->fullscreen) agl->host = createContext(window->LeftEdge, window->TopEdge, window->Width, window->Height, 0);
-	else agl->host = createContext(window->LeftEdge + window->BorderLeft, window->TopEdge + window->BorderTop,
-			window->Width - (window->BorderLeft + window->BorderRight), window->Height - (window->BorderTop + window->BorderBottom), 0);
+	else agl->host = createContext(agl->left, agl->top, agl->width, agl->height, 0);
 	if (!agl->host) {
 		FreeVec(agl);
 		return NULL;
@@ -80,10 +119,6 @@ struct amigamesa_context *AmigaMesaCreateContext(struct TagItem *tagList __asm("
 	/* The host turns the bytes of pixel data around (see glPixelStorei). */
 	_glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_TRUE);
 	_glPixelStorei(GL_PACK_SWAP_BYTES, GL_TRUE);
-	agl->left = window->LeftEdge + window->BorderLeft;
-	agl->top = window->TopEdge + window->BorderTop;
-	agl->width = window->Width - (window->BorderLeft + window->BorderRight);
-	agl->height = window->Height - (window->BorderTop + window->BorderBottom);
 	context = (struct amigamesa_context*) AllocVec(sizeof(struct amigamesa_context), MEMF_ANY | MEMF_CLEAR);
 	context->gl_ctx = agl;
 	context->visual = (struct amigamesa_visual*) malloc(sizeof(struct amigamesa_visual));
@@ -143,6 +178,12 @@ void AmigaMesaSwapBuffers(struct amigamesa_context *amesa __asm("a0")) {
 	struct Window *window = agl->window;
 	LOG
 	selectContext(agl->host);
+	if (!window) {
+		/* A rastport's area does not move. */
+		if (agl->offscreen) presentInto(agl->rastPort->BitMap, agl->rastPort->Layer, agl->left, agl->top, agl->width, agl->height, 1);
+		else swapBuffers();
+		return;
+	}
 	if (!agl->fullscreen && (agl->left != window->LeftEdge + window->BorderLeft || agl->top != window->TopEdge + window->BorderTop ||
 		agl->width != window->Width - (window->BorderLeft + window->BorderRight) || agl->height != window->Height - (window->BorderTop + window->BorderBottom))) {
 		agl->left = window->LeftEdge + window->BorderLeft;

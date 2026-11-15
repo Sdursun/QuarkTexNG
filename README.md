@@ -1,22 +1,68 @@
 # QuarkTex NG
 
 **Hardware-accelerated 3D for AmigaOS in WinUAE.** Warp3D, StormMESA (agl),
-MiniGL and OpenGL ES 2.0 (ogles2) programs running in the emulated Amiga
-draw with the PC's graphics card through OpenGL, instead of the emulated
-CPU drawing every pixel in software.
+MiniGL, OpenGL ES 2.0 (ogles2) and OpenGL ES 3.0/3.1 (ogles3) programs
+running in the emulated Amiga draw with the PC's graphics card through
+OpenGL, instead of the emulated CPU drawing every pixel in software.
 
 QuarkTex NG is an independent continuation of
 [QuarkTex](https://github.com/RobDangerous/QuarkTex), the 3D virtualization
 solution Robert Konrad released in 2003 (last version 0.53). It keeps its
 license, the GNU LGPL v3, and its idea, and rebuilds the rest: a 64-bit
 capable host library, a command buffer instead of one emulator call per
-OpenGL function, a modern OpenGL 3.3 renderer for Warp3D, a new
-minigl.library and ogles2.library, and frames written into Amiga display
-memory so they show in fullscreen too.
+OpenGL function, a modern OpenGL renderer for Warp3D, a new
+minigl.library, ogles2.library and ogles3.library, and frames written into
+Amiga display memory so they show in fullscreen too.
 
-Status: **1.0 beta 3**, in development.
+Current release: **1.1**.
 
-## What's new in 1.0 beta 3
+## What's new in 1.1
+
+- **ogles3.library (new)**: OpenGL ES 3.0 and 3.1, the API of the PiStorm
+  ogles3.library and its SDK (release 1.0) by **R-Typer and Ladislawv**
+  ([github.com/ladislawv/ogles3](https://github.com/ladislawv/ogles3)), on
+  the host's OpenGL 4.3. All 380 entries of its dispatch table are there:
+  GLSL ES 3.00 and 3.10 shaders, vertex array objects, uniform buffers,
+  instancing, transform feedback, queries, samplers, 3D and array
+  textures, multiple render targets, multisampled renderbuffers, and
+  OpenGL ES 3.1's compute shaders, storage buffers, atomic counters,
+  images, indirect draws and dispatches, separate shader programs and
+  multisample textures. The SDK's demos (Boing 2026, Boing Ocean, Boing
+  Swarm with 16384 GPU-simulated lights, the ray traced Juggler) run
+  unchanged, in a window and fullscreen. As the PiStorm library, a
+  context is OpenGL ES 3.1 unless it asks for 2.0, and `GL_VERSION` reads
+  "OpenGL ES 3.1 ogles3.library 1.0".
+- **ogles2.library**:
+  - Drawing from vertex buffers is much faster: the host keeps each
+    buffer's converted copy and converts only what a draw reads and what
+    changed (Quake III `timedemo four` 98 fps against 83 with 1.0 beta 3,
+    same PC; OpenMoHAA's static models no longer slow it down).
+  - Every entry of the SDK's table is implemented: ETC1 (and in ogles3
+    ETC2/EAC) compressed textures, `GL_KHR_debug`, `glMultiDraw*EXT`, the
+    base vertex draws, `glClipControlEXT` (with an OpenGL 4.5 driver).
+  - `OGLES2_CCT_SHARE_WITH`: contexts share textures, buffers, shaders,
+    programs and renderbuffers.
+  - Contexts on the program's bitmap (`OGLES2_CCT_BITMAP`, `aglSetBitmap`)
+    and resizing with `aglSetParams2` work and are tested; a bitmap has
+    the frame when `aglSwapBuffers` returns.
+  - The dispatch table's calls go to the context they are given, so a
+    second task can draw with its own context, as the SDK describes.
+  - Framebuffer 0 is the context's own picture: programs that bind it
+    back after drawing into a texture show their frames.
+  - `GL_VERSION` names the library ("OpenGL ES 2.0 ogles2.library 1.3").
+- **minigl.library 30.0**: MiniGL's 30 SDK (PiStorm3D 30.0), which keeps
+  the 29 SDK's interface; programs built with either run.
+- **agl.library**: contexts on a rastport (`AMA_RastPort`, `AMA_Screen`)
+  as StormMESA allowed, besides `AMA_Window`.
+- **Windows in front of a 3D window stay as they are**: frames are
+  written only into the visible parts of a window (all four APIs).
+- **QuarkTexNGCheck.exe**: a small Windows program that says whether the
+  PC's graphics driver can run QuarkTex NG, and why not.
+- The host uses OpenGL 4.3 core contexts (3.3 when the driver has no 4.3:
+  everything but OpenGL ES 3.1 still runs).
+- Install the libraries and DLLs of this release together.
+
+## What was new in 1.0 beta 3
 
 - **ogles2.library**: the OpenGL ES 2.0 API of the PiStorm ogles2 SDK
   (1.3) by R-Typer and Ladislawv, with GLSL ES shaders, on the host's
@@ -43,12 +89,12 @@ Status: **1.0 beta 3**, in development.
 
 ## What's new compared to QuarkTex 0.53
 
-| | QuarkTex 0.53 (2003) | QuarkTex NG 1.0 beta 3 |
+| | QuarkTex 0.53 (2003) | QuarkTex NG 1.1 |
 | --- | --- | --- |
 | WinUAE | 32-bit only (old uaelib traps) | 32-bit and **64-bit** (native code interface) |
 | Host communication | one emulator call per OpenGL function | commands batched in a buffer |
-| Warp3D | drawn from the 68k, vertex by vertex, OpenGL 1.1 | drawn on the host, batched, OpenGL 3.3 core |
-| APIs | Warp3D, StormMESA | Warp3D, StormMESA, **MiniGL** and **OpenGL ES 2.0** (new minigl.library and ogles2.library) |
+| Warp3D | drawn from the 68k, vertex by vertex, OpenGL 1.1 | drawn on the host, batched, OpenGL core profile |
+| APIs | Warp3D, StormMESA | Warp3D, StormMESA, **MiniGL**, **OpenGL ES 2.0** and **OpenGL ES 3.0/3.1** (new minigl.library, ogles2.library and ogles3.library) |
 | Display | a host window over the emulator: windowed mode only | frames written into Amiga RTG memory: window, full window and **fullscreen**, with WinUAE's scaling, filters and recording |
 | Stencil buffer, chroma key, mipmaps | missing | supported |
 | Several 3D contexts at once | no | yes, also in several programs at the same time |
@@ -111,6 +157,8 @@ runs at its own 90 fps cap.
 | Open Golf | MiniGL | menu and game, in a window and fullscreen |
 | Quake III Arena (PiStorm GLES2 port) | ogles2 | menu, game and `timedemo four`, in a window and fullscreen |
 | ogles2 SDK examples (triangle, cube, boingocean, boing2026) | ogles2 | render-to-texture, shadow maps, MSAA framebuffers |
+| OpenMoHAA | ogles2 | levels with lightmaps |
+| ogles3 1.0 demos (Boing 2026, Boing Ocean, Boing Swarm, Juggler RT) | ogles3 | OpenGL ES 3.1 compute, HDR, ray tracing; window and fullscreen |
 
 ### OpenGL ES 2.0: Quake III Arena
 
@@ -128,18 +176,28 @@ prints the result in the Shell.
 
 ## Requirements
 
-- Windows with a graphics card and driver for OpenGL 3.3.
+- Windows with a graphics card and driver for OpenGL 4.3 (with 3.3 only,
+  everything but OpenGL ES 3.1 runs; `QuarkTexNGCheck.exe` tells).
 - WinUAE (tested with 6.0.3 and the 6.x public betas), 32-bit or 64-bit.
 - AmigaOS 3.x with an RTG board (uaegfx) and Picasso96, a 68020 or better
   with FPU (68040/68060 recommended).
 
 ## Installation
 
+0. Run `QuarkTexNGCheck.exe` (in the archive, or built with the host
+   library) on the PC: it shows the graphics card, its driver, OpenGL and
+   GLSL versions and the highest OpenGL core profile it creates, and ends
+   with `QuarkTex NG support = PASS` if the driver can run QuarkTex NG (an
+   OpenGL 4.3 core profile), `FAIL` with the reason if not. Double-clicked
+   it opens a window (with a button that copies the report, for a bug
+   report); in a command prompt it prints the report and returns 0 for
+   PASS, 1 for FAIL (`/gui` opens the window there too).
 1. Copy `quarktexng-windows-x86.dll` and `quarktexng-windows-x86-64.dll` into
    the WinUAE directory (or its `plugins` directory). Older
    `quarktex-windows-*.dll` files are not used any more.
 2. Copy `Warp3D.library`, `agl.library` (StormMESA), `minigl.library`
-   (MiniGL) and `ogles2.library` (OpenGL ES 2.0) to `LIBS:` in AmigaOS. The libraries and the DLLs belong
+   (MiniGL), `ogles2.library` (OpenGL ES 2.0) and `ogles3.library` (OpenGL
+   ES 3.0/3.1) to `LIBS:` in AmigaOS. The libraries and the DLLs belong
    together: a library of one release does not work with a DLL of another.
 3. Set up WinUAE as below.
 
@@ -213,12 +271,12 @@ shows only while WinUAE runs in a window.
 - MiniGL Classic (the Warp3D-based minigl.library) in fullscreen crashes on
   QuarkTex NG's Warp3D. QuarkTex NG's own minigl.library runs the same games.
 - The rotating passport in OpenLara's menu draws dark.
-- Windows that overlap: each program writes its frame over its whole
-  window rectangle, also over windows in front of it.
-- ogles2.library: objects are not shared between contexts
-  (`OGLES2_CCT_SHARE_WITH`); compressed textures, shader and program
-  binaries and `glClipControlEXT` are missing; `OGLES2_CCT_VSYNC` and
-  multisampling of the default framebuffer are ignored.
+- ogles2.library and ogles3.library: no shader or program binary formats
+  are offered; `glClipControlEXT` needs a host driver with OpenGL 4.5;
+  `OGLES2_CCT_VSYNC` and multisampling of the default framebuffer are
+  ignored.
+- A window in front of a 3D window is kept as it is, but a smart refresh
+  window's hidden parts are not updated while they are covered.
 - Breaking Quake III (ogles2) with Ctrl-C during play reset the Amiga; a
   normal quit does not.
 
@@ -229,7 +287,7 @@ are all that is needed:
 
 ```sh
 ./build.sh            # everything, collected in dist/
-./build.sh amiga      # Warp3D.library, agl.library; minigl.library and ogles2.library with MINIGL_SDK and OGLES2_SDK
+./build.sh amiga      # Warp3D.library, agl.library; minigl.library, ogles2.library and ogles3.library with MINIGL_SDK, OGLES2_SDK and OGLES3_SDK
 ./build.sh host       # quarktexng-windows-x86.dll and -x86-64.dll (MinGW-w64)
 ./build.sh tests      # test programs, see tests/README.md
 ./build.sh unittest   # the OpenGL command buffer encoder/decoder on the build host
@@ -240,7 +298,9 @@ are all that is needed:
 repository (they are under the Hyperion MiniGL Open Source License):
 `MINIGL_SDK=<sdk>/dev/include ./build.sh amiga`. `ogles2.library` needs the
 ogles2 SDK (github.com/ladislawv/ogles2, its headers are MIT):
-`OGLES2_SDK=<ogles2-sdk>/ogles2/SDK ./build.sh amiga`.
+`OGLES2_SDK=<ogles2-sdk>/ogles2/SDK ./build.sh amiga`, and
+`ogles3.library` the ogles3 SDK (github.com/ladislawv/ogles3, release 1.0):
+`OGLES3_SDK=<ogles3-sdk-1.0> ./build.sh amiga`.
 
 The host DLLs also build with Visual Studio 2022:
 `cmake -S . -B build/host-x64 -A x64` and `cmake --build build/host-x64 --config Release`
@@ -267,7 +327,8 @@ WinUAE, with frame capture, profiling (`-Profile`), command tracing
 | `Warp3D.library/` | Warp3D 4 API on the host renderer (68k) |
 | `agl.library/` | StormMESA API on OpenGL (68k) |
 | `minigl.library/` | MiniGL's shared library interface on OpenGL (68k) |
-| `ogles2.library/` | the ogles2 SDK's OpenGL ES 2.0 interface on the host's OpenGL 3.3 (68k) |
+| `ogles2.library/` | the ogles2 SDK's OpenGL ES 2.0 interface on the host's OpenGL (68k) |
+| `ogles3.library/` | OpenGL ES 3.0/3.1 of the ogles3 SDK, built with ogles2.library's sources (68k) |
 | `gl/` | 68k bridge to the host, partly generated from `glFuncs.txt` |
 | `amiga/` | library skeleton and build files for the 68k side |
 | `host/` | host DLL: OpenGL contexts, Warp3D renderer, presenting into Amiga memory |
@@ -286,6 +347,10 @@ WinUAE, with frame capture, profiling (`-Profile`), command tracing
   and its SDK by **R-Typer and Ladislawv**
   ([github.com/ladislawv/ogles2](https://github.com/ladislawv/ogles2)); it
   is built against their SDK's headers and tested with their examples.
+- **ogles3.library** implements the interface of the PiStorm ogles3.library
+  (OpenGL ES 3.1) and its SDK, also by **R-Typer and Ladislawv**
+  ([github.com/ladislawv/ogles3](https://github.com/ladislawv/ogles3)); it
+  is built against that SDK's headers and tested with its demos.
 
 The license texts: [License.txt](License.txt) (GNU LGPL v3) and
 [COPYING](COPYING) (GNU GPL v3, on which the LGPL v3 builds).

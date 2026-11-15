@@ -48,9 +48,10 @@ unittest() {
 	run "$HOST_IMAGE" "mkdir -p build && g++ -std=c++11 -Wall -Wno-int-to-pointer-cast -O1 -Igl -o build/unittest tests/host/test.cpp && build/unittest"
 }
 
-# MiniGL's 29 SDK include directory (SDK/minigl-shared-library/include of the
-# PiStorm3D 29 archive) for minigl.library; without it that library is not
-# built. A program built on an older SDK is not supported (minigl.library/lib.c).
+# MiniGL's 29/30 SDK include directory (SDK/minigl-shared-library/include of
+# the PiStorm3D 29.1 or 30.0 archive) for minigl.library; without it that
+# library is not built. A program built on an older SDK is not supported
+# (minigl.library/lib.c).
 #
 # OGLES2_SDK: the root of the PiStorm/Emu68 ogles2.library SDK (ogles2/ of
 # ogles2-1.3.1-sdk.lha, holding both SDK/include and SDK/lib,
@@ -67,6 +68,12 @@ fi
 if [ -n "$OGLES2_SDK" ] && [ -f "$OGLES2_SDK/include/libraries/ogles2_dispatch.h" ]; then
 	SDK_MOUNT="$SDK_MOUNT $(mount_dir "$OGLES2_SDK" /sdk-ogles2)"
 fi
+# OGLES3_SDK: the ogles3 SDK's root (ogles3-sdk-1.0/ of ogles3-1.0-sdk.zip
+# or .lha, holding include/ and lib/); without it
+# ogles3.library is not built (docs/phase10-ogles3.md).
+if [ -n "$OGLES3_SDK" ] && [ -f "$OGLES3_SDK/include/libraries/ogles3_dispatch.h" ]; then
+	SDK_MOUNT="$SDK_MOUNT $(mount_dir "$OGLES3_SDK" /sdk-ogles3)"
+fi
 
 amiga() {
 	if [ -n "$MINIGL_SDK" ] && [ -f "$MINIGL_SDK/libraries/minigl_dispatch.h" ]; then
@@ -76,6 +83,10 @@ amiga() {
 	if [ -n "$OGLES2_SDK" ] && [ -f "$OGLES2_SDK/include/libraries/ogles2_dispatch.h" ]; then
 		host_image
 		run "$HOST_IMAGE" "python3 ogles2.library/oglesgen.py /sdk-ogles2/include build/amiga/ogles2 ogles2.library/*.c"
+	fi
+	if [ -n "$OGLES3_SDK" ] && [ -f "$OGLES3_SDK/include/libraries/ogles3_dispatch.h" ]; then
+		host_image
+		run "$HOST_IMAGE" "python3 ogles2.library/oglesgen.py --ogles3 /sdk-ogles3/include build/amiga/ogles3 ogles2.library/*.c ogles3.library/*.c"
 	fi
 	run "$AMIGA_IMAGE" "make -f amiga/Makefile"
 }
@@ -109,7 +120,10 @@ dist() {
 	cp build/amiga/Warp3D.library build/amiga/agl.library dist/
 	if [ -f build/amiga/minigl.library ]; then cp build/amiga/minigl.library dist/; fi
 	if [ -f build/amiga/ogles2.library ]; then cp build/amiga/ogles2.library dist/; fi
+	if [ -f build/amiga/ogles3.library ]; then cp build/amiga/ogles3.library dist/; fi
 	cp build/host-x86/quarktexng-windows-x86.dll build/host-x64/quarktexng-windows-x86-64.dll dist/
+	# The 32-bit check runs on 32- and 64-bit Windows alike.
+	cp build/host-x86/QuarkTexNGCheck.exe dist/
 	cp License.txt COPYING ThirdParty.txt ReadMe.txt dist/
 	echo "dist/:"
 	ls -lR dist
@@ -119,23 +133,25 @@ dist() {
 # (amiga/aminet/QuarkTexNG.readme). The archive holds the libraries and DLLs
 # of dist/, the documents and licenses, and the source of the commit they
 # were built from, which the LGPL asks for; so the tree must be committed.
-# minigl.library and ogles2.library must be in dist/ (MINIGL_SDK and
-# OGLES2_SDK set for the build).
+# minigl.library, ogles2.library and ogles3.library must be in dist/ (MINIGL_SDK,
+# OGLES2_SDK and OGLES3_SDK set for the build).
 aminet() {
 	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 		echo "aminet: commit first, the archive carries the source of HEAD" >&2
 		exit 1
 	fi
-	for f in Warp3D.library agl.library minigl.library ogles2.library quarktexng-windows-x86.dll quarktexng-windows-x86-64.dll; do
-		if [ ! -f "dist/$f" ]; then echo "aminet: dist/$f missing (./build.sh with MINIGL_SDK and OGLES2_SDK set)" >&2; exit 1; fi
+	for f in Warp3D.library agl.library minigl.library ogles2.library ogles3.library quarktexng-windows-x86.dll \
+			quarktexng-windows-x86-64.dll QuarkTexNGCheck.exe; do
+		if [ ! -f "dist/$f" ]; then echo "aminet: dist/$f missing (./build.sh with MINIGL_SDK, OGLES2_SDK and OGLES3_SDK set)" >&2; exit 1; fi
 	done
 	package=build/aminet/QuarkTexNG
 	# The contents, not the directory, which Explorer or OneDrive may hold open.
 	mkdir -p build/aminet
 	rm -rf build/aminet/QuarkTexNG build/aminet/QuarkTexNG.lha build/aminet/QuarkTexNG.readme
 	mkdir -p "$package/Libs" "$package/WinUAE" "$package/Source"
-	cp dist/Warp3D.library dist/agl.library dist/minigl.library dist/ogles2.library "$package/Libs/"
+	cp dist/Warp3D.library dist/agl.library dist/minigl.library dist/ogles2.library dist/ogles3.library "$package/Libs/"
 	cp dist/quarktexng-windows-x86.dll dist/quarktexng-windows-x86-64.dll "$package/WinUAE/"
+	cp dist/QuarkTexNGCheck.exe "$package/"
 	# Text files with Amiga (LF) line ends.
 	for f in ReadMe.txt README.md License.txt COPYING ThirdParty.txt amiga/aminet/QuarkTexNG.readme; do
 		tr -d '\r' < "$f" > "$package/$(basename "$f")"

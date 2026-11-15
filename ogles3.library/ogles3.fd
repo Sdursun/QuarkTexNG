@@ -1,0 +1,9 @@
+* QuarkTex ogles3.library: the PiStorm/Emu68 ogles3.library's shared library
+* interface (ogles3 SDK 1.0, dispatch ABI 1, docs/phase10-ogles3.md), built
+* from ogles2.library's sources. As there, LVO -30 returns the dispatch table
+* and -36 is called by the SDK's OGLES3Close() before CloseLibrary.
+##base _OGLES3Base
+##bias 30
+OGLES3GetDispatchTable()()
+OGLES3PrivateLogFlush()()
+##end

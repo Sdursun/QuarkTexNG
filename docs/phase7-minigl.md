@@ -2,7 +2,33 @@
 
 Status: in progress. Stages 1 (analysis), 2 (skeleton) and 5 (the games) are
 done: RTCW, JK2, OpenLara and Hurrican run on it. Stage 6 (2026-10-07) moved
-the interface to MiniGL's 29 SDK (PiStorm3D 29.1).
+the interface to MiniGL's 29 SDK (PiStorm3D 29.1). PiStorm3D 30.0
+(2026-11-10) needed no change but the library's version.
+
+## PiStorm3D 30.0 (2026-11-10)
+
+PiStorm3D's 30.0 release (`minigl.library 30.0 (24.10.2026)`) keeps the
+client interface of 29.1: `libraries/minigl_dispatch.h` (dispatch ABI 5, 205
+entries), `minigl.h`, `minigl_protos.h` and the code of `mgl/gl.h`,
+`mgl/glut.h` and `mgl/config.h` are the same, only their comments changed.
+`mgl/context.h` appends fields of PiStorm3D's own driver to `GLcontext`
+(its frame submission task, triple buffering, the HVS flip), after
+everything a client's inlines reach; this library keeps its own
+`GLcontext` (`sdk-shim/mgl/context.h`) and does not need them.
+
+What did change for clients is the import library: the 30 SDK's
+`MiniGLOpen` (`SDK/lib/libminigl.a`) also refuses a library whose table is
+smaller than its own (`structSize` of at least 840 bytes, the 205 entries
+and the 20-byte header), as the header's comments had always described.
+This library's table is that size. The library is now version 30.0, as
+PiStorm3D's is.
+
+Verified in the test WinUAE: a program linked against the 30 SDK's
+`libminigl.a` opens it (`MiniGLOpen`, table size 840), `m01_minigl`
+passes, and the 30.0 archive's demos (`gears`, `cube`, `ring`, `warp`,
+`library_test`) draw correctly. Building takes the 30.0 archive's
+`SDK/minigl-shared-library/include` as `MINIGL_SDK`; the 29.1 one gives
+the same library.
 
 ## Stage 6: MiniGL's 29 SDK (done)
 

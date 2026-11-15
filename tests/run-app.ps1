@@ -41,6 +41,9 @@ param(
 	# Log frame rate and where the time of a frame goes, every 300 frames
 	# (QUARKTEX_PROFILE).
 	[switch]$Profile,
+	# Log an OpenGL error with the ogles2/ogles3 command that left it
+	# (QUARKTEX_CHECK_ERRORS).
+	[switch]$CheckErrors,
 	# WinUAE's display mode: 'false' (a window), 'true' (fullscreen) or
 	# 'fullwindow' (a borderless window over the whole screen).
 	[ValidateSet('false', 'true', 'fullwindow')] [string]$Fullscreen = 'false',
@@ -106,6 +109,7 @@ $env:QUARKTEX_CAPTURE_DIR = Join-Path $qttest 'capture'
 $env:QUARKTEX_CAPTURE_EVERY = "$CaptureEvery"
 if ($Trace) { $env:QUARKTEX_TRACE = '1' }
 if ($Profile) { $env:QUARKTEX_PROFILE = '1' }
+if ($CheckErrors) { $env:QUARKTEX_CHECK_ERRORS = '1' }
 if ($TraceFrame -ge 0) { $env:QUARKTEX_TRACE_FRAME = "$TraceFrame" }
 # The host writes its log only when it has something to say: an old one
 # must not be taken for this run's.
@@ -116,7 +120,7 @@ if (-not $process.WaitForExit($TimeoutSec * 1000)) {
 	Write-Host "   stopped after $TimeoutSec s"
 }
 Remove-Item Env:QUARKTEX_CAPTURE_DIR, Env:QUARKTEX_CAPTURE_EVERY
-Remove-Item Env:QUARKTEX_TRACE, Env:QUARKTEX_TRACE_FRAME, Env:QUARKTEX_PROFILE -ErrorAction SilentlyContinue
+Remove-Item Env:QUARKTEX_TRACE, Env:QUARKTEX_TRACE_FRAME, Env:QUARKTEX_PROFILE, Env:QUARKTEX_CHECK_ERRORS -ErrorAction SilentlyContinue
 $hostLog = Join-Path $uae 'QuarkTexNGLog.txt'
 if (Test-Path $hostLog) { Copy-Item $hostLog (Join-Path $qttest 'capture') -Force }
 Get-ChildItem (Join-Path $qttest 'capture') | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host

@@ -29,6 +29,11 @@ void glExit(void);
  * context, as do moveWindow, swapBuffers and freeContext (which leaves none
  * selected); selectContext flushes the buffer when it switches. */
 ULONG createContext(int left, int top, int width, int height, int flags);
+/* The same, for a QT_CONTEXT_CORE context that shares the objects (textures,
+ * buffers, shaders, programs, renderbuffers) of the core context share
+ * (ogles2.library's OGLES2_CCT_SHARE_WITH). A host library older than
+ * that makes the context without sharing. */
+ULONG createSharedContext(int left, int top, int width, int height, int flags, ULONG share);
 #define QT_CONTEXT_CORE 1
 /* An OpenGL compatibility context as OpenGL makes it: no QuarkTex 0.53 model
  * view matrix, and a 24-bit depth buffer (minigl.library). */
@@ -39,6 +44,9 @@ ULONG createContext(int left, int top, int width, int height, int flags);
  * hidden. moveWindow gives the picture a new size. */
 #define QT_CONTEXT_OFFSCREEN 4
 void selectContext(ULONG id);
+/* selectContext for a call that names its context (ogles2.library's dispatch
+ * table): a compare when it is the calling task's selected one already. */
+void useContext(ULONG id);
 void moveWindow(int left, int top, int width, int height);
 void freeContext(void);
 void swapBuffers(void);
@@ -58,11 +66,18 @@ void finishFrame(void);
 struct BitMap;
 struct Layer;
 int presentable(struct BitMap *bitmap);
+/* The bitmap's size in pixels (graphics.library's BMA_WIDTH/BMA_HEIGHT). */
+void bitmapSize(struct BitMap *bitmap, LONG *width, LONG *height);
 /* Has the host write the frame into the rectangle of the bitmap, which it
  * locks, and the layer (if any) drawing there. wait: it is written before
  * presentInto returns (else as soon as the GPU has it, see finishFrame), for
  * applications that may stop drawing after any frame (agl, Warp3D). */
 void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height, int wait);
+/* Locks the layer (if any) and the bitmap as presentInto does and calls
+ * write with the target for the rectangle while they are locked (NULL if
+ * the bitmap could not be locked); returns what write returns. */
+ULONG withTarget(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height,
+	ULONG (*write)(const QtTarget *target, void *data), void *data);
 void logString(char* c);
 /* 0 if the FPU does not compute with 80-bit extended precision (an emulator
  * set to 64 bits): glInit logs a warning. */

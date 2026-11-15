@@ -67,7 +67,7 @@ void glVertexPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei st
 	_glVertexPointer(size, type, stride, memoffset + (long) ptr);
 }
 
-inline void vertex(int i) {
+static inline void vertex(int i) {
 	GLshort *sp = NULL;
 	GLint *ip = NULL;
 	GLfloat *fp = NULL;
@@ -117,7 +117,7 @@ void glNormalPointer(GLenum type __asm("d0"), GLsizei stride __asm("d1"), GLvoid
 	_glNormalPointer(type, stride, memoffset + (long) ptr);
 }
 
-inline void normal(int i) {
+static inline void normal(int i) {
 	GLbyte *bp = NULL;
 	GLshort *sp = NULL;
 	GLint *ip = NULL;
@@ -158,7 +158,7 @@ void glColorPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei str
 }
 
 
-inline void color(int i) {
+static inline void color(int i) {
 	GLbyte *bp = NULL;
 	GLubyte *ubp = NULL;
 	GLshort *sp = NULL;
@@ -276,7 +276,7 @@ void glTexCoordPointer(GLint size __asm("d0"), GLenum type __asm("d1"), GLsizei 
 	_glTexCoordPointer(size, type, stride, memoffset + (long) ptr);
 }
 
-inline void texCoord(int i) {
+static inline void texCoord(int i) {
 	GLshort *sp = NULL;
 	GLint *ip = NULL;
 	GLfloat *fp = NULL;

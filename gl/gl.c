@@ -27,7 +27,7 @@
  */
 
 /* Must match QT_PROTOCOL_VERSION in host/quarktex.cpp. */
-#define QT_PROTOCOL_VERSION 11
+#define QT_PROTOCOL_VERSION 12
 
 #define QT_BUFFER_BYTES (256 * 1024)
 
@@ -291,15 +291,25 @@ void glExit(void) {
 }
 
 ULONG createContext(int left, int top, int width, int height, int flags) {
+	return createSharedContext(left, top, width, height, flags, 0);
+}
+
+ULONG createSharedContext(int left, int top, int width, int height, int flags, ULONG share) {
 	QtSlot *s = qt_slot();
 	ULONG id;
 	if (!s || !qt_buffer(s) || !qt_create) return 0;
-	id = hostCall(qt_create, left, top, width, height, flags, 0);
+	id = hostCall(qt_create, left, top, width, height, flags, share);
 	if (id) {
 		++s->contexts;
 		selectContext(id);
 	}
 	return id;
+}
+
+void useContext(ULONG id) {
+	QtSlot *s = qt_last;
+	if (s->task == SysBase->ThisTask && s->context == id) return;
+	selectContext(id);
 }
 
 void selectContext(ULONG id) {
@@ -352,10 +362,82 @@ int presentable(struct BitMap *bitmap) {
 	return format >= RGBFB_R8G8B8 && format <= RGBFB_B5G5R5PC;
 }
 
+void bitmapSize(struct BitMap *bitmap, LONG *width, LONG *height) {
+	*width = bitmap && qt_GfxBase ? (LONG) GetBitMapAttr(bitmap, BMA_WIDTH) : 0;
+	*height = bitmap && qt_GfxBase ? (LONG) GetBitMapAttr(bitmap, BMA_HEIGHT) : 0;
+}
+
+/* presentInto's target with the layer's visible parts after it: the host
+ * (qt_swap_buffers) writes the picture only into those rectangles when it
+ * finds the magic word, so a window in front keeps what it shows. A host
+ * of before reads the QtTarget alone. */
+#define QT_CLIP_MAGIC 0x51544352 /* 'QTCR' */
+#define QT_CLIP_RECTS 32
+struct QtClipTarget {
+	QtTarget target;
+	ULONG magic, rects; /* rects 0: all of it */
+	LONG rect[QT_CLIP_RECTS][4]; /* MinX, MinY, MaxX, MaxY in the bitmap */
+};
+
+static void visibleParts(struct QtClipTarget *t, struct Layer *layer) {
+	struct ClipRect *cr;
+	int covered = 0;
+	t->magic = QT_CLIP_MAGIC;
+	t->rects = 0;
+	if (!layer) return;
+	for (cr = layer->ClipRect; cr; cr = cr->Next) {
+		if (cr->obscured) {
+			covered = 1;
+			continue;
+		}
+		if (t->rects == QT_CLIP_RECTS) {
+			/* More pieces than we pass: write all of it, as before. */
+			t->rects = 0;
+			return;
+		}
+		t->rect[t->rects][0] = cr->bounds.MinX;
+		t->rect[t->rects][1] = cr->bounds.MinY;
+		t->rect[t->rects][2] = cr->bounds.MaxX;
+		t->rect[t->rects][3] = cr->bounds.MaxY;
+		++t->rects;
+	}
+	if (!covered) t->rects = 0;
+	/* Covered all over: nothing to write. */
+	else if (!t->rects) t->target.width = t->target.height = 0;
+}
+
 void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height, int wait) {
+	struct RenderInfo info;
+	struct QtClipTarget clip;
+	QtTarget *target = &clip.target;
+	LONG lock;
+	if (layer) LockLayerRom(layer);
+	lock = p96LockBitMap(bitmap, (UBYTE *) &info, sizeof(info));
+	if (lock) {
+		target->address = (ULONG) info.Memory;
+		target->bytesPerRow = (ULONG) info.BytesPerRow;
+		target->format = (ULONG) info.RGBFormat;
+		target->bitmapWidth = p96GetBitMapAttr(bitmap, P96BMA_WIDTH);
+		target->bitmapHeight = p96GetBitMapAttr(bitmap, P96BMA_HEIGHT);
+		target->left = left;
+		target->top = top;
+		target->width = width;
+		target->height = height;
+		visibleParts(&clip, layer);
+		swapBuffersTo(target);
+		if (wait) finishFrame();
+		p96UnlockBitMap(bitmap, lock);
+	}
+	else swapBuffersTo(NULL);
+	if (layer) UnlockLayerRom(layer);
+}
+
+ULONG withTarget(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top, LONG width, LONG height,
+		ULONG (*write)(const QtTarget *target, void *data), void *data) {
 	struct RenderInfo info;
 	QtTarget target;
 	LONG lock;
+	ULONG result;
 	if (layer) LockLayerRom(layer);
 	lock = p96LockBitMap(bitmap, (UBYTE *) &info, sizeof(info));
 	if (lock) {
@@ -368,12 +450,12 @@ void presentInto(struct BitMap *bitmap, struct Layer *layer, LONG left, LONG top
 		target.top = top;
 		target.width = width;
 		target.height = height;
-		swapBuffersTo(&target);
-		if (wait) finishFrame();
+		result = write(&target, data);
 		p96UnlockBitMap(bitmap, lock);
 	}
-	else swapBuffersTo(NULL);
+	else result = write(NULL, data);
 	if (layer) UnlockLayerRom(layer);
+	return result;
 }
 
 void swapBuffers(void) {

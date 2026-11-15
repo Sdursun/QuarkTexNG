@@ -38,3 +38,14 @@ elseif(MINGW)
 	target_link_options(quarktex PRIVATE -static-libgcc -static-libstdc++ -static
 		$<$<CONFIG:Release,MinSizeRel>:-s>)
 endif()
+
+# QuarkTexNGCheck.exe: whether a PC's graphics driver can run QuarkTex NG
+# (an OpenGL 3.3 core profile), for users (tools/check/QuarkTexNGCheck.cpp).
+add_executable(QuarkTexNGCheck tools/check/QuarkTexNGCheck.cpp)
+target_link_libraries(QuarkTexNGCheck PRIVATE OpenGL::GL gdi32 user32)
+if(MSVC)
+	target_compile_definitions(QuarkTexNGCheck PRIVATE _CRT_SECURE_NO_WARNINGS)
+	set_property(TARGET QuarkTexNGCheck PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+elseif(MINGW)
+	target_link_options(QuarkTexNGCheck PRIVATE -static-libgcc -static-libstdc++ -static $<$<CONFIG:Release,MinSizeRel>:-s>)
+endif()

@@ -22,6 +22,13 @@
  * for input (OGLES2_CCT_MODEID), the program's bitmap (OGLES2_CCT_BITMAP),
  * or, with none of these, a window of the library's own on the default
  * public screen.
+ *
+ * OGLES2_CCT_SHARE_WITH: the host context is made sharing the objects of
+ * the given context's (textures, buffers, shaders, programs,
+ * renderbuffers; framebuffers and vertex array objects stay each
+ * context's own, as in OpenGL ES). Buffers are the host library's own
+ * copies, named from one sequence for all contexts (host/ogles2.cpp), so
+ * they are shared in any case.
  */
 
 struct IntuitionBase *IntuitionBase;
@@ -42,10 +49,18 @@ static void destroy(struct OGLES2Context *c) {
 	if (c->host) {
 		selectContext(c->host);
 		freeContext();
+		/* freeContext leaves no host context selected: the task's current
+		 * one (another than c) gets its commands again. */
+		if (ogles2_current) selectContext(ogles2_current->host);
 	}
 	if (c->window && c->ownWindow) CloseWindow(c->window);
 	if (c->screen && c->ownScreen) CloseScreen(c->screen);
-	for (i = 0; i < 2; ++i) if (c->mapped[i]) FreeVec(c->mapped[i]);
+	for (i = 0; i < QT_OGLES2_MAP_SLOTS; ++i) if (c->mapped[i]) FreeVec(c->mapped[i]);
+	while (c->vaos) {
+		QtOgles2Vao *next = c->vaos->next;
+		FreeVec(c->vaos);
+		c->vaos = next;
+	}
 	FreeVec(c);
 }
 
@@ -53,7 +68,7 @@ static struct BitMap *targetBitMap(struct OGLES2Context *c) {
 	return c->window ? c->window->RPort->BitMap : c->bitmap;
 }
 
-static void *attach(struct OGLES2Context *c) {
+static void *attach(struct OGLES2Context *c, ULONG share) {
 	struct BitMap *bitmap = targetBitMap(c);
 	c->offscreen = bitmap && presentable(bitmap);
 	/* A bitmap is only ever written into: there is no host window for it. */
@@ -61,8 +76,8 @@ static void *attach(struct OGLES2Context *c) {
 		destroy(c);
 		return NULL;
 	}
-	if (c->offscreen) c->host = createContext(0, 0, c->width, c->height, QT_CONTEXT_CORE | QT_CONTEXT_OFFSCREEN);
-	else c->host = createContext(c->left, c->top, c->width, c->height, QT_CONTEXT_CORE);
+	if (c->offscreen) c->host = createSharedContext(0, 0, c->width, c->height, QT_CONTEXT_CORE | QT_CONTEXT_OFFSCREEN, share);
+	else c->host = createSharedContext(c->left, c->top, c->width, c->height, QT_CONTEXT_CORE, share);
 	if (!c->host) {
 		destroy(c);
 		return NULL;
@@ -74,6 +89,11 @@ static void *attach(struct OGLES2Context *c) {
 	/* GLES2 vertex shaders always set gl_PointSize themselves; a desktop
 	 * core profile only lets them with GL_PROGRAM_POINT_SIZE on. */
 	_glEnable(0x8642);
+	/* No program current, as OpenGL ES starts: the host's core contexts
+	 * come with the Warp3D emulation's program in use (host/ffp.cpp), which
+	 * would answer GL_CURRENT_PROGRAM and shadow a bound program pipeline
+	 * (OpenGL ES 3.1). */
+	ogles2_simple(QT_OGLES2_S_UseProgram, 0, 0);
 	ogles2_current = c;
 	return c;
 }
@@ -143,10 +163,10 @@ static ULONG openWindow(struct OGLES2Context *c, struct TagItem *tags) {
 }
 
 struct OGLES2Context *ogles2_aglCreateContext2(ULONG *errcode, struct TagItem *tags) {
-	struct OGLES2Context *c;
+	struct OGLES2Context *c, *share;
 	struct Window *window;
 	struct BitMap *bitmap;
-	ULONG mode, error = OGLES2_CCE_OK;
+	ULONG mode, error = OGLES2_CCE_OK, asked = 0;
 	int i;
 	openLibraries();
 	if (!IntuitionBase || !GfxBase) {
@@ -156,7 +176,8 @@ struct OGLES2Context *ogles2_aglCreateContext2(ULONG *errcode, struct TagItem *t
 	window = (struct Window *) tagValue(tags, OGLES2_CCT_WINDOW, 0);
 	bitmap = (struct BitMap *) tagValue(tags, OGLES2_CCT_BITMAP, 0);
 	mode = tagValue(tags, OGLES2_CCT_MODEID, tagValue(tags, OGLES2_CCT_CONTEXT_FOR_MODEID, INVALID_ID));
-	if ((window != NULL) + (bitmap != NULL) + (mode != INVALID_ID) > 1) {
+	share = (struct OGLES2Context *) tagValue(tags, OGLES2_CCT_SHARE_WITH, 0);
+	if ((window != NULL) + (bitmap != NULL) + (mode != INVALID_ID) > 1 || (share && !share->host)) {
 		if (errcode) *errcode = OGLES2_CCE_BAD_TAGS;
 		return NULL;
 	}
@@ -165,6 +186,26 @@ struct OGLES2Context *ogles2_aglCreateContext2(ULONG *errcode, struct TagItem *t
 		return NULL;
 	}
 	for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) c->currentAttrib[i][3] = 1; /* GLES2's (0, 0, 0, 1) */
+	ogles2_resetAttribs(c->attribs);
+	c->esVersion = 20;
+#ifdef QT_OGLES3
+	/* ogles3.library, as the PiStorm one (1.0): OpenGL ES 2.0 if asked for
+	 * 20, else the highest 3.x it has, 3.1, for 30, 31 and no tag alike.
+	 * 3.1 needs the host's core contexts to be OpenGL 4.3 (checked once
+	 * attached); without, 3.0 unless 3.1 was asked for. Contexts share
+	 * objects only with contexts of their own version (2.0 or 3.x). */
+	switch (asked = tagValue(tags, OGLES3_CCT_PISTORM_ES_VERSION, 0)) {
+	case 20: break;
+	case 0: case 30: case 31: c->esVersion = 31; break;
+	default: error = OGLES2_CCE_BAD_TAGS;
+	}
+	if (share && (share->esVersion >= 30) != (c->esVersion >= 30)) error = OGLES2_CCE_BAD_TAGS;
+	if (error != OGLES2_CCE_OK) {
+		FreeVec(c);
+		if (errcode) *errcode = error;
+		return NULL;
+	}
+#endif
 	if (window) {
 		c->window = window;
 		innerArea(c, window);
@@ -184,10 +225,20 @@ struct OGLES2Context *ogles2_aglCreateContext2(ULONG *errcode, struct TagItem *t
 		if (errcode) *errcode = error;
 		return NULL;
 	}
-	if (!attach(c)) {
+	if (!attach(c, share ? share->host : 0)) {
 		if (errcode) *errcode = OGLES2_CCE_NO_GPU;
 		return NULL;
 	}
+#ifdef QT_OGLES3
+	if (c->esVersion == 31 && !ogles2_call(QT_OGLES2_C_Has43, 0, 0, 0, 0, 0)) {
+		if (asked == 31) {
+			destroy(c);
+			if (errcode) *errcode = OGLES2_CCE_UNSUPPORTED;
+			return NULL;
+		}
+		c->esVersion = 30;
+	}
+#endif
 	answer(c, tags);
 	if (errcode) *errcode = OGLES2_CCE_OK;
 	return c;
@@ -204,11 +255,14 @@ void ogles2_aglMakeCurrent(struct OGLES2Context *ctx) {
 
 /* Writes the frame into the window's bitmap, over its inner area (the
  * window's layer locked, so nothing draws there meanwhile), or into the
- * program's bitmap, or shows it in the host's own window. */
+ * program's bitmap, or shows it in the host's own window. The program's
+ * bitmap has the frame when aglSwapBuffers returns: the program goes on to
+ * use it (blits it somewhere, reads it), and nothing else would tell it
+ * when the host has written it. */
 static void present(struct OGLES2Context *ctx) {
 	if (!ctx->offscreen) swapBuffers();
 	else if (ctx->window) presentInto(targetBitMap(ctx), ctx->window->WLayer, ctx->left, ctx->top, ctx->width, ctx->height, 0);
-	else presentInto(ctx->bitmap, NULL, 0, 0, ctx->width, ctx->height, 0);
+	else presentInto(ctx->bitmap, NULL, 0, 0, ctx->width, ctx->height, 1);
 }
 
 void ogles2_aglSwapBuffers(struct OGLES2Context *ctx) {
@@ -249,7 +303,6 @@ void ogles2_aglSetBitmap(struct OGLES2Context *ctx, struct BitMap *bitmap) {
 	if (!ctx || !ctx->bitmap || !bitmap || !presentable(bitmap)) return;
 	selectContext(ctx->host);
 	present(ctx);
-	finishFrame();
 	ctx->bitmap = bitmap;
 	width = (int) p96GetBitMapAttr(bitmap, P96BMA_WIDTH);
 	height = (int) p96GetBitMapAttr(bitmap, P96BMA_HEIGHT);

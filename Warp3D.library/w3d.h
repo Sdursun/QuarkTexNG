@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <exec/libraries.h>
-#include <proto/asl.h>
 
 #include "Warp3D.h"
 #include "../gl/gl.h"

@@ -311,6 +311,89 @@ installed in `LIBS:`:
 Breaking the game with Ctrl-C in the middle of play reset the Amiga, with no
 alert recorded; a normal quit does not. Not looked into yet.
 
+## Drawing from buffers without converting them again (2026-10-31)
+
+OpenMoHAA's GLES2 build found drawing from buffers slower than sending the
+vertices each frame (docs/quarktexng.md in that project): one buffer of its
+static models gave 13.6 fps instead of 66. Every draw converted elements 0
+to the highest index of each enabled attribute, from wherever in the buffer
+they were, into temporary host buffers made and deleted per draw, so a
+draw's cost went with the size of the buffer, and a static buffer was
+converted again at every draw.
+
+Now (`host/ogles2.cpp`):
+- **Cached:** per host context and attribute layout of a buffer (buffer,
+  offset, stride, type, size, normalised), a host buffer of floats with
+  room for all of the buffer's elements. A draw converts only those of its
+  elements (lowest to highest index) that are dirty: not converted yet, or
+  written since by `glBufferData`/`glBufferSubData`. Each buffer has a
+  version and a list of its last 64 written ranges; older changes make the
+  whole copy dirty. A static buffer is converted once.
+- `glBufferData` without data (ioquake3 orphans its buffers that way before
+  each batch of `glBufferSubData`) leaves a copy of the same size as it is:
+  the contents are undefined until written.
+- Converted ranges go into the copy through a staging buffer and
+  `glCopyBufferSubData`, not `glBufferSubData` into a buffer earlier draws
+  may still be reading.
+- Attributes in Amiga memory are converted at every draw as before, but
+  only from the lowest to the highest index, into a stream buffer per
+  attribute index that is reused. The indices go into an element buffer.
+- The copies, the stream buffers and the shader sources kept for a context
+  are deleted with it (`qt_ogles2_forget_context`).
+
+Quake III's `timedemo four` (640 x 480, the test WinUAE of
+`tests/run-app.ps1`, runs alternating with the old DLL): 98.2 against 83.3
+fps, 53.2 against 46.8 in a slower pair; the frames captured every 200 swaps
+match the old DLL's (one differs only in the console text). `boingocean` and
+`boing2026` are as fast or faster; `o02_ogles2_api` passes.
+
+## Bitmaps, resizing and shared objects (2026-11-15)
+
+The bitmap surface and `aglSetParams2`'s resizing were written in stage 3
+but never run; `OGLES2_CCT_SHARE_WITH` was taken and ignored.
+`tests/o04_ogles2_surfaces.c` checks all three.
+
+- **Bitmaps.** `aglSwapBuffers` into a program's bitmap now waits until the
+  host has written the frame (`presentInto(..., wait)`): the program goes on
+  to use the bitmap, and nothing else would tell it when the frame is there.
+  Windows and screens still do not wait. `aglSetBitmap` renders the open
+  frame into the old bitmap and resizes the default framebuffer; the
+  viewport stays as the program set it.
+- **Resizing.** After `ChangeWindowBox` and `IDCMP_NEWSIZE`,
+  `aglSetParams2(OGLES2_CCT_WINDOW, ...)` gives the context the new inner
+  size and the frame fills it. That already worked.
+- **Shared objects.** `createSharedContext` (gl/gl.c) passes the context to
+  share with in `a1` of `qt_create_context`. The host makes the new core
+  context with that one's HGLRC as `wglCreateContextAttribsARB`'s share
+  context. Textures, shaders, programs and renderbuffers are then shared by
+  OpenGL itself. Framebuffers and vertex array objects stay each context's
+  own, as in OpenGL ES. Buffers were already shared: they are the host's own
+  copies, named from one sequence for all contexts.
+  `glGetShaderSource`'s copies are kept per group of contexts sharing
+  objects, not per context (`qt_ogles2_share_context`). A DLL older than
+  this ignores `a1` and makes the context without sharing. ogles3.library,
+  like the PiStorm one, shares only between contexts of one version (2.0
+  with 2.0, 3.x with 3.x): `OGLES2_CCE_BAD_TAGS` otherwise.
+- **Destroying another context.** `aglDestroyContext` of a context that was
+  not the current one left no host context selected, so the current one's
+  next commands went nowhere. It now selects the current one again.
+
+- **The context argument.** The GL entries used the task's selected host
+  context, not the context they are given. A program that called the table
+  with another of its contexts drew into the wrong one, and so did a second
+  task using a context another task made, as the SDK describes drawing from
+  a second task. oglesgen.py now puts a wrapper in front of each GL entry
+  that selects its context's host context first (gl/gl.c's `useContext`:
+  two compares when it is selected already). Measured with 10 million
+  calls in the user's WinUAE: glDepthMask 0.032 -> 0.041 us, glUniform1f
+  0.300 -> 0.322 us a call, about 0.1 ms in a frame of 5000 calls.
+
+Not done: buffers that a shader wrote (transform feedback, storage
+buffers) are read back only for the context that wrote them.
+
+Verified in the user's WinUAE with the libraries from RAM: and the new DLLs:
+o01-o04 and e01-e05 pass, as do m01, a03, v01 and v04.
+
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 
 `aglSwapBuffers()` and everything before it worked on the first real run

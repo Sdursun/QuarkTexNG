@@ -32,3 +32,12 @@ void *memset(void *dest, int c, size_t n) {
 	while (n--) *p++ = (unsigned char) c;
 	return dest;
 }
+
+/* GCC turns a loop counting up to a NUL into strlen (ogles2's
+ * chunkLength); the attribute keeps this one a loop. */
+__attribute__((optimize("no-tree-loop-distribute-patterns")))
+size_t strlen(const char *s) {
+	const char *p = s;
+	while (*p) ++p;
+	return (size_t) (p - s);
+}

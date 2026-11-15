@@ -11,6 +11,7 @@
 #define QT_GL(name) gl##name
 #endif
 #include <cstdio>
+#include <cstdlib>
 #include "gldecode.h"
 #include "w3dcmd.h"
 #include "mglcmd.h"
@@ -171,10 +172,19 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		// Which OpenGL command an error comes from, with its first arguments.
 		// Not between glBegin (5) and glEnd (75), where glGetError is an error
 		// itself.
+		// QUARKTEX_CHECK_ERRORS: after every OpenGL and ogles2/ogles3
+		// command, in every frame.
 		static bool insideBegin = false;
-		if (qt_w3d_trace_all && (header >> 16) == 5) insideBegin = true;
+		static int checkErrors = -1;
+#ifndef QT_TEST
+		if (checkErrors < 0) checkErrors = getenv("QUARKTEX_CHECK_ERRORS") ? 1 : 0;
+#else
+		checkErrors = 0;
+#endif
+		bool check = qt_w3d_trace_all || checkErrors;
+		if (check && (header >> 16) == 5) insideBegin = true;
 		else if ((header >> 16) == 75) insideBegin = false;
-		if (qt_w3d_trace_all && !insideBegin && (header >> 16) < QT_W3D_FIRST) {
+		if (check && !insideBegin && ((header >> 16) < QT_W3D_FIRST || (header >> 16) >= QT_OGLES2_FIRST)) {
 			GLenum error = QT_GL(GetError)();
 			if (error) {
 				char line[120];

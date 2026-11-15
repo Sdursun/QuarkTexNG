@@ -17,7 +17,13 @@
 
 /* Tags of AmigaMesaCreateContext (agl.library/Amigamesa.h) */
 #define AMA_Dummy       (TAG_USER + 32)
+#define AMA_Left        (AMA_Dummy + 0x0001)
+#define AMA_Bottom      (AMA_Dummy + 0x0002)
+#define AMA_Width       (AMA_Dummy + 0x0003)
+#define AMA_Height      (AMA_Dummy + 0x0004)
+#define AMA_Screen      (AMA_Dummy + 0x0006)
 #define AMA_Window      (AMA_Dummy + 0x0007)
+#define AMA_RastPort    (AMA_Dummy + 0x0008)
 #define AMA_DoubleBuf   (AMA_Dummy + 0x0030)
 #define AMA_RGBMode     (AMA_Dummy + 0x0031)
 

@@ -27,10 +27,15 @@ OGLES2_SDK ?= /sdk-ogles2
 OGL_CFLAGS  = $(CPU) -O2 -Wall -Wno-pointer-sign -Werror=implicit-function-declaration \
               -I$(OGLES2_SDK)/include -Itests
 OGL_BUILT   = $(if $(wildcard $(OGLES2_SDK)/include/libraries/ogles2_dispatch.h),$(OGL_TESTS))
+# ogles3.library checks (eNN_*), when the ogles3 SDK is there.
+ES3_TESTS   = $(basename $(notdir $(wildcard tests/e[0-9][0-9]_*.c)))
+OGLES3_SDK ?= /sdk-ogles3
+ES3_CFLAGS  = $(CPU) -O2 -Wall -Wno-pointer-sign -Werror=implicit-function-declaration               -I$(OGLES3_SDK)/include -Itests
+ES3_BUILT   = $(if $(wildcard $(OGLES3_SDK)/include/libraries/ogles3_dispatch.h),$(ES3_TESTS))
 W3D_HEADERS = tests/common.h tests/window.h tests/include/warp3d_calls.h Warp3D.library/Warp3D.h
 AGL_HEADERS = tests/agl_common.h tests/window.h $(BUILD)/agl_calls.h gl/gl.h gl/gldefines.h
 
-all: $(addprefix $(BUILD)/,$(W3D_TESTS) $(AGL_TESTS) $(W_TESTS) $(MGL_BUILT) $(OGL_BUILT))
+all: $(addprefix $(BUILD)/,$(W3D_TESTS) $(AGL_TESTS) $(W_TESTS) $(MGL_BUILT) $(OGL_BUILT) $(ES3_BUILT))
 
 $(BUILD)/agl_calls.h: agl.library/agl_lib.fd tests/aglcalls.py | $(BUILD)
 	$(PYTHON) tests/aglcalls.py $< $@
@@ -67,6 +72,12 @@ $(BUILD)/o%.o: tests/o%.c tests/window.h | $(BUILD)
 
 $(BUILD)/o%: $(BUILD)/o%.o $(BUILD)/window.o
 	$(CC) $(LDFLAGS) -o $@ $^ -L$(OGLES2_SDK)/lib -logles2
+
+$(BUILD)/e%.o: tests/e%.c tests/window.h | $(BUILD)
+	$(CC) $(ES3_CFLAGS) -c -o $@ $<
+
+$(BUILD)/e%: $(BUILD)/e%.o $(BUILD)/window.o
+	$(CC) $(LDFLAGS) -o $@ $^ -L$(OGLES3_SDK)/lib -logles3
 
 $(BUILD):
 	mkdir -p $@

@@ -23,6 +23,12 @@
 #define GL_DEPTH24_STENCIL8 0x88F0
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
 #endif
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
+#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#endif
 #ifndef GL_PIXEL_PACK_BUFFER
 #define GL_PIXEL_PACK_BUFFER 0x88EB
 #define GL_PIXEL_PACK_BUFFER_BINDING 0x88ED
@@ -150,12 +156,20 @@ namespace present {
 			bufferData(GL_PIXEL_PACK_BUFFER, static_cast<ptrdiff_t>(width) * height * 4, 0, GL_STREAM_READ);
 		}
 		bindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(saved));
+		// A framebuffer object of the application's own stays bound (it is
+		// 0, the window's, when the context is new).
+		GLint draw = 0, read = 0;
+		glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw);
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read);
 		bindFramebuffer(GL_FRAMEBUFFER, f.fbo);
 		framebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, f.color);
 		framebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, f.depthStencil);
 		f.width = width;
 		f.height = height;
-		return checkFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+		bool complete = checkFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+		if (draw) bindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(draw));
+		if (read) bindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(read));
+		return complete;
 	}
 
 	void destroy(Framebuffer& f) {
@@ -168,6 +182,23 @@ namespace present {
 		deleteBuffers(2, f.pixelBuffers);
 		f.fbo = f.color = f.depthStencil = f.pixelBuffers[0] = f.pixelBuffers[1] = 0;
 		f.fence = 0;
+	}
+
+	void beginRead(const Framebuffer& f, Reading& saved) {
+		GLint binding = 0, buffer = GL_COLOR_ATTACHMENT0;
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &binding);
+		saved.binding = binding;
+		if (static_cast<unsigned int>(binding) != f.fbo) bindFramebuffer(GL_READ_FRAMEBUFFER, f.fbo);
+		glGetIntegerv(GL_READ_BUFFER, &buffer);
+		saved.buffer = buffer;
+		if (buffer != GL_COLOR_ATTACHMENT0) glReadBuffer(GL_COLOR_ATTACHMENT0);
+	}
+
+	void endRead(const Reading& saved) {
+		if (saved.buffer != GL_COLOR_ATTACHMENT0) glReadBuffer(static_cast<GLenum>(saved.buffer));
+		GLint binding = 0;
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &binding);
+		if (binding != saved.binding) bindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(saved.binding));
 	}
 
 	void start(Framebuffer& f, const Target& t, void* (*resolve)(uint32_t)) {
@@ -185,7 +216,10 @@ namespace present {
 		GLint savedBuffer = boundPackBuffer();
 		for (int i = 0; i < count; ++i) glPixelStorei(packs[i], values[i]);
 		bindBuffer(GL_PIXEL_PACK_BUFFER, f.pixelBuffers[f.next]);
+		Reading reading;
+		beginRead(f, reading);
 		glReadPixels(0, 0, f.width, f.height, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+		endRead(reading);
 		bindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(savedBuffer));
 		for (int i = 0; i < count; ++i) glPixelStorei(packs[i], saved[i]);
 		f.fence = fenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);

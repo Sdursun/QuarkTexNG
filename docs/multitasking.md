@@ -92,10 +92,15 @@ picture. The reference suite (`tests/run.ps1`) is unchanged.
 
 ## Limits
 
-- Windows that overlap: with presentation into Amiga display memory
-  (phase 8), each program's frame is written over its whole window
-  rectangle, also over windows in front of it. This is unchanged and not
-  part of this work.
+- Windows that overlap (since 2026-11-14): `presentInto` (gl/gl.c) sends
+  the window layer's visible cliprects after the target (`QtClipTarget`,
+  magic `QTCR`, up to 32; more write the whole rectangle as before), and
+  the host writes the frame only there, so windows in front keep what
+  they show (`tests/o03_ogles2_overlap.c`). The rectangles are those of
+  the swap; a frame the host writes later (asynchronously) uses them even
+  if a window moved meanwhile, until the next swap. A smart refresh
+  window's covered parts are not updated. An older DLL ignores the
+  rectangles; a newer DLL with an older library sees no magic word.
 - `MGLSetWindowMode`/pixel depth hints (minigl `context.c`) are still
   shared. They are set just before a context is made, so a clash needs two
   programs starting in the same instant.

@@ -1,5 +1,6 @@
 #include "w3d.h"
 
+#include <libraries/asl.h> /* W3D_RequestMode's ASLSM_ tags; asl.library itself is not used */
 #include <proto/graphics.h>
 #include <proto/picasso96.h>
 

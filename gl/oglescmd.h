@@ -67,9 +67,13 @@
  * follows glVertexAttribPointer's own buffer-or-address rule), indices;
  * then per attribute: enabled, size, type, normalized, stride, buffer name
  * (0: pointer is an Amiga address), pointer/offset. */
-#define QT_OGLES2_MAX_ATTRIBS 8
+/* Since protocol 12 (ogles3.library, docs/phase10-ogles3.md): 16
+ * attributes, instances (0 or 1: one) after indices, and per attribute an
+ * eighth word, its divisor; the enabled word's bit 1 marks an integer
+ * attribute (glVertexAttribIPointer), handed to the shaders unconverted. */
+#define QT_OGLES2_MAX_ATTRIBS 16
 #define QT_OGLES2_DRAW 0xA006
-#define QT_OGLES2_DRAW_WORDS (7 + 7 * QT_OGLES2_MAX_ATTRIBS)
+#define QT_OGLES2_DRAW_WORDS (8 + 8 * QT_OGLES2_MAX_ATTRIBS)
 
 /*
  * Shaders, programs and uniforms: real OpenGL 2.0 core entries (gl3.h, the
@@ -95,7 +99,10 @@ enum {
  * (index ignored, result their return value). */
 #define QT_OGLES2_NAME 0xA011
 #define QT_OGLES2_NAME_WORDS 5
-enum { QT_OGLES2_N_BindAttribLocation, QT_OGLES2_N_GetAttribLocation, QT_OGLES2_N_GetUniformLocation };
+enum {
+	QT_OGLES2_N_BindAttribLocation, QT_OGLES2_N_GetAttribLocation, QT_OGLES2_N_GetUniformLocation,
+	QT_OGLES2_N_GetUniformBlockIndex, QT_OGLES2_N_GetFragDataLocation
+};
 
 /* location, v0..v3 (int or float bit patterns, by subop): glUniform1f..4f,
  * 1i..4i. */
@@ -105,6 +112,8 @@ enum {
 	QT_OGLES2_U_1F, QT_OGLES2_U_2F, QT_OGLES2_U_3F, QT_OGLES2_U_4F,
 	QT_OGLES2_U_1I, QT_OGLES2_U_2I, QT_OGLES2_U_3I, QT_OGLES2_U_4I
 };
+/* glUniform{1,2,3,4}ui (ogles3.library): after QT_OGLES2_UNIFORM_V's
+ * matrix subops below, so the vector forms can share them. */
 
 /* glGetShaderiv/glGetProgramiv: id, pname, address of one GLint (swapped
  * explicitly, unlike the generic command buffer's raw pointer forwarding). */
@@ -134,15 +143,18 @@ enum { QT_OGLES2_G_Shader, QT_OGLES2_G_Program };
 #define QT_OGLES2_GEN_WORDS 4
 #define QT_OGLES2_DELETE 0xA016
 #define QT_OGLES2_DELETE_WORDS 4
-enum { QT_OGLES2_K_Texture, QT_OGLES2_K_Framebuffer, QT_OGLES2_K_Renderbuffer };
+enum {
+	QT_OGLES2_K_Texture, QT_OGLES2_K_Framebuffer, QT_OGLES2_K_Renderbuffer, QT_OGLES2_K_Sampler, QT_OGLES2_K_Query,
+	QT_OGLES2_K_TransformFeedback
+};
 
 /* glBindTexture, glActiveTexture, glGenerateMipmap, glTexParameteri,
  * glBindFramebuffer, glBindRenderbuffer, glFramebufferTexture2D,
  * glFramebufferRenderbuffer, glCheckFramebufferStatus (result: its return
- * value): subop, w0..w4 (an enum/int/uint as given; unused trailing words
- * ignored). */
+ * value): subop, w0..w9 (an enum/int/uint as given; unused trailing words
+ * ignored; ten since protocol 12, for glBlitFramebuffer). */
 #define QT_OGLES2_CALL 0xA017
-#define QT_OGLES2_CALL_WORDS 7
+#define QT_OGLES2_CALL_WORDS 12
 enum {
 	QT_OGLES2_C_BindTexture, QT_OGLES2_C_ActiveTexture, QT_OGLES2_C_GenerateMipmap, QT_OGLES2_C_TexParameteri,
 	QT_OGLES2_C_BindFramebuffer, QT_OGLES2_C_BindRenderbuffer, QT_OGLES2_C_FramebufferTexture2D,
@@ -191,8 +203,14 @@ enum {
  * location, count, address of count vectors or matrices of big-endian
  * floats or ints. */
 #define QT_OGLES2_UNIFORM_V 0xA01A
-#define QT_OGLES2_UNIFORM_V_WORDS 5
-enum { QT_OGLES2_U_M2 = QT_OGLES2_U_4I + 1, QT_OGLES2_U_M3, QT_OGLES2_U_M4 };
+#define QT_OGLES2_UNIFORM_V_WORDS 6
+enum {
+	QT_OGLES2_U_M2 = QT_OGLES2_U_4I + 1, QT_OGLES2_U_M3, QT_OGLES2_U_M4,
+	/* OpenGL ES 3.0 (since protocol 12, with transpose as the last word,
+	 * which ES 3.0 allows for every matrix): */
+	QT_OGLES2_U_1UI, QT_OGLES2_U_2UI, QT_OGLES2_U_3UI, QT_OGLES2_U_4UI,
+	QT_OGLES2_U_M2x3, QT_OGLES2_U_M3x2, QT_OGLES2_U_M2x4, QT_OGLES2_U_M4x2, QT_OGLES2_U_M3x4, QT_OGLES2_U_M4x3
+};
 
 /* glBufferSubData: buffer name, offset, size, address of size bytes, kept
  * big-endian as glBufferData's are. QT_OGLES2_READ_BUFFER is the reverse,
@@ -222,7 +240,14 @@ enum { QT_OGLES2_GET_Integer, QT_OGLES2_GET_Float, QT_OGLES2_GET_Boolean };
 enum {
 	QT_OGLES2_P_TexParameteriv, QT_OGLES2_P_TexParameterfv, QT_OGLES2_P_RenderbufferParameteriv,
 	QT_OGLES2_P_FramebufferAttachmentParameteriv, QT_OGLES2_P_BufferParameteriv, QT_OGLES2_P_Uniformfv,
-	QT_OGLES2_P_Uniformiv
+	QT_OGLES2_P_Uniformiv,
+	/* OpenGL ES 3.0: glGetQueryiv (target, pname), glGetQueryObjectuiv (id,
+	 * pname), glGetSamplerParameter{i,f}v (sampler, pname), glGetActive-
+	 * UniformBlockiv (program, index, pname; GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_
+	 * INDICES gives as many as the block has), glGetIntegeri_v (target,
+	 * index: the buffer bindings are the fake buffers' names). */
+	QT_OGLES2_P_Queryiv, QT_OGLES2_P_QueryObjectuiv, QT_OGLES2_P_SamplerParameteriv, QT_OGLES2_P_SamplerParameterfv,
+	QT_OGLES2_P_ActiveUniformBlockiv, QT_OGLES2_P_Integeri_v
 };
 
 /* glGetActiveAttrib/glGetActiveUniform: subop, program, index, bufSize,
@@ -230,7 +255,7 @@ enum {
  * wanted) and of bufSize bytes for the name. */
 #define QT_OGLES2_GET_ACTIVE 0xA01F
 #define QT_OGLES2_GET_ACTIVE_WORDS 9
-enum { QT_OGLES2_A_Attrib, QT_OGLES2_A_Uniform };
+enum { QT_OGLES2_A_Attrib, QT_OGLES2_A_Uniform, QT_OGLES2_A_TransformFeedbackVarying, QT_OGLES2_A_UniformBlockName };
 
 /* glGetAttachedShaders: program, maxCount, address of the count (0 if not
  * wanted), address of maxCount GLuints. */
@@ -257,5 +282,124 @@ enum { QT_OGLES2_G_ShaderSource = QT_OGLES2_G_Program + 1 };
 /* glDrawBuffersEXT: n, address of n big-endian GLenums. */
 #define QT_OGLES2_DRAW_BUFFERS 0xA023
 #define QT_OGLES2_DRAW_BUFFERS_WORDS 3
+
+/*
+ * OpenGL ES 3.0 (ogles3.library, docs/phase10-ogles3.md, protocol 12).
+ * Vertex array objects are 68k-side state, as the attributes are; samplers
+ * and queries are real host objects (QT_OGLES2_GEN's kinds).
+ */
+enum {
+	QT_OGLES2_C_UniformBlockBinding = QT_OGLES2_C_ProvokingVertex + 1, QT_OGLES2_C_BindSampler,
+	QT_OGLES2_C_SamplerParameteri, QT_OGLES2_C_SamplerParameterf, QT_OGLES2_C_IsSampler,
+	QT_OGLES2_C_TexStorage2D, QT_OGLES2_C_TexStorage3D, QT_OGLES2_C_FramebufferTextureLayer,
+	QT_OGLES2_C_RenderbufferStorageMultisample, QT_OGLES2_C_BlitFramebuffer, QT_OGLES2_C_VertexAttribI4i,
+	QT_OGLES2_C_VertexAttribI4ui, QT_OGLES2_C_CopyTexSubImage3D,
+	/* Queries and transform feedback: glBeginTransformFeedback binds the
+	 * host's capture buffers for the buffers bound (QT_OGLES2_BIND_BUFFER_
+	 * RANGE with GL_TRANSFORM_FEEDBACK_BUFFER), glEndTransformFeedback
+	 * copies what was captured back into them, every 32-bit word swapped. */
+	QT_OGLES2_C_BeginQuery, QT_OGLES2_C_EndQuery, QT_OGLES2_C_IsQuery, QT_OGLES2_C_BeginTransformFeedback,
+	QT_OGLES2_C_EndTransformFeedback, QT_OGLES2_C_PauseTransformFeedback, QT_OGLES2_C_ResumeTransformFeedback,
+	QT_OGLES2_C_BindTransformFeedback, QT_OGLES2_C_IsTransformFeedback,
+	/* OpenGL ES 3.1 (stage 3): storage and atomic counter buffers are bound
+	 * as uniform buffers are (QT_OGLES2_BIND_BUFFER_RANGE); what a dispatch
+	 * or draw may have written into them is read back into the fake
+	 * buffers when something else reads those. */
+	QT_OGLES2_C_DispatchCompute, QT_OGLES2_C_MemoryBarrier, QT_OGLES2_C_BindImageTexture,
+	QT_OGLES2_C_Has43, /* whether the host's core contexts are OpenGL 4.3 (ES 3.1 contexts) */
+	/* The rest of OpenGL ES 3.1 (stage 3b): program pipelines are real host
+	 * objects (QT_OGLES2_K_ProgramPipeline); glProgramParameteri passes
+	 * GL_PROGRAM_SEPARABLE on (glCreateShaderProgramv is made of it on the
+	 * 68k side). glTexStorage2DMultisample: target, samples, internal-
+	 * format, width, height, fixedsamplelocations. */
+	QT_OGLES2_C_ProgramParameteri, QT_OGLES2_C_BindProgramPipeline, QT_OGLES2_C_UseProgramStages,
+	QT_OGLES2_C_ActiveShaderProgram, QT_OGLES2_C_ValidateProgramPipeline, QT_OGLES2_C_IsProgramPipeline,
+	QT_OGLES2_C_TexStorage2DMultisample, QT_OGLES2_C_SampleMaski, QT_OGLES2_C_FramebufferParameteri,
+	/* glClipControlEXT: origin, depth; returns 1 if the host has
+	 * glClipControl (OpenGL 4.5), 0 if not (nothing changed). */
+	QT_OGLES2_C_ClipControl
+};
+enum { QT_OGLES2_K_ProgramPipeline = QT_OGLES2_K_TransformFeedback + 1 };
+/* glGetProgramPipelineInfoLog: QT_OGLES2_GET_LOG with this subop. */
+enum { QT_OGLES2_G_ProgramPipeline = QT_OGLES2_G_ShaderSource + 1 };
+/* QT_OGLES2_GET_PARAM (ES 3.1): glGetProgramPipelineiv (pipeline, pname),
+ * glGetMultisamplefv (pname, index; two floats), glGetTexLevelParameter
+ * {i,f}v (target, level, pname), glGetFramebufferParameteriv (target,
+ * pname). */
+enum {
+	QT_OGLES2_P_ProgramPipelineiv = QT_OGLES2_P_Integeri_v + 1, QT_OGLES2_P_Multisamplefv, QT_OGLES2_P_TexLevelParameteriv,
+	QT_OGLES2_P_TexLevelParameterfv, QT_OGLES2_P_FramebufferParameteriv
+};
+
+/* glTexImage3D: target, level, internalformat, width, height, depth,
+ * border, format, type, address of the pixel data (0: NULL). Pixel types as
+ * QT_OGLES2_TEX_SUB_IMAGE_2D's, and ES 3.0's: GL_HALF_FLOAT, GL_FLOAT,
+ * GL_(UNSIGNED_)BYTE/SHORT/INT, the packed 32-bit ones. */
+#define QT_OGLES2_TEX_IMAGE_3D 0xA024
+#define QT_OGLES2_TEX_IMAGE_3D_WORDS 11
+/* glTexSubImage3D: target, level, xoffset, yoffset, zoffset, width, height,
+ * depth, format, type, address of the pixel data. */
+#define QT_OGLES2_TEX_SUB_IMAGE_3D 0xA025
+#define QT_OGLES2_TEX_SUB_IMAGE_3D_WORDS 12
+
+/* glClearBuffer{iv,uiv,fv}: subop, buffer, drawbuffer, address of the
+ * value(s), big-endian; glClearBufferfi: subop, buffer, drawbuffer, depth
+ * (a float word), stencil. */
+#define QT_OGLES2_CLEAR_BUFFER 0xA026
+#define QT_OGLES2_CLEAR_BUFFER_WORDS 6
+enum { QT_OGLES2_CB_iv, QT_OGLES2_CB_uiv, QT_OGLES2_CB_fv, QT_OGLES2_CB_fi };
+
+/* glBindBufferBase/glBindBufferRange for GL_UNIFORM_BUFFER: target, index,
+ * buffer name, offset, size (0: all of it). The host keeps a copy of the
+ * buffer with every 32-bit word swapped (all std140 data is 32-bit words)
+ * and binds that at each draw. */
+#define QT_OGLES2_BIND_BUFFER_RANGE 0xA027
+#define QT_OGLES2_BIND_BUFFER_RANGE_WORDS 6
+
+/* glCopyBufferSubData: read buffer name, write buffer name, read offset,
+ * write offset, size. */
+#define QT_OGLES2_COPY_BUFFER_SUB_DATA 0xA028
+#define QT_OGLES2_COPY_BUFFER_SUB_DATA_WORDS 6
+
+/* glTransformFeedbackVaryings: program, count, address of count big-endian
+ * addresses of NUL-terminated names, bufferMode. */
+#define QT_OGLES2_TRANSFORM_FEEDBACK_VARYINGS 0xA029
+#define QT_OGLES2_TRANSFORM_FEEDBACK_VARYINGS_WORDS 5
+/* glGetUniformIndices: program, count, address of the names' addresses (as
+ * above), address of count GLuints written. */
+#define QT_OGLES2_UNIFORM_INDICES 0xA02A
+#define QT_OGLES2_UNIFORM_INDICES_WORDS 5
+/* glGetActiveUniformsiv: program, count, address of count big-endian
+ * indices, pname, address of count GLints written. */
+#define QT_OGLES2_ACTIVE_UNIFORMS_IV 0xA02B
+#define QT_OGLES2_ACTIVE_UNIFORMS_IV_WORDS 6
+
+/* glProgramUniform* (OpenGL ES 3.1): QT_OGLES2_UNIFORM_V's subops and
+ * words with the program after the subop: subop, program, location, count,
+ * address of the values (the scalar forms too: their values are put in an
+ * array on the 68k), transpose. */
+#define QT_OGLES2_PROGRAM_UNIFORM_V 0xA02C
+#define QT_OGLES2_PROGRAM_UNIFORM_V_WORDS 7
+
+/* The program interface queries (OpenGL ES 3.1): subop, program,
+ * programInterface, index (R_Interfaceiv: pname), address (R_Index,
+ * R_Location: of the NUL-terminated name; R_iv: of propCount big-endian
+ * props), propCount, bufSize (R_Name: bytes, R_iv: GLints), address of the
+ * length written (0: not wanted), address of the output (R_Interfaceiv:
+ * one GLint; R_Name: the name; R_iv: the GLints). R_Index and R_Location
+ * return their value. */
+#define QT_OGLES2_PROGRAM_RESOURCE 0xA02D
+#define QT_OGLES2_PROGRAM_RESOURCE_WORDS 10
+enum { QT_OGLES2_R_Interfaceiv, QT_OGLES2_R_Index, QT_OGLES2_R_Location, QT_OGLES2_R_Name, QT_OGLES2_R_iv };
+
+/* glCompressedTex{,Sub}Image{2D,3D}: subop, target, level, internalformat
+ * (CT_Image*) or xoffset (CT_Sub*), yoffset, zoffset, width, height, depth,
+ * format (CT_Sub*), imageSize, address of the data. The blocks are byte
+ * streams and go to the host as they are. The formats offered are OpenGL ES
+ * 3.0's ETC2/EAC ones and ETC1 (GL_OES_compressed_ETC1_RGB8_texture, taken
+ * as ETC2 RGB8, of which it is a subset), with a 4.3 host only. */
+#define QT_OGLES2_COMPRESSED_TEX 0xA02E
+#define QT_OGLES2_COMPRESSED_TEX_WORDS 13
+enum { QT_OGLES2_CT_Image2D, QT_OGLES2_CT_Sub2D, QT_OGLES2_CT_Image3D, QT_OGLES2_CT_Sub3D };
 
 #endif

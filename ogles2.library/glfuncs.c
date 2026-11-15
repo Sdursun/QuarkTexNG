@@ -29,7 +29,17 @@ void ogles2_GLViewport(struct OGLES2Context *ctx, GLint x, GLint y, GLsizei widt
 }
 void ogles2_GLFlush(struct OGLES2Context *ctx) { _glFlush(); }
 void ogles2_GLFinish(struct OGLES2Context *ctx) { _glFinish(); }
-GLenum ogles2_GLGetError(struct OGLES2Context *ctx) { return _glGetError(); }
+GLenum ogles2_GLGetError(struct OGLES2Context *ctx) {
+	if (ctx && ctx->error) {
+		GLenum e = ctx->error;
+		ctx->error = 0;
+		return e;
+	}
+	return _glGetError();
+}
+void ogles2_error(struct OGLES2Context *ctx, GLenum error) {
+	if (ctx && !ctx->error) ctx->error = error;
+}
 void ogles2_GLEnable(struct OGLES2Context *ctx, GLenum cap) { _glEnable(cap); }
 void ogles2_GLDisable(struct OGLES2Context *ctx, GLenum cap) { _glDisable(cap); }
 GLboolean ogles2_GLIsEnabled(struct OGLES2Context *ctx, GLenum cap) { return _glIsEnabled(cap); }
@@ -47,9 +57,27 @@ void ogles2_GLScissor(struct OGLES2Context *ctx, GLint x, GLint y, GLsizei width
 }
 
 static const char vendor[] = "QuarkTex NG";
+#ifdef QT_OGLES3
+static const char renderer[] = QT_PRODUCT " ogles3.library (host OpenGL)";
+#else
 static const char renderer[] = QT_PRODUCT " ogles2.library (host OpenGL)";
-static const char version[] = "OpenGL ES 2.0";
+#endif
+/* As the PiStorm libraries: the OpenGL ES version, then the library's
+ * name and version.revision ("OpenGL ES 3.1 ogles3.library 1.0"; amiga/
+ * Makefile gives QT_LIB_VERSION and QT_LIB_REVISION). */
+#define QT_STR_(x) #x
+#define QT_STR(x) QT_STR_(x)
+#ifdef QT_OGLES3
+#define QT_LIBRARY_TEXT " ogles3.library " QT_STR(QT_LIB_VERSION) "." QT_STR(QT_LIB_REVISION)
+#else
+#define QT_LIBRARY_TEXT " ogles2.library " QT_STR(QT_LIB_VERSION) "." QT_STR(QT_LIB_REVISION)
+#endif
+static const char version[] = "OpenGL ES 2.0" QT_LIBRARY_TEXT;
 static const char shadingVersion[] = "OpenGL ES GLSL ES 1.00";
+static const char version3[] = "OpenGL ES 3.0" QT_LIBRARY_TEXT;
+static const char shadingVersion3[] = "OpenGL ES GLSL ES 3.00";
+static const char version31[] = "OpenGL ES 3.1" QT_LIBRARY_TEXT;
+static const char shadingVersion31[] = "OpenGL ES GLSL ES 3.10";
 /* Only what the host's OpenGL 3.3 core context really does as GLES2 would
  * (host/ogles2.cpp): non-power-of-two textures, 32-bit indices, depth
  * textures, the shaders' derivative functions (core in the GLSL 3.30 the
@@ -58,15 +86,25 @@ static const char shadingVersion[] = "OpenGL ES GLSL ES 1.00";
 static const char extensions[] = "GL_OES_texture_npot GL_OES_element_index_uint GL_OES_depth_texture "
 	"GL_OES_standard_derivatives GL_OES_depth24 "
 	"GL_OES_packed_depth_stencil GL_OES_rgb8_rgba8 GL_OES_mapbuffer GL_OES_draw_elements_base_vertex "
-	"GL_EXT_discard_framebuffer";
+	"GL_EXT_discard_framebuffer GL_OES_compressed_ETC1_RGB8_texture";
+/* OpenGL ES 3.0 contexts (ogles3.library) add what desktop OpenGL 3.3 has
+ * of the ES 3.0 extensions: float and half float colour buffers. */
+static const char extensions3[] = "GL_OES_texture_npot GL_OES_element_index_uint GL_OES_depth_texture "
+	"GL_OES_standard_derivatives GL_OES_depth24 "
+	"GL_OES_packed_depth_stencil GL_OES_rgb8_rgba8 GL_OES_mapbuffer GL_OES_draw_elements_base_vertex "
+	"GL_EXT_discard_framebuffer GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float "
+	"GL_OES_compressed_ETC1_RGB8_texture GL_EXT_draw_elements_base_vertex GL_EXT_multi_draw_arrays";
 
 const GLubyte *ogles2_GLGetString(struct OGLES2Context *ctx, GLenum name) {
 	switch (name) {
 	case GL_VENDOR: return (const GLubyte *) vendor;
 	case GL_RENDERER: return (const GLubyte *) renderer;
-	case GL_VERSION: return (const GLubyte *) version;
-	case GL_SHADING_LANGUAGE_VERSION: return (const GLubyte *) shadingVersion;
-	case GL_EXTENSIONS: return (const GLubyte *) extensions;
+	case GL_VERSION:
+		return (const GLubyte *) (ctx && ctx->esVersion >= 31 ? version31 : ctx && ctx->esVersion >= 30 ? version3 : version);
+	case GL_SHADING_LANGUAGE_VERSION:
+		return (const GLubyte *) (ctx && ctx->esVersion >= 31 ? shadingVersion31
+			: ctx && ctx->esVersion >= 30 ? shadingVersion3 : shadingVersion);
+	case GL_EXTENSIONS: return (const GLubyte *) (ctx && ctx->esVersion >= 30 ? extensions3 : extensions);
 	}
 	return (const GLubyte *) "";
 }
@@ -83,13 +121,24 @@ const GLubyte *ogles2_GLGetString(struct OGLES2Context *ctx, GLenum name) {
 /* The word for a float argument: on the 68k the wire format (big-endian) is
  * already its native one, so this only needs to alias the bits, as gl/gl.c's
  * own qt_f2l does (static there, so not usable here). */
-static ULONG floatWord(GLfloat f) {
+#define floatWord ogles2_floatWord
+#define simple ogles2_simple
+#define nameCall ogles2_nameCall
+#define uniform ogles2_uniform
+#define genObjects ogles2_genObjects
+#define deleteObjects ogles2_deleteObjects
+#define call ogles2_call
+#define bufferCopy ogles2_bufferCopy
+#define getParam ogles2_getParam
+#define boundBuffer ogles2_boundBuffer
+
+ULONG floatWord(GLfloat f) {
 	union { GLfloat f; ULONG l; } u;
 	u.f = f;
 	return u.l;
 }
 
-static LONG simple(ULONG subop, ULONG w0, ULONG w1) {
+LONG simple(ULONG subop, ULONG w0, ULONG w1) {
 	ULONG *w = qt_reserve(QT_OGLES2_SIMPLE_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_SIMPLE << 16) | QT_OGLES2_SIMPLE_WORDS;
 	w[1] = subop;
@@ -155,7 +204,7 @@ void ogles2_GLShaderSource(struct OGLES2Context *ctx, GLuint shader, GLsizei cou
 	if (joined) FreeVec(joined);
 }
 
-static LONG nameCall(ULONG subop, ULONG program, ULONG index, const char *text) {
+LONG nameCall(ULONG subop, ULONG program, ULONG index, const char *text) {
 	ULONG *w = qt_reserve(QT_OGLES2_NAME_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_NAME << 16) | QT_OGLES2_NAME_WORDS;
 	w[1] = subop;
@@ -175,7 +224,7 @@ GLint ogles2_GLGetUniformLocation(struct OGLES2Context *ctx, GLuint program, con
 	return (GLint) nameCall(QT_OGLES2_N_GetUniformLocation, program, 0, name);
 }
 
-static void uniform(ULONG subop, GLint location, ULONG w0, ULONG w1, ULONG w2, ULONG w3) {
+void uniform(ULONG subop, GLint location, ULONG w0, ULONG w1, ULONG w2, ULONG w3) {
 	ULONG *w = qt_reserve(QT_OGLES2_UNIFORM_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_UNIFORM << 16) | QT_OGLES2_UNIFORM_WORDS;
 	w[1] = subop;
@@ -228,7 +277,13 @@ void ogles2_GLGetShaderiv(struct OGLES2Context *ctx, GLuint shader, GLenum pname
 }
 
 void ogles2_GLGetProgramiv(struct OGLES2Context *ctx, GLuint program, GLenum pname, GLint *params) {
-	ULONG *w = qt_reserve(QT_OGLES2_GET_IV_WORDS);
+	ULONG *w;
+	/* GL_PROGRAM_BINARY_LENGTH: no binaries are offered (glGetProgramBinary). */
+	if (pname == 0x8741) {
+		if (params) *params = 0;
+		return;
+	}
+	w = qt_reserve(QT_OGLES2_GET_IV_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_GET_IV << 16) | QT_OGLES2_GET_IV_WORDS;
 	w[1] = QT_OGLES2_G_Program;
 	w[2] = program;
@@ -281,16 +336,34 @@ void ogles2_GLDeleteBuffers(struct OGLES2Context *ctx, GLsizei n, const GLuint *
  * several programs' bindings never meet there (docs/multitasking.md), and
  * glVertexAttribPointer/glDrawElements send the buffer name that was bound
  * at that call, as GLES2 itself requires. */
+/* The binding of target (OpenGL ES 3.0's targets as well), NULL for none. */
+static GLuint *binding(struct OGLES2Context *ctx, GLenum target) {
+	switch (target) {
+	case GL_ARRAY_BUFFER: return &ctx->arrayBuffer;
+	case GL_ELEMENT_ARRAY_BUFFER: return &ctx->elementArrayBuffer;
+	case 0x8A11: return &ctx->uniformBuffer;            /* GL_UNIFORM_BUFFER */
+	case 0x8F36: return &ctx->copyReadBuffer;           /* GL_COPY_READ_BUFFER */
+	case 0x8F37: return &ctx->copyWriteBuffer;          /* GL_COPY_WRITE_BUFFER */
+	case 0x88EB: return &ctx->pixelPackBuffer;          /* GL_PIXEL_PACK_BUFFER */
+	case 0x88EC: return &ctx->pixelUnpackBuffer;        /* GL_PIXEL_UNPACK_BUFFER */
+	case 0x8C8E: return &ctx->transformFeedbackBuffer;  /* GL_TRANSFORM_FEEDBACK_BUFFER */
+	case 0x90D2: return &ctx->shaderStorageBuffer;      /* GL_SHADER_STORAGE_BUFFER */
+	case 0x92C0: return &ctx->atomicCounterBuffer;      /* GL_ATOMIC_COUNTER_BUFFER */
+	case 0x90EE: return &ctx->dispatchIndirectBuffer;   /* GL_DISPATCH_INDIRECT_BUFFER */
+	case 0x8F3F: return &ctx->drawIndirectBuffer;       /* GL_DRAW_INDIRECT_BUFFER */
+	}
+	return NULL;
+}
+
 void ogles2_GLBindBuffer(struct OGLES2Context *ctx, GLenum target, GLuint buffer) {
-	if (!ctx) return;
-	if (target == GL_ARRAY_BUFFER) ctx->arrayBuffer = buffer;
-	else if (target == GL_ELEMENT_ARRAY_BUFFER) ctx->elementArrayBuffer = buffer;
+	GLuint *b;
+	if (ctx && (b = binding(ctx, target))) *b = buffer;
 }
 
 /* The buffer bound to target, 0 for none or another target. */
-static GLuint boundBuffer(struct OGLES2Context *ctx, GLenum target) {
-	if (!ctx) return 0;
-	return target == GL_ARRAY_BUFFER ? ctx->arrayBuffer : target == GL_ELEMENT_ARRAY_BUFFER ? ctx->elementArrayBuffer : 0;
+GLuint boundBuffer(struct OGLES2Context *ctx, GLenum target) {
+	GLuint *b;
+	return ctx && (b = binding(ctx, target)) ? *b : 0;
 }
 
 void ogles2_GLBufferData(struct OGLES2Context *ctx, GLenum target, GLsizeiptr size, const void *data, GLenum usage) {
@@ -309,17 +382,50 @@ void ogles2_GLBufferData(struct OGLES2Context *ctx, GLenum target, GLsizeiptr si
 /* glVertexAttribPointer, glEnable/DisableVertexAttribArray: 68k-side only
  * (gl/oglescmd.h); glDrawArrays/glDrawElements send the current state of
  * all QT_OGLES2_MAX_ATTRIBS of them with the draw. */
-void ogles2_GLVertexAttribPointer(struct OGLES2Context *ctx, GLuint index, GLint size, GLenum type, GLboolean normalized,
-		GLsizei stride, const void *pointer) {
+void ogles2_resetAttribs(QtOgles2Attrib *attribs) {
+	int i;
+	for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) attribs[i].binding = (GLuint) i;
+}
+
+void ogles2_bindingChanged(struct OGLES2Context *ctx, GLuint b) {
+	const QtOgles2Binding *binding = &ctx->bindings[b];
+	int i;
+	for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) {
+		QtOgles2Attrib *a = &ctx->attribs[i];
+		if (a->binding != b) continue;
+		a->bufferName = binding->buffer;
+		a->pointer = binding->offset + a->relativeOffset;
+		a->stride = binding->stride;
+		a->divisor = binding->divisor;
+	}
+}
+
+/* OpenGL ES 3.1's definition: the format with relative offset 0, the
+ * attribute reading binding index, and that binding the buffer bound to
+ * GL_ARRAY_BUFFER (or none: pointer is then an Amiga address) at pointer.
+ * Stride 0 stays 0, which the host reads as tightly packed. */
+void ogles2_vertexAttrib(struct OGLES2Context *ctx, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride,
+		const void *pointer, GLboolean integer) {
 	QtOgles2Attrib *a;
+	QtOgles2Binding *b;
 	if (!ctx || index >= QT_OGLES2_MAX_ATTRIBS) return;
 	a = &ctx->attribs[index];
 	a->size = size;
 	a->type = type;
 	a->normalized = normalized;
-	a->stride = stride;
-	a->bufferName = ctx->arrayBuffer;
-	a->pointer = (ULONG) pointer;
+	a->integer = integer;
+	a->relativeOffset = 0;
+	a->binding = index;
+	b = &ctx->bindings[index];
+	b->buffer = ctx->arrayBuffer;
+	b->offset = (ULONG) pointer;
+	b->stride = stride;
+	ogles2_bindingChanged(ctx, index);
+}
+
+void ogles2_GLVertexAttribPointer(struct OGLES2Context *ctx, GLuint index, GLint size, GLenum type, GLboolean normalized,
+		GLsizei stride, const void *pointer) {
+	ogles2_vertexAttrib(ctx, index, size, type, normalized, stride, pointer, GL_FALSE);
 }
 
 void ogles2_GLEnableVertexAttribArray(struct OGLES2Context *ctx, GLuint index) {
@@ -331,17 +437,21 @@ void ogles2_GLDisableVertexAttribArray(struct OGLES2Context *ctx, GLuint index) 
 }
 
 static ULONG *attribWords(ULONG *w, const QtOgles2Attrib *a) {
-	w[0] = a->enabled;
+	w[0] = (a->enabled ? 1 : 0) | (a->integer ? 2 : 0);
 	w[1] = (ULONG) a->size;
 	w[2] = a->type;
 	w[3] = a->normalized;
 	w[4] = (ULONG) a->stride;
 	w[5] = a->bufferName;
 	w[6] = a->pointer;
-	return w + 7;
+	w[7] = a->divisor;
+	return w + 8;
 }
 
-static void draw(struct OGLES2Context *ctx, GLenum mode, GLint first, GLsizei count, GLenum indexType, const void *indices) {
+/* instances: 0 for a draw that is not instanced (glDrawArraysInstanced and
+ * glDrawElementsInstanced give it, ogles3.library). */
+void ogles2_draw(struct OGLES2Context *ctx, GLenum mode, GLint first, GLsizei count, GLenum indexType, const void *indices,
+		GLsizei instances) {
 	ULONG *w;
 	int i;
 	if (!ctx) return;
@@ -353,17 +463,18 @@ static void draw(struct OGLES2Context *ctx, GLenum mode, GLint first, GLsizei co
 	w[4] = indexType;
 	w[5] = indexType ? ctx->elementArrayBuffer : 0;
 	w[6] = (ULONG) indices;
-	w += 7;
+	w[7] = (ULONG) instances;
+	w += 8;
 	for (i = 0; i < QT_OGLES2_MAX_ATTRIBS; ++i) w = attribWords(w, &ctx->attribs[i]);
 	qt_flush();
 }
 
 void ogles2_GLDrawArrays(struct OGLES2Context *ctx, GLenum mode, GLint first, GLsizei count) {
-	draw(ctx, mode, first, count, 0, 0);
+	ogles2_draw(ctx, mode, first, count, 0, 0, 0);
 }
 
 void ogles2_GLDrawElements(struct OGLES2Context *ctx, GLenum mode, GLsizei count, GLenum type, const void *indices) {
-	draw(ctx, mode, 0, count, type, indices);
+	ogles2_draw(ctx, mode, 0, count, type, indices, 0);
 }
 
 /*
@@ -374,7 +485,7 @@ void ogles2_GLDrawElements(struct OGLES2Context *ctx, GLenum mode, GLsizei count
  * ones) and QT_OGLES2_CALL (the scalar entries, by subop).
  */
 
-static void genObjects(ULONG kind, GLsizei n, GLuint *names) {
+void genObjects(ULONG kind, GLsizei n, GLuint *names) {
 	ULONG *w = qt_reserve(QT_OGLES2_GEN_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_GEN << 16) | QT_OGLES2_GEN_WORDS;
 	w[1] = kind;
@@ -383,7 +494,7 @@ static void genObjects(ULONG kind, GLsizei n, GLuint *names) {
 	qt_flush();
 }
 
-static void deleteObjects(ULONG kind, GLsizei n, const GLuint *names) {
+void deleteObjects(ULONG kind, GLsizei n, const GLuint *names) {
 	ULONG *w = qt_reserve(QT_OGLES2_DELETE_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_DELETE << 16) | QT_OGLES2_DELETE_WORDS;
 	w[1] = kind;
@@ -409,16 +520,24 @@ void ogles2_GLDeleteRenderbuffers(struct OGLES2Context *ctx, GLsizei n, const GL
 	deleteObjects(QT_OGLES2_K_Renderbuffer, n, renderbuffers);
 }
 
-static LONG call(ULONG subop, ULONG w0, ULONG w1, ULONG w2, ULONG w3, ULONG w4) {
+/* QT_OGLES2_CALL with up to ten argument words (words[0..9]). */
+LONG ogles2_call10(ULONG subop, const ULONG *words) {
 	ULONG *w = qt_reserve(QT_OGLES2_CALL_WORDS);
+	int i;
 	w[0] = ((ULONG) QT_OGLES2_CALL << 16) | QT_OGLES2_CALL_WORDS;
 	w[1] = subop;
-	w[2] = w0;
-	w[3] = w1;
-	w[4] = w2;
-	w[5] = w3;
-	w[6] = w4;
+	for (i = 0; i < 10; ++i) w[2 + i] = words[i];
 	return (LONG) qt_flush();
+}
+
+LONG call(ULONG subop, ULONG w0, ULONG w1, ULONG w2, ULONG w3, ULONG w4) {
+	ULONG words[10] = {0};
+	words[0] = w0;
+	words[1] = w1;
+	words[2] = w2;
+	words[3] = w3;
+	words[4] = w4;
+	return ogles2_call10(subop, words);
 }
 
 void ogles2_GLBindTexture(struct OGLES2Context *ctx, GLenum target, GLuint texture) {
@@ -470,7 +589,8 @@ void ogles2_GLTexImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, 
 void ogles2_GLUniformMatrix4fv(struct OGLES2Context *ctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
 	ULONG *w;
 	if (transpose) {
-		ogles2_missing("GLUniformMatrix4fv (transpose)");
+		/* GL_INVALID_VALUE in GLES2; OpenGL ES 3.0 allows it. */
+		if (ctx && ctx->esVersion >= 30) ogles2_uniformV(QT_OGLES2_U_M4, location, count, value, GL_TRUE);
 		return;
 	}
 	w = qt_reserve(QT_OGLES2_UNIFORM_MATRIX4FV_WORDS);
@@ -614,6 +734,8 @@ static int vertexAttribValue(struct OGLES2Context *ctx, GLuint index, GLenum pna
 	case GL_VERTEX_ATTRIB_ARRAY_TYPE: *value = a->type ? a->type : GL_FLOAT; return 1;
 	case GL_VERTEX_ATTRIB_ARRAY_NORMALIZED: *value = a->normalized; return 1;
 	case GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING: *value = a->bufferName; return 1;
+	case 0x82D4: *value = (GLint) a->binding; return 1;        /* GL_VERTEX_ATTRIB_BINDING (ES 3.1) */
+	case 0x82D5: *value = (GLint) a->relativeOffset; return 1; /* GL_VERTEX_ATTRIB_RELATIVE_OFFSET */
 	}
 	return 0;
 }
@@ -645,15 +767,18 @@ void ogles2_GLGetVertexAttribPointerv(struct OGLES2Context *ctx, GLuint index, G
 	}
 }
 
-static void uniformV(ULONG subop, GLint location, GLsizei count, const void *value) {
+void ogles2_uniformV(ULONG subop, GLint location, GLsizei count, const void *value, GLboolean transpose) {
 	ULONG *w = qt_reserve(QT_OGLES2_UNIFORM_V_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_UNIFORM_V << 16) | QT_OGLES2_UNIFORM_V_WORDS;
 	w[1] = subop;
 	w[2] = (ULONG) location;
 	w[3] = (ULONG) count;
 	w[4] = (ULONG) value;
+	w[5] = transpose ? 1 : 0;
 	qt_flush();
 }
+
+#define uniformV(subop, location, count, value) ogles2_uniformV(subop, location, count, value, GL_FALSE)
 
 void ogles2_GLUniform1fv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLfloat *value) {
 	uniformV(QT_OGLES2_U_1F, location, count, value);
@@ -679,15 +804,16 @@ void ogles2_GLUniform3iv(struct OGLES2Context *ctx, GLint location, GLsizei coun
 void ogles2_GLUniform4iv(struct OGLES2Context *ctx, GLint location, GLsizei count, const GLint *value) {
 	uniformV(QT_OGLES2_U_4I, location, count, value);
 }
-/* transpose must be GL_FALSE in GLES2 (GL_INVALID_VALUE otherwise). */
+/* transpose must be GL_FALSE in GLES2 (GL_INVALID_VALUE otherwise); OpenGL
+ * ES 3.0 allows it. */
 void ogles2_GLUniformMatrix2fv(struct OGLES2Context *ctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
-	if (!transpose) uniformV(QT_OGLES2_U_M2, location, count, value);
+	if (!transpose || (ctx && ctx->esVersion >= 30)) ogles2_uniformV(QT_OGLES2_U_M2, location, count, value, transpose);
 }
 void ogles2_GLUniformMatrix3fv(struct OGLES2Context *ctx, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
-	if (!transpose) uniformV(QT_OGLES2_U_M3, location, count, value);
+	if (!transpose || (ctx && ctx->esVersion >= 30)) ogles2_uniformV(QT_OGLES2_U_M3, location, count, value, transpose);
 }
 
-static void bufferCopy(ULONG opcode, GLuint buffer, ULONG offset, ULONG size, const void *data) {
+void bufferCopy(ULONG opcode, GLuint buffer, ULONG offset, ULONG size, const void *data) {
 	ULONG *w;
 	if (!buffer) return;
 	w = qt_reserve(QT_OGLES2_BUFFER_SUB_DATA_WORDS);
@@ -703,7 +829,7 @@ void ogles2_GLBufferSubData(struct OGLES2Context *ctx, GLenum target, GLintptr o
 	bufferCopy(QT_OGLES2_BUFFER_SUB_DATA, boundBuffer(ctx, target), (ULONG) offset, (ULONG) size, data);
 }
 
-static void getParam(ULONG subop, ULONG w0, ULONG w1, ULONG w2, void *out) {
+void getParam(ULONG subop, ULONG w0, ULONG w1, ULONG w2, void *out) {
 	ULONG *w = qt_reserve(QT_OGLES2_GET_PARAM_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_GET_PARAM << 16) | QT_OGLES2_GET_PARAM_WORDS;
 	w[1] = subop;
@@ -793,6 +919,37 @@ static int localValue(struct OGLES2Context *ctx, GLenum pname, GLint *value) {
 	case GL_ELEMENT_ARRAY_BUFFER_BINDING: *value = ctx ? ctx->elementArrayBuffer : 0; return 1;
 	case GL_MAX_VERTEX_ATTRIBS: *value = QT_OGLES2_MAX_ATTRIBS; return 1;
 	}
+	if (!ctx || ctx->esVersion < 30) return 0;
+#ifdef QT_OGLES3
+	{
+		int ogles2_debugValue(struct OGLES2Context *ctx, GLenum pname, GLint *value); /* es3more.c */
+		int ogles2_extensionCount(struct OGLES2Context *ctx); /* es3.c */
+		if (ogles2_debugValue(ctx, pname, value)) return 1;
+		/* GL_NUM_EXTENSIONS: the length of glGetStringi's list, not the host's count. */
+		if (pname == 0x821D) { *value = ogles2_extensionCount(ctx); return 1; }
+	}
+#endif
+	/* OpenGL ES 3.x: its version, not the host's, and the buffers bound to
+	 * the generic targets (fake names, 68k-side). */
+	switch (pname) {
+	case 0x821B: *value = 3; return 1;                               /* GL_MAJOR_VERSION */
+	case 0x821C: *value = ctx->esVersion == 31 ? 1 : 0; return 1;    /* GL_MINOR_VERSION */
+	case 0x8A28: *value = ctx->uniformBuffer; return 1;              /* GL_UNIFORM_BUFFER_BINDING */
+	case 0x8F36: *value = ctx->copyReadBuffer; return 1;             /* GL_COPY_READ_BUFFER_BINDING */
+	case 0x8F37: *value = ctx->copyWriteBuffer; return 1;            /* GL_COPY_WRITE_BUFFER_BINDING */
+	case 0x88ED: *value = ctx->pixelPackBuffer; return 1;            /* GL_PIXEL_PACK_BUFFER_BINDING */
+	case 0x88EF: *value = ctx->pixelUnpackBuffer; return 1;          /* GL_PIXEL_UNPACK_BUFFER_BINDING */
+	case 0x8C8F: *value = ctx->transformFeedbackBuffer; return 1;    /* GL_TRANSFORM_FEEDBACK_BUFFER_BINDING */
+	}
+	if (ctx->esVersion < 31) return 0;
+	switch (pname) {
+	case 0x82DA: *value = QT_OGLES2_MAX_ATTRIBS; return 1;           /* GL_MAX_VERTEX_ATTRIB_BINDINGS */
+	case 0x82E5: *value = 2048; return 1;                            /* GL_MAX_VERTEX_ATTRIB_STRIDE (OpenGL 4.4's on the host) */
+	case 0x90D3: *value = ctx->shaderStorageBuffer; return 1;        /* GL_SHADER_STORAGE_BUFFER_BINDING */
+	case 0x92C1: *value = ctx->atomicCounterBuffer; return 1;        /* GL_ATOMIC_COUNTER_BUFFER_BINDING */
+	case 0x90EF: *value = ctx->dispatchIndirectBuffer; return 1;     /* GL_DISPATCH_INDIRECT_BUFFER_BINDING */
+	case 0x8F43: *value = ctx->drawIndirectBuffer; return 1;         /* GL_DRAW_INDIRECT_BUFFER_BINDING */
+	}
 	return 0;
 }
 
@@ -821,7 +978,7 @@ void ogles2_GLGetBooleanv(struct OGLES2Context *ctx, GLenum pname, GLboolean *da
 	else get(QT_OGLES2_GET_Boolean, pname, data);
 }
 
-static void getActive(ULONG subop, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type,
+void ogles2_getActive(ULONG subop, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type,
 		GLchar *name) {
 	ULONG *w = qt_reserve(QT_OGLES2_GET_ACTIVE_WORDS);
 	w[0] = ((ULONG) QT_OGLES2_GET_ACTIVE << 16) | QT_OGLES2_GET_ACTIVE_WORDS;
@@ -838,11 +995,11 @@ static void getActive(ULONG subop, GLuint program, GLuint index, GLsizei bufSize
 
 void ogles2_GLGetActiveAttrib(struct OGLES2Context *ctx, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size,
 		GLenum *type, GLchar *name) {
-	getActive(QT_OGLES2_A_Attrib, program, index, bufSize, length, size, type, name);
+	ogles2_getActive(QT_OGLES2_A_Attrib, program, index, bufSize, length, size, type, name);
 }
 void ogles2_GLGetActiveUniform(struct OGLES2Context *ctx, GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size,
 		GLenum *type, GLchar *name) {
-	getActive(QT_OGLES2_A_Uniform, program, index, bufSize, length, size, type, name);
+	ogles2_getActive(QT_OGLES2_A_Uniform, program, index, bufSize, length, size, type, name);
 }
 
 void ogles2_GLGetAttachedShaders(struct OGLES2Context *ctx, GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) {
@@ -900,13 +1057,67 @@ void ogles2_GLDrawBuffersEXT(struct OGLES2Context *ctx, GLsizei n, const GLenum 
 /* start/end are only a hint. */
 void ogles2_GLDrawRangeElements(struct OGLES2Context *ctx, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type,
 		const void *indices) {
-	draw(ctx, mode, 0, count, type, indices);
+	ogles2_draw(ctx, mode, 0, count, type, indices, 0);
 }
 
 /* QT_OGLES2_DRAW's first is the base vertex of an indexed draw. */
 void ogles2_GLDrawElementsBaseVertexOES(struct OGLES2Context *ctx, GLenum mode, GLsizei count, GLenum type, const void *indices,
 		GLint basevertex) {
-	draw(ctx, mode, basevertex, count, type, indices);
+	ogles2_draw(ctx, mode, basevertex, count, type, indices, 0);
+}
+
+/*
+ * Compressed textures (gl/oglescmd.h, QT_OGLES2_COMPRESSED_TEX): ETC1, and
+ * OpenGL ES 3.0's ETC2/EAC formats, passed to the host as they are.
+ */
+void ogles2_compressedTex(ULONG subop, GLenum target, GLint level, ULONG xOrFormat, GLint y, GLint z, GLsizei width,
+		GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void *data) {
+	ULONG *w = qt_reserve(QT_OGLES2_COMPRESSED_TEX_WORDS);
+	w[0] = ((ULONG) QT_OGLES2_COMPRESSED_TEX << 16) | QT_OGLES2_COMPRESSED_TEX_WORDS;
+	w[1] = subop;
+	w[2] = target;
+	w[3] = (ULONG) level;
+	w[4] = xOrFormat;
+	w[5] = (ULONG) y;
+	w[6] = (ULONG) z;
+	w[7] = (ULONG) width;
+	w[8] = (ULONG) height;
+	w[9] = (ULONG) depth;
+	w[10] = format;
+	w[11] = (ULONG) imageSize;
+	w[12] = (ULONG) data;
+	qt_flush();
+}
+void ogles2_GLCompressedTexImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, GLenum internalformat, GLsizei width,
+		GLsizei height, GLint border, GLsizei imageSize, const void *data) {
+	if (border) { ogles2_error(ctx, GL_INVALID_VALUE); return; }
+	ogles2_compressedTex(QT_OGLES2_CT_Image2D, target, level, internalformat, 0, 0, width, height, 1, 0, imageSize, data);
+}
+void ogles2_GLCompressedTexSubImage2D(struct OGLES2Context *ctx, GLenum target, GLint level, GLint xoffset, GLint yoffset,
+		GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void *data) {
+	ogles2_compressedTex(QT_OGLES2_CT_Sub2D, target, level, (ULONG) xoffset, yoffset, 0, width, height, 1, format, imageSize, data);
+}
+
+/* No shader or program binary formats are offered (GL_NUM_*_BINARY_FORMATS
+ * are 0): a binary of any format is refused, and a program has none to give
+ * (GL_PROGRAM_BINARY_LENGTH 0), so programs compile their sources. */
+void ogles2_GLShaderBinary(struct OGLES2Context *ctx, GLsizei count, const GLuint *shaders, GLenum binaryFormat,
+		const void *binary, GLsizei length) {
+	ogles2_error(ctx, GL_INVALID_ENUM);
+}
+void ogles2_GLGetProgramBinaryOES(struct OGLES2Context *ctx, GLuint program, GLsizei bufSize, GLsizei *length,
+		GLenum *binaryFormat, void *binary) {
+	if (length) *length = 0;
+	ogles2_error(ctx, GL_INVALID_OPERATION);
+}
+void ogles2_GLProgramBinaryOES(struct OGLES2Context *ctx, GLuint program, GLenum binaryFormat, const void *binary, GLint length) {
+	ogles2_error(ctx, GL_INVALID_ENUM);
+}
+
+/* glClipControlEXT: the host's glClipControl (OpenGL 4.5), where it has one;
+ * GL_INVALID_OPERATION where not (the extension is not offered). */
+void ogles2_GLClipControlEXT(struct OGLES2Context *ctx, GLenum origin, GLenum depth) {
+	if (!ogles2_call(QT_OGLES2_C_ClipControl, origin, depth, 0, 0, 0)) ogles2_error(ctx, GL_INVALID_OPERATION);
 }
 
 /* lib.c: an entry the library does not implement yet. */

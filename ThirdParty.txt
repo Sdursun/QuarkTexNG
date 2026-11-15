@@ -92,8 +92,8 @@ community; QuarkTex NG's source is in Source/. The SDK is not part of this
 release (see docs/phase7-minigl.md in Source/ for building).
 
 
-6. ogles2 SDK (not included)
-----------------------------
+6. ogles2 and ogles3 SDKs (not included)
+----------------------------------------
 
 ogles2.library is QuarkTex NG's own implementation of the interface of the
 PiStorm ogles2.library and its SDK by R-Typer and Ladislawv
@@ -102,6 +102,15 @@ the SDK's include files (include/libraries/), which are under the MIT
 License; its GLES2 and KHR headers are Khronos', MIT or Apache-2.0. None of
 the PiStorm library's code is in QuarkTex NG. The SDK is not part of this
 release (see docs/phase9-ogles2.md in Source/ for building).
+
+ogles3.library likewise implements the interface of the PiStorm
+ogles3.library and its SDK, also by R-Typer and Ladislawv
+(github.com/ladislawv/ogles3, release 1.0). Building it reads that SDK's
+include files (include/libraries/, include/clib/), which are under the MIT
+License, and its Khronos GLES2, GLES3 and KHR headers (MIT or Apache-2.0).
+None of the PiStorm library's code, which is under the Hyperion MiniGL
+Open Source License, is in QuarkTex NG. The SDK is not part of this
+release (see docs/phase10-ogles3.md in Source/ for building).
 
 
 7. Picasso96 and AmigaOS include files (not included)
