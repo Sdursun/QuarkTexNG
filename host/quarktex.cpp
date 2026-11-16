@@ -469,6 +469,7 @@ QT_EXPORT int32_t __cdecl qt_move_window(struct uni* uni) {
 	if (c->offscreen && (c->framebuffer.width != uni->d3 || c->framebuffer.height != uni->d4) && activate(c)) {
 		ffp::flush();
 		present::resize(c->framebuffer, uni->d3, uni->d4, uni_resolve);
+		qt_ogles2_msaa_present(); // framebuffer 0's multisampled stand-in at the new size
 	}
 	return 0;
 }
@@ -479,6 +480,7 @@ QT_EXPORT int32_t __cdecl qt_swap_buffers(struct uni* uni) {
 	Context* c = find(uni->d1);
 	if (!c || !activate(c)) return 0;
 	ffp::flush();
+	qt_ogles2_msaa_present();
 	if (!captureDir.empty() && c->swaps % captureEvery == 0) captureFrame(c);
 	++c->swaps;
 	LARGE_INTEGER before, after;

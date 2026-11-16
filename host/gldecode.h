@@ -89,6 +89,16 @@ bool qt_ogles2_decode(const Command& c, int32_t& result);
 // current, before it is deleted.
 void qt_ogles2_forget_context();
 
+// Multisampling (host/ogles2.cpp, "MSAA"): the current context's stand-in
+// resolved into the real framebuffer before its pixels are read (GL 1.1's
+// glReadPixels/glCopyTex(Sub)Image here), and before a frame is presented
+// (also following a new size of framebuffer 0). Nothing without a stand-in.
+void qt_ogles2_msaa_resolve();
+void qt_ogles2_msaa_present();
+// Before glClear (mask): a whole-picture clear brings back a stand-in a
+// blit into the real framebuffer had left behind.
+void qt_ogles2_msaa_clear(uint32_t mask);
+
 // A new core OpenGL context (an HGLRC), sharing the objects of with's (0:
 // none): host/ogles2.cpp keeps shader sources per group of contexts that
 // share objects.

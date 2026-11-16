@@ -479,6 +479,8 @@ namespace ogles2 {
 		GLuint own = qt_default_framebuffer();
 		return own && static_cast<GLuint>(name) == own ? 0 : name;
 	}
+	GLint realFramebuffer(GLint bound); // a multisampled stand-in's real framebuffer ("MSAA")
+
 	// Whether framebuffer 0 is bound to the target (GL_FRAMEBUFFER,
 	// GL_DRAW_FRAMEBUFFER or GL_READ_FRAMEBUFFER) of an offscreen context.
 	bool defaultBound(GLenum target) {
@@ -486,7 +488,7 @@ namespace ogles2 {
 		if (!own) return false;
 		GLint bound = 0;
 		QT_GL(GetIntegerv)(target == 0x8CA8 ? 0x8CAA : 0x8CA6, &bound); // READ_/DRAW_FRAMEBUFFER_BINDING
-		return static_cast<GLuint>(bound) == own;
+		return static_cast<GLuint>(realFramebuffer(bound)) == own;
 	}
 	// The default framebuffer's buffer names as attachments of the object.
 	GLenum defaultAttachment(GLenum attachment) {
@@ -744,10 +746,289 @@ namespace ogles2 {
 		// have written since: newer than their bytes (syncBack).
 		std::set<uint32_t> gpuWritten;
 		std::map<uint32_t, GLuint> captures; // a fake buffer's host buffer transform feedback writes into
-		PerGL() : elements(0), staging(0) { memset(stream, 0, sizeof(stream)); }
+		// Multisampling (QT_OGLES2_C_Msaa, see "MSAA" below): samples (0 =
+		// off), the multisampled stand-ins by the program's host framebuffer,
+		// and which of them is bound for drawing in place of drawReal.
+		struct Shadow {
+			GLuint fbo, color, depth;
+			GLint width, height;
+			GLenum colorFormat, depthFormat;
+			bool stale; // the real framebuffer was written past it (a blit): unused until a clear
+		};
+		int msaa;
+		std::map<GLuint, Shadow> shadows;
+		GLuint drawReal, drawShadow;
+		PerGL() : elements(0), staging(0), msaa(0), drawReal(0), drawShadow(0) { memset(stream, 0, sizeof(stream)); }
 	};
 	std::map<uintptr_t, PerGL> perGL;
 	std::vector<float> scratch;
+
+	// --- MSAA ----------------------------------------------------------------
+	//
+	// OpenGL ES 2.0 has no multisampled framebuffer objects, and a program
+	// that draws its scene into a texture (GZDoom) gets nothing from a
+	// multisampled default framebuffer. When the library asks for it
+	// (OGLES2_CCT_PISTORM_MSAA or ENV:OGLES2/MSAA), every framebuffer with a
+	// depth or stencil attachment -- the program's own objects and its
+	// framebuffer 0 alike -- is drawn into a multisampled stand-in of the same
+	// size instead, resolved into the real one (glBlitFramebuffer) when the
+	// program binds another framebuffer for drawing, reads pixels or copies
+	// from it, and before the frame is presented. Reads go to the real object
+	// (the read binding stays the program's); queries answer the program's
+	// names. Not covered: a texture of the framebuffer changed by something
+	// else than drawing into it while it stays bound (the stand-in keeps the
+	// older picture).
+
+	// Size and internal format of level 0 of the 2D textures, as glTexImage2D
+	// and glTexStorage2D made them, by (group, texture): a texture attached
+	// to a framebuffer is known by name only.
+	struct TextureSize { GLint width, height; GLenum format; };
+	std::map<std::pair<uintptr_t, GLuint>, TextureSize> textureSizes;
+
+	void recordTexture(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height) {
+		if (target != GL_TEXTURE_2D || level != 0) return;
+		GLint bound = 0;
+		QT_GL(GetIntegerv)(GL_TEXTURE_BINDING_2D, &bound);
+		if (!bound) return;
+		TextureSize size = {width, height, static_cast<GLenum>(internalformat)};
+		textureSizes[std::make_pair(currentGroup(), static_cast<GLuint>(bound))] = size;
+	}
+
+	// Unsized formats a multisampled renderbuffer cannot have, as sized ones.
+	GLenum sizedColor(GLenum format) {
+		switch (format) {
+		case GL_RGBA: case 0x80E1 /* GL_BGRA */: return 0x8058; // GL_RGBA8
+		case GL_RGB: return 0x8051;                              // GL_RGB8
+		case 0x8D62: return 0x8051;                              // GL_RGB565 -> GL_RGB8
+		}
+		return format;
+	}
+
+	// Whether the framebuffer bound for drawing (real) takes a stand-in: one
+	// colour attachment (a 2D texture's level 0 or a single-sampled
+	// renderbuffer) and a depth or stencil attachment. Gives its size and
+	// formats.
+	bool describe(GLint& width, GLint& height, GLenum& colorFormat, GLenum& depthFormat) {
+		const GLenum draw = 0x8CA9, color0 = 0x8CE0, color1 = 0x8CE1, depth = 0x8D00, stencil = 0x8D20;
+		const GLenum type = 0x8CD0, name = 0x8CD1, level = 0x8CD2, face = 0x8CD3;
+		GLint colorType = 0, colorName = 0, otherType = 0, depthType = 0, stencilType = 0;
+		QT_GL3(GetFramebufferAttachmentParameteriv)(draw, color0, type, &colorType);
+		QT_GL3(GetFramebufferAttachmentParameteriv)(draw, color1, type, &otherType);
+		QT_GL3(GetFramebufferAttachmentParameteriv)(draw, depth, type, &depthType);
+		QT_GL3(GetFramebufferAttachmentParameteriv)(draw, stencil, type, &stencilType);
+		if (!colorType || otherType || (!depthType && !stencilType)) return false;
+		QT_GL3(GetFramebufferAttachmentParameteriv)(draw, color0, name, &colorName);
+		if (colorType == 0x1702) { // GL_TEXTURE
+			GLint textureLevel = 0, textureFace = 0;
+			QT_GL3(GetFramebufferAttachmentParameteriv)(draw, color0, level, &textureLevel);
+			QT_GL3(GetFramebufferAttachmentParameteriv)(draw, color0, face, &textureFace);
+			if (textureLevel || textureFace) return false;
+			std::map<std::pair<uintptr_t, GLuint>, TextureSize>::const_iterator t =
+				textureSizes.find(std::make_pair(currentGroup(), static_cast<GLuint>(colorName)));
+			if (t == textureSizes.end()) return false;
+			width = t->second.width;
+			height = t->second.height;
+			colorFormat = sizedColor(t->second.format);
+		}
+		else if (colorType == 0x8D41) { // GL_RENDERBUFFER
+			GLint saved = 0, samples = 0, format = 0;
+			QT_GL(GetIntegerv)(0x8CA7, &saved); // GL_RENDERBUFFER_BINDING
+			QT_GL3(BindRenderbuffer)(0x8D41, static_cast<GLuint>(colorName));
+			QT_GL3(GetRenderbufferParameteriv)(0x8D41, 0x8D42, &width);   // WIDTH
+			QT_GL3(GetRenderbufferParameteriv)(0x8D41, 0x8D43, &height);  // HEIGHT
+			QT_GL3(GetRenderbufferParameteriv)(0x8D41, 0x8D44, &format);  // INTERNAL_FORMAT
+			QT_GL3(GetRenderbufferParameteriv)(0x8D41, 0x8CAB, &samples); // SAMPLES
+			QT_GL3(BindRenderbuffer)(0x8D41, static_cast<GLuint>(saved));
+			if (samples) return false;
+			colorFormat = sizedColor(static_cast<GLenum>(format));
+		}
+		else return false;
+		if (width <= 0 || height <= 0) return false;
+		GLint depthBits = 0, stencilBits = 0;
+		if (depthType) QT_GL3(GetFramebufferAttachmentParameteriv)(draw, depth, 0x8216, &depthBits);       // DEPTH_SIZE
+		if (stencilType) QT_GL3(GetFramebufferAttachmentParameteriv)(draw, stencil, 0x8217, &stencilBits); // STENCIL_SIZE
+		depthFormat = stencilBits ? 0x88F0 /* DEPTH24_STENCIL8 */ : depthBits > 24 ? 0x8CAC /* DEPTH_COMPONENT32F */
+			: 0x81A6 /* DEPTH_COMPONENT24 */;
+		return true;
+	}
+
+	void deleteShadow(PerGL::Shadow& s) {
+		if (s.fbo) QT_GL3(DeleteFramebuffers)(1, &s.fbo);
+		if (s.color) QT_GL3(DeleteRenderbuffers)(1, &s.color);
+		if (s.depth) QT_GL3(DeleteRenderbuffers)(1, &s.depth);
+		s.fbo = s.color = s.depth = 0;
+	}
+
+	// The stand-in's colour into the real framebuffer; the bindings stay.
+	void resolveShadow(PerGL& gl) {
+		if (!gl.drawShadow) return;
+		std::map<GLuint, PerGL::Shadow>::const_iterator s = gl.shadows.find(gl.drawReal);
+		if (s == gl.shadows.end()) return;
+		GLint read = 0;
+		QT_GL(GetIntegerv)(0x8CAA, &read); // READ_FRAMEBUFFER_BINDING
+		GLboolean scissor = QT_GL(IsEnabled)(GL_SCISSOR_TEST);
+		if (scissor) QT_GL(Disable)(GL_SCISSOR_TEST);
+		QT_GL3(BindFramebuffer)(0x8CA8, gl.drawShadow); // READ
+		QT_GL3(BindFramebuffer)(0x8CA9, gl.drawReal);   // DRAW
+		QT_GL3(BlitFramebuffer)(0, 0, s->second.width, s->second.height, 0, 0, s->second.width, s->second.height,
+			GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		QT_GL3(BindFramebuffer)(0x8CA9, gl.drawShadow);
+		QT_GL3(BindFramebuffer)(0x8CA8, static_cast<GLuint>(read));
+		if (scissor) QT_GL(Enable)(GL_SCISSOR_TEST);
+	}
+
+	// Leaves the stand-in: resolved, and the real framebuffer bound for drawing.
+	void leaveShadow(PerGL& gl, bool resolve) {
+		if (!gl.drawShadow) return;
+		if (resolve) resolveShadow(gl);
+		QT_GL3(BindFramebuffer)(0x8CA9, gl.drawReal);
+		gl.drawShadow = 0;
+	}
+
+	// With real bound for drawing: binds its stand-in instead, made or
+	// remade to its size, if it takes one (and holds its picture: not after
+	// a blit into the real one, until the next clear, see clearing()).
+	void enterShadow(PerGL& gl, GLuint real, bool clearing = false) {
+		if (gl.msaa < 2 || !real || gl.drawShadow) return;
+		GLint width = 0, height = 0;
+		GLenum colorFormat = 0, depthFormat = 0;
+		if (!describe(width, height, colorFormat, depthFormat)) return;
+		PerGL::Shadow& s = gl.shadows[real];
+		if (s.stale && !clearing) return;
+		s.stale = false;
+		if (!s.fbo || s.width != width || s.height != height || s.colorFormat != colorFormat || s.depthFormat != depthFormat) {
+			deleteShadow(s);
+			GLint savedRenderbuffer = 0;
+			QT_GL(GetIntegerv)(0x8CA7, &savedRenderbuffer);
+			QT_GL3(GenFramebuffers)(1, &s.fbo);
+			QT_GL3(GenRenderbuffers)(1, &s.color);
+			QT_GL3(GenRenderbuffers)(1, &s.depth);
+			QT_GL3(BindRenderbuffer)(0x8D41, s.color);
+			QT_GL3(RenderbufferStorageMultisample)(0x8D41, gl.msaa, colorFormat, width, height);
+			QT_GL3(BindRenderbuffer)(0x8D41, s.depth);
+			QT_GL3(RenderbufferStorageMultisample)(0x8D41, gl.msaa, depthFormat, width, height);
+			QT_GL3(BindRenderbuffer)(0x8D41, static_cast<GLuint>(savedRenderbuffer));
+			QT_GL3(BindFramebuffer)(0x8CA9, s.fbo);
+			QT_GL3(FramebufferRenderbuffer)(0x8CA9, 0x8CE0, 0x8D41, s.color);
+			QT_GL3(FramebufferRenderbuffer)(0x8CA9, depthFormat == 0x88F0 ? 0x821A /* DEPTH_STENCIL */ : 0x8D00, 0x8D41, s.depth);
+			bool complete = QT_GL3(CheckFramebufferStatus)(0x8CA9) == 0x8CD5;
+			QT_GL3(BindFramebuffer)(0x8CA9, real);
+			s.width = width;
+			s.height = height;
+			s.colorFormat = colorFormat;
+			s.depthFormat = depthFormat;
+			if (!complete) {
+				deleteShadow(s);
+				gl.shadows.erase(real);
+				return;
+			}
+		}
+		QT_GL3(BindFramebuffer)(0x8CA9, s.fbo);
+		gl.drawReal = real;
+		gl.drawShadow = s.fbo;
+	}
+
+	// glBindFramebuffer(target, host name) with the stand-ins.
+	void bindFramebuffer(GLenum target, GLuint name) {
+		PerGL& gl = perGL[currentGL()];
+		bool draw = target == 0x8D40 /* GL_FRAMEBUFFER */ || target == 0x8CA9;
+		if (draw) leaveShadow(gl, true);
+		QT_GL3(BindFramebuffer)(target, name);
+		if (draw) enterShadow(gl, name);
+	}
+
+	// A command about the framebuffer bound to target (attaching, status,
+	// attachment queries) goes to the real one while a stand-in is bound;
+	// reattach: what it bound may have changed whether and how it takes one.
+	template <typename F> void onReal(GLenum target, F f, bool reattach) {
+		PerGL& gl = perGL[currentGL()];
+		bool draw = target == 0x8D40 /* GL_FRAMEBUFFER */ || target == 0x8CA9;
+		if (!draw || !gl.drawShadow) {
+			f();
+			return;
+		}
+		GLuint real = gl.drawReal;
+		leaveShadow(gl, reattach);
+		f();
+		enterShadow(gl, real);
+	}
+
+	// Before the real framebuffers' pixels are read (glReadPixels,
+	// glCopyTex(Sub)Image, glBlitFramebuffer) or presented.
+	void resolveForRead() {
+		std::map<uintptr_t, PerGL>::iterator it = perGL.find(currentGL());
+		if (it != perGL.end() && it->second.drawShadow) resolveShadow(it->second);
+	}
+
+	// The program's glBlitFramebuffer: resolved first (it may read the
+	// framebuffer drawn into), then into the real framebuffers; the stand-in
+	// of the one written is behind it from then on (stale).
+	void blitFramebuffer(GLint x0, GLint y0, GLint x1, GLint y1, GLint dx0, GLint dy0, GLint dx1, GLint dy1, GLbitfield mask,
+			GLenum filter) {
+		PerGL& gl = perGL[currentGL()];
+		resolveForRead();
+		leaveShadow(gl, false);
+		QT_GL3(BlitFramebuffer)(x0, y0, x1, y1, dx0, dy0, dx1, dy1, mask, filter);
+		GLint draw = 0;
+		QT_GL(GetIntegerv)(0x8CA6, &draw);
+		std::map<GLuint, PerGL::Shadow>::iterator s = gl.shadows.find(static_cast<GLuint>(draw));
+		if (s != gl.shadows.end()) s->second.stale = true;
+	}
+
+	// Before a glClear: one of the whole colour buffer (no scissor) makes a
+	// stale stand-in usable again.
+	void clearing(GLbitfield mask) {
+		std::map<uintptr_t, PerGL>::iterator it = perGL.find(currentGL());
+		if (it == perGL.end() || it->second.msaa < 2 || it->second.drawShadow || !(mask & GL_COLOR_BUFFER_BIT)) return;
+		if (QT_GL(IsEnabled)(GL_SCISSOR_TEST)) return;
+		GLint draw = 0;
+		QT_GL(GetIntegerv)(0x8CA6, &draw);
+		std::map<GLuint, PerGL::Shadow>::const_iterator s = it->second.shadows.find(static_cast<GLuint>(draw));
+		if (s != it->second.shadows.end() && s->second.stale) enterShadow(it->second, static_cast<GLuint>(draw), true);
+	}
+
+	// QT_OGLES2_C_Msaa: samples (2 to the host's GL_MAX_SAMPLES; fewer is
+	// off); returns the samples used, 0 if none.
+	int32_t setMsaa(uint32_t samples) {
+		PerGL& gl = perGL[currentGL()];
+		GLint most = 0;
+		QT_GL(GetIntegerv)(0x8D57, &most); // GL_MAX_SAMPLES
+		if (samples > static_cast<uint32_t>(most)) samples = static_cast<uint32_t>(most);
+		GLint bound = 0;
+		QT_GL(GetIntegerv)(0x8CA6, &bound); // DRAW_FRAMEBUFFER_BINDING
+		GLuint real = gl.drawShadow ? gl.drawReal : static_cast<GLuint>(bound);
+		leaveShadow(gl, true);
+		gl.msaa = samples >= 2 ? static_cast<int>(samples) : 0;
+		enterShadow(gl, real);
+		return gl.msaa;
+	}
+
+	// The program's host framebuffer for a binding query's answer.
+	GLint realFramebuffer(GLint bound) {
+		std::map<uintptr_t, PerGL>::const_iterator it = perGL.find(currentGL());
+		if (it != perGL.end() && it->second.drawShadow && static_cast<GLuint>(bound) == it->second.drawShadow)
+			return static_cast<GLint>(it->second.drawReal);
+		return bound;
+	}
+
+	// Before presenting: the picture resolved, and framebuffer 0's stand-in
+	// following a new size (present::ensure on a resize).
+	void beforePresent() {
+		std::map<uintptr_t, PerGL>::iterator it = perGL.find(currentGL());
+		if (it == perGL.end() || !it->second.drawShadow) return;
+		PerGL& gl = it->second;
+		GLuint real = gl.drawReal;
+		leaveShadow(gl, true);
+		enterShadow(gl, real);
+	}
+
+	void forgetShadow(PerGL& gl, GLuint real) {
+		std::map<GLuint, PerGL::Shadow>::iterator s = gl.shadows.find(real);
+		if (s == gl.shadows.end()) return;
+		if (gl.drawShadow && gl.drawReal == real) gl.drawShadow = 0;
+		deleteShadow(s->second);
+		gl.shadows.erase(s);
+	}
 
 	// Writes size bytes at offset into target, a buffer earlier draws may
 	// still be reading on the GPU: through a fresh staging buffer and a copy
@@ -1158,6 +1439,7 @@ namespace ogles2 {
 			for (std::map<uint32_t, GLuint>::iterator i = gl.captures.begin(); i != gl.captures.end(); ++i)
 				QT_GL3(DeleteBuffers)(1, &i->second);
 			if (!gl.orphans.empty()) QT_GL3(DeleteBuffers)(static_cast<GLsizei>(gl.orphans.size()), &gl.orphans[0]);
+			for (std::map<GLuint, PerGL::Shadow>::iterator s = gl.shadows.begin(); s != gl.shadows.end(); ++s) deleteShadow(s->second);
 			perGL.erase(it);
 		}
 		for (std::map<ShaderKey, std::string>::iterator i = sources.begin(); last && i != sources.end();) {
@@ -1330,12 +1612,26 @@ namespace ogles2 {
 			names[i] = qt_swap32(big);
 		}
 		switch (kind) {
-		case QT_OGLES2_K_Texture: QT_GL(DeleteTextures)(static_cast<GLsizei>(n), names); break;
+		case QT_OGLES2_K_Texture:
+			for (uint32_t i = 0; i < n; ++i) textureSizes.erase(std::make_pair(currentGroup(), names[i]));
+			QT_GL(DeleteTextures)(static_cast<GLsizei>(n), names);
+			break;
 		case QT_OGLES2_K_Framebuffer: {
 			// Never the context's own object; deleting a bound framebuffer
 			// binds 0, which is that object again.
 			GLuint own = qt_default_framebuffer();
 			for (uint32_t i = 0; i < n; ++i) if (own && names[i] == own) names[i] = 0;
+			{
+				// A deleted framebuffer's stand-in goes too; if it was bound,
+				// drawing falls back to framebuffer 0 as GLES has it.
+				PerGL& gl = perGL[currentGL()];
+				for (uint32_t i = 0; i < n; ++i) {
+					if (!names[i]) continue;
+					bool bound = gl.drawShadow && gl.drawReal == names[i];
+					forgetShadow(gl, names[i]);
+					if (bound) QT_GL3(BindFramebuffer)(0x8CA9, names[i]);
+				}
+			}
 			QT_GL3(DeleteFramebuffers)(static_cast<GLsizei>(n), names);
 			if (own) {
 				GLint draw = 0, read = 0;
@@ -1401,6 +1697,7 @@ namespace ogles2 {
 		GLenum format, type;
 		if (internalformat == 0x8D62) internalformat = 0x8051; // GL_RGB565 -> GL_RGB8, as glRenderbufferStorage's
 		storageFormat(internalformat, format, type);
+		if (!three) recordTexture(target, 0, static_cast<GLint>(internalformat), width, height);
 		for (GLsizei level = 0; level < levels; ++level) {
 			if (three) QT_GL3(TexImage3D)(target, level, static_cast<GLint>(internalformat), width, height, depth, 0, format, type, 0);
 			else if (target == GL_TEXTURE_CUBE_MAP) {
@@ -1426,17 +1723,25 @@ namespace ogles2 {
 		case QT_OGLES2_C_TexParameteri:
 			QT_GL(TexParameteri)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLint>(w2));
 			break;
-		case QT_OGLES2_C_BindFramebuffer: QT_GL3(BindFramebuffer)(static_cast<GLenum>(w0), hostFramebuffer(static_cast<GLuint>(w1))); break;
+		case QT_OGLES2_C_BindFramebuffer: bindFramebuffer(static_cast<GLenum>(w0), hostFramebuffer(static_cast<GLuint>(w1))); break;
 		case QT_OGLES2_C_BindRenderbuffer: QT_GL3(BindRenderbuffer)(static_cast<GLenum>(w0), static_cast<GLuint>(w1)); break;
 		case QT_OGLES2_C_FramebufferTexture2D:
-			QT_GL3(FramebufferTexture2D)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLenum>(w2),
-				static_cast<GLuint>(w3), static_cast<GLint>(w4));
+			onReal(static_cast<GLenum>(w0), [&]() {
+				QT_GL3(FramebufferTexture2D)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLenum>(w2),
+					static_cast<GLuint>(w3), static_cast<GLint>(w4));
+			}, true);
 			break;
 		case QT_OGLES2_C_FramebufferRenderbuffer:
-			QT_GL3(FramebufferRenderbuffer)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLenum>(w2),
-				static_cast<GLuint>(w3));
+			onReal(static_cast<GLenum>(w0), [&]() {
+				QT_GL3(FramebufferRenderbuffer)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), static_cast<GLenum>(w2),
+					static_cast<GLuint>(w3));
+			}, true);
 			break;
-		case QT_OGLES2_C_CheckFramebufferStatus: return static_cast<int32_t>(QT_GL3(CheckFramebufferStatus)(static_cast<GLenum>(w0)));
+		case QT_OGLES2_C_CheckFramebufferStatus: {
+			GLenum status = 0;
+			onReal(static_cast<GLenum>(w0), [&]() { status = QT_GL3(CheckFramebufferStatus)(static_cast<GLenum>(w0)); }, false);
+			return static_cast<int32_t>(status);
+		}
 		case QT_OGLES2_C_RenderbufferStorage:
 			// GL_RGB565: GLES2's own, desktop OpenGL's only from 4.1 on.
 			if (w1 == 0x8D62) w1 = 0x8051; // GL_RGB8
@@ -1486,8 +1791,10 @@ namespace ogles2 {
 				static_cast<GLsizei>(w4), static_cast<GLsizei>(w5), true);
 			break;
 		case QT_OGLES2_C_FramebufferTextureLayer:
-			QT_GL3(FramebufferTextureLayer)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), w2, static_cast<GLint>(w3),
-				static_cast<GLint>(w4));
+			onReal(static_cast<GLenum>(w0), [&]() {
+				QT_GL3(FramebufferTextureLayer)(static_cast<GLenum>(w0), static_cast<GLenum>(w1), w2, static_cast<GLint>(w3),
+					static_cast<GLint>(w4));
+			}, true);
 			break;
 		case QT_OGLES2_C_RenderbufferStorageMultisample:
 			if (w2 == 0x8D62) w2 = 0x8051; // GL_RGB565 -> GL_RGB8
@@ -1495,7 +1802,7 @@ namespace ogles2 {
 				static_cast<GLsizei>(w3), static_cast<GLsizei>(w4));
 			break;
 		case QT_OGLES2_C_BlitFramebuffer:
-			QT_GL3(BlitFramebuffer)(static_cast<GLint>(w0), static_cast<GLint>(w1), static_cast<GLint>(w2), static_cast<GLint>(w3),
+			blitFramebuffer(static_cast<GLint>(w0), static_cast<GLint>(w1), static_cast<GLint>(w2), static_cast<GLint>(w3),
 				static_cast<GLint>(w4), static_cast<GLint>(w5), static_cast<GLint>(w6), static_cast<GLint>(w7), w8,
 				static_cast<GLenum>(w9));
 			break;
@@ -1528,6 +1835,7 @@ namespace ogles2 {
 					static_cast<GLenum>(w5), static_cast<GLenum>(w6));
 			break;
 		case QT_OGLES2_C_CopyTexSubImage3D:
+			resolveForRead();
 			QT_GL3(CopyTexSubImage3D)(static_cast<GLenum>(w0), static_cast<GLint>(w1), static_cast<GLint>(w2), static_cast<GLint>(w3),
 				static_cast<GLint>(w4), static_cast<GLint>(w5), static_cast<GLint>(w6), static_cast<GLsizei>(w7),
 				static_cast<GLsizei>(w8));
@@ -1556,6 +1864,7 @@ namespace ogles2 {
 #endif
 			QT_GL3(ClipControl)(static_cast<GLenum>(w0), static_cast<GLenum>(w1));
 			return 1;
+		case QT_OGLES2_C_Msaa: return setMsaa(w0);
 		}
 		return 0;
 	}
@@ -1753,6 +2062,7 @@ namespace ogles2 {
 		GLenum gles2Format = format;
 		bool swizzled = coreFormat(format, &internalformat);
 		QT_GL(TexImage2D)(target, level, internalformat, width, height, border, format, type, const_cast<void*>(pixels));
+		recordTexture(target, level, internalformat, width, height);
 		// Level 0 decides it; a texture may be reused with another format.
 		if (level == 0) swizzle(target, swizzled ? gles2Format : 0);
 		return true;
@@ -1781,6 +2091,7 @@ namespace ogles2 {
 		GLenum format = static_cast<GLenum>(c.u(5)), type = static_cast<GLenum>(c.u(6));
 		uint8_t* out = c.p(7);
 		if (!out) return true;
+		resolveForRead();
 		QT_GL(ReadPixels)(x, y, width, height, format, type, out);
 		uint32_t unit = swapUnit(type);
 		if (unit > 1) {
@@ -2018,7 +2329,7 @@ namespace ogles2 {
 		case 0x8B9A: value = GL_UNSIGNED_BYTE; return true; // IMPLEMENTATION_COLOR_READ_TYPE
 		case 0x8B9B: value = GL_RGBA; return true; // IMPLEMENTATION_COLOR_READ_FORMAT
 		case 0x8CA6: case 0x8CAA: // DRAW_/READ_FRAMEBUFFER_BINDING: 0 for the context's own object
-			QT_GL(GetIntegerv)(pname, &v); value = programFramebuffer(v); return true;
+			QT_GL(GetIntegerv)(pname, &v); value = programFramebuffer(realFramebuffer(v)); return true;
 		}
 		return false;
 	}
@@ -2116,10 +2427,13 @@ namespace ogles2 {
 			putWord(out, static_cast<uint32_t>(ints[0]));
 			break;
 		case QT_OGLES2_P_FramebufferAttachmentParameteriv: {
-			bool own = defaultBound(static_cast<GLenum>(w0));
-			GLenum attachment = static_cast<GLenum>(w1);
-			if (own) attachment = defaultAttachment(attachment);
-			QT_GL3(GetFramebufferAttachmentParameteriv)(static_cast<GLenum>(w0), attachment, static_cast<GLenum>(w2), ints);
+			bool own = false;
+			onReal(static_cast<GLenum>(w0), [&]() {
+				own = defaultBound(static_cast<GLenum>(w0));
+				GLenum attachment = static_cast<GLenum>(w1);
+				if (own) attachment = defaultAttachment(attachment);
+				QT_GL3(GetFramebufferAttachmentParameteriv)(static_cast<GLenum>(w0), attachment, static_cast<GLenum>(w2), ints);
+			}, false);
 			// GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE of the default framebuffer
 			if (own && w2 == 0x8CD0 && ints[0] == 0x8D41) ints[0] = 0x8218; // RENDERBUFFER -> FRAMEBUFFER_DEFAULT
 			putWord(out, static_cast<uint32_t>(ints[0]));
@@ -2277,6 +2591,18 @@ namespace ogles2 {
 
 void qt_ogles2_forget_context() {
 	ogles2::forgetContext();
+}
+
+void qt_ogles2_msaa_resolve() {
+	ogles2::resolveForRead();
+}
+
+void qt_ogles2_msaa_present() {
+	ogles2::beforePresent();
+}
+
+void qt_ogles2_msaa_clear(uint32_t mask) {
+	ogles2::clearing(static_cast<GLbitfield>(mask));
 }
 
 void qt_ogles2_share_context(uintptr_t gl, uintptr_t with) {

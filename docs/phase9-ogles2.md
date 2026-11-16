@@ -427,6 +427,46 @@ textures, which the game no longer decompresses on the 68k.
 e05 draws a DXT1 and a DXT5 block and sets and reads back the anisotropy;
 o02 checks the extensions and the 15 formats.
 
+## Multisampling (2026-11-17)
+
+The PiStorm library 1.4 has `OGLES2_CCT_PISTORM_MSAA` (0 or 4), or without
+the tag the environment variable `OGLES2/MSAA`: 4x MSAA of the default
+framebuffer, framebuffer objects not multisampled. ogles2.library and
+ogles3.library take both (2 up to the host's `GL_MAX_SAMPLES`) and, only
+when asked, send `QT_OGLES2_C_Msaa`; an older DLL answers it with 0 and
+nothing changes, so the protocol stays 12.
+
+On the host (host/ogles2.cpp, "MSAA") every framebuffer with a depth or
+stencil attachment -- the program's objects as well as framebuffer 0 -- is
+drawn into a multisampled stand-in of its size and formats while it is
+bound for drawing. That matters for programs that draw their scene into a
+texture and copy it to the screen (GZDoom's GLES renderer): multisampling
+framebuffer 0 alone would leave the scene jagged. The stand-in is resolved
+into the real framebuffer (`glBlitFramebuffer`) when the program binds
+another one for drawing, before `glReadPixels`/`glCopyTex(Sub)Image`/
+`glBlitFramebuffer` and before presenting; reads go to the real one, and
+binding queries, `glCheckFramebufferStatus`, attachments and
+`glDrawBuffers(GL_BACK)` see the program's own objects. A texture
+attachment's size comes from `glTexImage2D`/`glTexStorage2D` (recorded per
+share group), so nothing has to bind it to ask. A blit into a framebuffer
+leaves its stand-in behind (stale) until the next whole-picture `glClear`;
+framebuffer 0's follows a resize (`qt_move_window`).
+
+GZDoom passes `gl_multisample` (its menu's Multisample) as the tag. In
+the user's WinUAE (RTX 5070), bench2 at 1280x720: 142.5 fps without, 143.0
+with 4x; the edges of the scene are smooth. o01-o04, e01 and e03-e05 pass
+with `OGLES2/MSAA` 4 and without it, with no GL error under
+`QUARKTEX_CHECK_ERRORS` (the first versions had two: a wrong
+`GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE` value and `glDrawBuffers(GL_BACK)`
+while framebuffer 0's stand-in was bound; e01's blit into framebuffer 0
+showed the stale stand-in).
+
+tests/o05_ogles2_drawcost measures one small draw (a texture bound and a
+quad from a buffer with three attributes): 1.5 us in WinUAE, 3.3 us with
+the vertices in Amiga memory. Sending draws without a flush (when they read
+only buffers) changed nothing: binds flush anyway, and a host round trip
+is cheap.
+
 ## Debugging a reboot (the LVO -36 bug, 2026-10-23)
 
 `aglSwapBuffers()` and everything before it worked on the first real run

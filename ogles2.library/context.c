@@ -6,9 +6,14 @@
 #include <proto/graphics.h>
 #include <proto/picasso96.h>
 #include <proto/utility.h>
+#include <proto/dos.h>
 #include <graphics/displayinfo.h>
 #include <graphics/modeid.h>
 #include <intuition/screens.h>
+
+#ifndef OGLES2_CCT_PISTORM_MSAA
+#define OGLES2_CCT_PISTORM_MSAA (OGLES2_CCT_PISTORM_MIN + 5) /* the ogles2 1.4 SDK's */
+#endif
 
 /*
  * Contexts (docs/phase9-ogles2.md, stage 1): a host OpenGL 3.3 core context
@@ -34,11 +39,13 @@
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *P96Base;
+struct DosLibrary *DOSBase;
 
 static void openLibraries(void) {
 	if (!IntuitionBase) IntuitionBase = (struct IntuitionBase *) OpenLibrary("intuition.library", 39);
 	if (!GfxBase) GfxBase = (struct GfxBase *) OpenLibrary("graphics.library", 39);
 	if (!P96Base) P96Base = OpenLibrary("Picasso96API.library", 2);
+	if (!DOSBase) DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 36);
 }
 
 static void destroy(struct OGLES2Context *c) {
@@ -110,6 +117,23 @@ static void innerArea(struct OGLES2Context *c, struct Window *w) {
 static ULONG tagValue(struct TagItem *tags, ULONG tag, ULONG def) {
 	struct TagItem *item = FindTagItem(tag, tags);
 	return item ? item->ti_Data : def;
+}
+
+/* Multisampling, as the PiStorm library has it: OGLES2_CCT_PISTORM_MSAA, or
+ * without the tag the environment variable OGLES2/MSAA (the calling Shell's
+ * local one first). The PiStorm library takes 0 or 4; here 2 to the host's
+ * most, and it also covers the program's framebuffer objects with a depth
+ * buffer (host/ogles2.cpp, "MSAA"). 0: none asked for. */
+static ULONG msaaAsked(struct TagItem *tags) {
+	ULONG samples = tagValue(tags, OGLES2_CCT_PISTORM_MSAA, ~0UL);
+	if (samples == ~0UL) {
+		char value[8];
+		LONG i, n;
+		samples = 0;
+		if (DOSBase && (n = GetVar((STRPTR) "OGLES2/MSAA", (STRPTR) value, sizeof(value), 0)) > 0)
+			for (i = 0; i < n && value[i] >= '0' && value[i] <= '9'; ++i) samples = samples * 10 + (ULONG) (value[i] - '0');
+	}
+	return samples > 64 ? 64 : samples;
 }
 
 /* The tags that answer (OGLES2_CCT_GET_WIDTH, _GET_HEIGHT, _PISTORM_GET_
@@ -239,6 +263,10 @@ struct OGLES2Context *ogles2_aglCreateContext2(ULONG *errcode, struct TagItem *t
 		c->esVersion = 30;
 	}
 #endif
+	{
+		ULONG samples = msaaAsked(tags);
+		if (samples >= 2) ogles2_call(QT_OGLES2_C_Msaa, samples, 0, 0, 0, 0);
+	}
 	answer(c, tags);
 	if (errcode) *errcode = OGLES2_CCE_OK;
 	return c;

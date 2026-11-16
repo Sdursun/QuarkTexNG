@@ -317,7 +317,13 @@ enum {
 	QT_OGLES2_C_TexStorage2DMultisample, QT_OGLES2_C_SampleMaski, QT_OGLES2_C_FramebufferParameteri,
 	/* glClipControlEXT: origin, depth; returns 1 if the host has
 	 * glClipControl (OpenGL 4.5), 0 if not (nothing changed). */
-	QT_OGLES2_C_ClipControl
+	QT_OGLES2_C_ClipControl,
+	/* Multisampling for the context (OGLES2_CCT_PISTORM_MSAA or
+	 * ENV:OGLES2/MSAA): samples; returns the samples the host uses, 0 for
+	 * none (a host without it answers 0 too). Framebuffers with a depth or
+	 * stencil attachment, 0 included, are drawn multisampled
+	 * (host/ogles2.cpp, "MSAA"). Sent only when asked for. */
+	QT_OGLES2_C_Msaa
 };
 enum { QT_OGLES2_K_ProgramPipeline = QT_OGLES2_K_TransformFeedback + 1 };
 /* glGetProgramPipelineInfoLog: QT_OGLES2_GET_LOG with this subop. */

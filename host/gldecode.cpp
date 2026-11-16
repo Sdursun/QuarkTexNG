@@ -149,6 +149,9 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		result = 0;
 		uint32_t opcode = header >> 16;
 		if (opcode < QT_W3D_FIRST || opcode >= QT_MGL_FIRST) qt_w3d_sync();
+		// CopyTexImage1D/2D, CopyTexSubImage1D/2D, ReadPixels (gl/glFuncs.txt)
+		if ((opcode >= 54 && opcode <= 57) || opcode == 238) qt_ogles2_msaa_resolve();
+		else if (opcode == 11 && c.words == 2) qt_ogles2_msaa_clear(c.u(1)); // Clear
 		switch (opcode) {
 #include "gldecode.auto.inc"
 		default:
