@@ -1576,8 +1576,12 @@ namespace ogles2 {
 	bool genObjects(const Command& c) {
 		uint32_t kind = c.u(1), n = c.u(2);
 		uint8_t* out = c.p(3);
-		GLuint names[64];
-		if (!out || n > 64) return true;
+		// As many as asked for: Wipeout XL makes a track's 150 textures in
+		// one call. (Up to 1.2 beta 1 more than 64 made none, the names
+		// stayed 0 and every texture of the track was the default one.)
+		if (!out || !n || n > 0x100000) return true;
+		std::vector<GLuint> list(n);
+		GLuint* names = &list[0];
 		switch (kind) {
 		case QT_OGLES2_K_Texture: QT_GL(GenTextures)(static_cast<GLsizei>(n), names); break;
 		case QT_OGLES2_K_Framebuffer: QT_GL3(GenFramebuffers)(static_cast<GLsizei>(n), names); break;
@@ -1604,8 +1608,9 @@ namespace ogles2 {
 	bool deleteObjects(const Command& c) {
 		uint32_t kind = c.u(1), n = c.u(2);
 		const uint8_t* in = c.p(3);
-		GLuint names[64];
-		if (!in || n > 64) return true;
+		if (!in || !n || n > 0x100000) return true;
+		std::vector<GLuint> list(n);
+		GLuint* names = &list[0];
 		for (uint32_t i = 0; i < n; ++i) {
 			uint32_t big;
 			memcpy(&big, in + 4 * i, 4);
@@ -2577,7 +2582,7 @@ namespace ogles2 {
 		const uint8_t* in = c.p(4);
 		std::vector<float> m;
 		uint32_t i;
-		if (!in || count > 64) return 0;
+		if (!in || count > 1024) return 0; // as uniformV (64 up to 1.2 beta 1: too few for bone matrices)
 		m.resize(static_cast<size_t>(count) * 16);
 		for (i = 0; i < count * 16; ++i) {
 			uint32_t bits = (uint32_t(in[4 * i]) << 24) | (uint32_t(in[4 * i + 1]) << 16) |
