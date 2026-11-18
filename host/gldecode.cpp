@@ -175,7 +175,7 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		// Which OpenGL command an error comes from, with its first arguments.
 		// Not between glBegin (5) and glEnd (75), where glGetError is an error
 		// itself.
-		// QUARKTEX_CHECK_ERRORS: after every OpenGL and ogles2/ogles3
+		// QUARKTEX_CHECK_ERRORS: after every OpenGL, minigl and ogles2/ogles3
 		// command, in every frame.
 		static bool insideBegin = false;
 		static int checkErrors = -1;
@@ -187,7 +187,7 @@ int32_t qt_decode(const uint8_t* buffer, uint32_t bytes, QtResolver resolve) {
 		bool check = qt_w3d_trace_all || checkErrors;
 		if (check && (header >> 16) == 5) insideBegin = true;
 		else if ((header >> 16) == 75) insideBegin = false;
-		if (check && !insideBegin && ((header >> 16) < QT_W3D_FIRST || (header >> 16) >= QT_OGLES2_FIRST)) {
+		if (check && !insideBegin && ((header >> 16) < QT_W3D_FIRST || (header >> 16) >= QT_MGL_FIRST)) {
 			GLenum error = QT_GL(GetError)();
 			if (error) {
 				char line[120];

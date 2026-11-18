@@ -257,6 +257,50 @@ GLboolean mgl_GLIsEnabled(GLcontext context, GLenum cap) {
 	return _glIsEnabled(gl) ? GL_TRUE : GL_FALSE;
 }
 
+/* glBegin, with MiniGL's two primitives of its own: MGL_FLATFAN (0x7013) and
+ * MGL_FLATSTRIP (0x7014, both from MiniGL's older headers; GLQuake's screen
+ * tint uses the fan), a fan or strip whose vertices are window coordinates
+ * (pixels from the top left corner, z the depth), past the matrices and the
+ * viewport. Drawn with matrices that map the window, taken back at glEnd.
+ * (Up to 1.2 beta 1 such a glBegin was skipped as an unknown constant and
+ * its glEnd was an OpenGL error.) */
+void mgl_GLBegin(GLcontext context, GLenum mode) {
+	unsigned int q;
+	if ((mode == 0x7013 || mode == 0x7014) && context) {
+		QtMglContext *c = QT_MGL(context);
+		_glPushAttrib(0x1000 | 0x800); /* GL_TRANSFORM_BIT (the matrix mode), GL_VIEWPORT_BIT */
+		_glViewport(0, 0, c->width, c->height);
+		_glMatrixMode(QGL_PROJECTION);
+		_glPushMatrix();
+		_glLoadIdentity();
+		_glOrtho(0.0, (GLdouble) c->width, (GLdouble) c->height, 0.0, 0.0, -1.0); /* z 0..1 is the depth */
+		_glMatrixMode(QGL_MODELVIEW);
+		_glPushMatrix();
+		_glLoadIdentity();
+		c->client.flat = TRUE;
+		_glBegin(mode == 0x7013 ? QGL_TRIANGLE_FAN : QGL_TRIANGLE_STRIP);
+		return;
+	}
+	q = mgl_enum(mode);
+	if ((q & QT_MGL_ONLY) == QT_MGL_ONLY) {
+		mgl_unknown("GLBegin");
+		return;
+	}
+	_glBegin(q);
+}
+
+void mgl_GLEnd(GLcontext context) {
+	_glEnd();
+	if (context && QT_MGL(context)->client.flat) {
+		QT_MGL(context)->client.flat = FALSE;
+		_glMatrixMode(QGL_MODELVIEW);
+		_glPopMatrix();
+		_glMatrixMode(QGL_PROJECTION);
+		_glPopMatrix();
+		_glPopAttrib();
+	}
+}
+
 /* OpenGL 1.2's glBlendEquation and 1.4's glBlendFuncSeparate, which the
  * OpenGL 1.1 command set lacks. */
 void mgl_GLBlendEquation(GLcontext context, GLenum mode) {
@@ -527,9 +571,41 @@ static UBYTE *indicesToRgba(const QtMglClient *s, const UBYTE *indices, int widt
 }
 
 /* internalformat is a number of components (1 to 4) or a format. */
+/* MiniGL's own pixel formats, the texels as Warp3D keeps them (GLQuake's
+ * lightmaps: format and internal format MGL_UNSIGNED_SHORT_4_4_4_4 with any
+ * type): 16-bit words, A4R4G4B4 or R5G6B5. 1 and the OpenGL format, type and
+ * internal format for one of them. (Up to 1.2 beta 1 they went to OpenGL as
+ * a format it does not have: no lightmaps.) */
+static int mglWords(GLenum format, unsigned int *glFormat, unsigned int *glType, int *components) {
+	if (format == 0x701B) { /* MGL_UNSIGNED_SHORT_4_4_4_4 */
+		*glFormat = QGL_BGRA;
+		*glType = 0x8365; /* GL_UNSIGNED_SHORT_4_4_4_4_REV */
+		*components = 4;
+		return 1;
+	}
+	if (format == 0x701A) { /* MGL_UNSIGNED_SHORT_5_6_5 */
+		*glFormat = QGL_RGB;
+		*glType = 0x8363; /* GL_UNSIGNED_SHORT_5_6_5 */
+		*components = 3;
+		return 1;
+	}
+	return 0;
+}
+
 void mgl_GLTexImage2D(GLcontext context, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
 		GLint border, GLenum format, GLenum type, const GLvoid *pixels) {
+	unsigned int wordFormat, wordType;
+	int wordComponents;
 	int components = internalformat >= 1 && internalformat <= 4 ? internalformat : (int) mgl_enum((unsigned int) internalformat);
+	/* Mipmaps made from level 0 (GL_GENERATE_MIPMAP), which the levels a
+	 * program gives afterwards replace: MiniGL on Warp3D draws a texture
+	 * with a mipmap filter and no mipmaps, OpenGL takes it as incomplete and
+	 * draws without it (GLQuake's charset: white squares for its digits). */
+	if (level == 0) _glTexParameteri(mgl_enum(target), 0x8191, 1);
+	if (mglWords(format, &wordFormat, &wordType, &wordComponents)) {
+		_glTexImage2D(mgl_enum(target), level, wordComponents, width, height, border, wordFormat, wordType, (void *) pixels);
+		return;
+	}
 	if (mgl_enum(format) == QGL_COLOR_INDEX) {
 		QtMglClient *s = client(context);
 		UBYTE *rgba = pixels ? indicesToRgba(s, (const UBYTE *) pixels, width, height) : NULL;
@@ -543,7 +619,14 @@ void mgl_GLTexImage2D(GLcontext context, GLenum target, GLint level, GLint inter
 
 void mgl_GLTexSubImage2D(GLcontext context, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height,
 		GLenum format, GLenum type, const GLvoid *pixels) {
-	unsigned int t = mgl_enum(target), f = mgl_enum(format), ty = mgl_enum(type);
+	unsigned int t = mgl_enum(target), f, ty;
+	int wordComponents;
+	if (mglWords(format, &f, &ty, &wordComponents)) {
+		_glTexSubImage2D(t, level, xoffset, yoffset, width, height, f, ty, (void *) pixels);
+		return;
+	}
+	f = mgl_enum(format);
+	ty = mgl_enum(type);
 	if ((t & QT_MGL_ONLY) == QT_MGL_ONLY || (f & QT_MGL_ONLY) == QT_MGL_ONLY || (ty & QT_MGL_ONLY) == QT_MGL_ONLY) {
 		mgl_unknown("GLTexSubImage2D");
 		return;

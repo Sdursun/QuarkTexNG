@@ -111,6 +111,7 @@ with open(os.path.join(out, "mglenum.auto.c"), "w") as f:
     f.write("\twhile (low <= high) {\n\t\tint middle = (low + high) / 2;\n")
     f.write("\t\tif (known[middle] == value) return 1;\n\t\tif (known[middle] < value) low = middle + 1;\n")
     f.write("\t\telse high = middle - 1;\n\t}\n\treturn 0;\n}\n\n")
+    f.write("unsigned int mgl_rejected; /* the last value mgl_enum did not know, for the log */\n\n")
     f.write("unsigned int mgl_enum(unsigned int value) {\n\tswitch (value) {\n")
     for value in sorted(to_gl):
         if to_gl[value][1] != value:
@@ -120,7 +121,7 @@ with open(os.path.join(out, "mglenum.auto.c"), "w") as f:
     # use OpenGL's own for extensions); anything else is marked unknown, as
     # applications define values of their own for what MiniGL lacks (RTCW:
     # GL_CLIP_PLANE0 = 0x7A07), which MiniGL ignores.
-    f.write("\t}\n\treturn value <= 1 || mgl_known(value) ? value : 0x%X | value;\n}\n\n" % QT_MGL_ONLY)
+    f.write("\t}\n\tif (value <= 1 || mgl_known(value)) return value;\n\tmgl_rejected = value;\n\treturn 0x%X | value;\n}\n\n" % QT_MGL_ONLY)
     f.write("unsigned int mgl_enum_back(unsigned int value) {\n\treturn value;\n}\n\n")
     # glClear's mask bits are already real OpenGL values in the 29 header
     # (GL_COLOR_BUFFER_BIT 0x4000, GL_DEPTH_BUFFER_BIT 0x100); MiniGL has no

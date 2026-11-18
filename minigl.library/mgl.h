@@ -73,6 +73,7 @@ typedef struct {
 	int unpackAlignment;     /* for colour index images, expanded on the 68k */
 	UBYTE palette[256][4];   /* glColorTable's */
 	BOOL paletteAlpha;
+	BOOL flat;               /* between glBegin(MGL_FLATFAN/MGL_FLATSTRIP) and glEnd */
 } QtMglClient;
 
 /* A context. MiniGL's GLcontext is opaque to applications: they only pass

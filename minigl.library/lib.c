@@ -102,4 +102,12 @@ void mgl_unknown(const char *name) {
 	if (count < 64) logged[count++] = name;
 	logString("minigl.library: skipped a call with an unknown constant:");
 	logString((char *) name);
+	{
+		/* the constant (the last one mgl_enum did not know), in hex */
+		extern unsigned int mgl_rejected;
+		static char text[] = "  0x00000000";
+		int d;
+		for (d = 0; d < 8; ++d) text[4 + d] = "0123456789ABCDEF"[(mgl_rejected >> (28 - 4 * d)) & 15];
+		logString(text);
+	}
 }
