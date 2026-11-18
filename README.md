@@ -14,9 +14,31 @@ OpenGL function, a modern OpenGL renderer for Warp3D, a new
 minigl.library, ogles2.library and ogles3.library, and frames written into
 Amiga display memory so they show in fullscreen too.
 
-Current release: **1.2 beta 1** (a beta; the last normal release is 1.1).
+Current release: **1.2 beta 2** (a beta; the last normal release is 1.1).
 
-## What's new in 1.2 beta 1
+## What's new in 1.2 beta 2
+
+Three more programs reported by Lucas "Ponki", who tested them on two PCs:
+
+- **ogles2/ogles3: Wipeout XL's track has its textures.** `glGenTextures`
+  (and the other `glGen*`/`glDelete*` calls) made at most 64 names a call
+  and none when asked for more. Wipeout XL (xl-ogles3) makes a track's 150
+  textures in one call, so the whole track was drawn with one texture and
+  only the ship looked right. Only the host DLLs changed for this.
+- **minigl.library: GLQuake (the MiniGL library port) is drawn right.**
+  - `glRotatefEXT`/`glRotatefEXTs` take MiniGL's `GLROT_*` axes. The view,
+    which GLQuake builds from them, was wrong: the weapon at the edge of
+    the screen, the ceiling in view.
+  - MiniGL's own 16-bit texture formats (`MGL_UNSIGNED_SHORT_4_4_4_4`,
+    `MGL_UNSIGNED_SHORT_5_6_5`): GLQuake's lightmaps were missing.
+  - A texture with a mipmap filter and no mipmaps is drawn, as MiniGL on
+    Warp3D draws it (white squares for the status bar's small digits).
+  - `glBegin(MGL_FLATFAN)` and `MGL_FLATSTRIP`, fans and strips in window
+    coordinates.
+  - QuarkTexNGLog.txt names the constant of a call that was skipped.
+- Install the libraries and DLLs of this release together.
+
+## What was new in 1.2 beta 1
 
 - **Warp3D: BlitzQuake draws again.** `W3D_ClearZBuffer` now clears the
   z-buffer also while `W3D_ZBUFFERUPDATE` is off, as Warp3D does. BlitzQuake

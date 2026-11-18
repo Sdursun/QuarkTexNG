@@ -2,12 +2,12 @@ Short:        WinUAE HW 3D: Warp3D/MiniGL/GLES2/GLES3
 Author:       Serkan DURSUN, based on QuarkTex by Robert Konrad
 Uploader:     Serkan DURSUN <blasterreal@gmail.com>
 Type:         driver/video
-Version:      1.2beta1
+Version:      1.2beta2
 Architecture: m68k-amigaos >= 3.0
 Distribution: Aminet
 Requires:     WinUAE with native code, Picasso96 RTG, 68020+ with FPU
 
-QuarkTex NG 1.2 beta 1
+QuarkTex NG 1.2 beta 2
 ======================
 
 QuarkTex NG gives AmigaOS in WinUAE hardware accelerated 3D: Warp3D,
@@ -34,8 +34,26 @@ QuarkTex NG's libraries are built against their SDKs' headers and tested
 with their examples and demos, so programs written for their libraries
 also run in WinUAE. Many thanks to both of them.
 
-What is new in 1.2 beta 1
+What is new in 1.2 beta 2
 -------------------------
+
+Three more programs reported by Lucas "Ponki":
+
+- ogles2/ogles3: Wipeout XL's track has its textures. glGenTextures (and
+  the other glGen*/glDelete* calls) made at most 64 names a call and none
+  when asked for more; Wipeout XL makes a track's 150 textures in one
+  call, so the track was drawn with one texture and only the ship looked
+  right.
+- minigl.library: GLQuake (the MiniGL library port) is drawn right:
+  glRotatefEXT/glRotatefEXTs take MiniGL's GLROT_* axes (the view was
+  wrong); MiniGL's 16-bit texture formats MGL_UNSIGNED_SHORT_4_4_4_4 and
+  _5_6_5 (the lightmaps were missing); a texture with a mipmap filter and
+  no mipmaps is drawn (white squares for the small digits);
+  glBegin(MGL_FLATFAN) and MGL_FLATSTRIP.
+- QuarkTexNGLog.txt names the constant of a MiniGL call that was skipped.
+
+What was new in 1.2 beta 1
+--------------------------
 
 - Warp3D: BlitzQuake draws again. W3D_ClearZBuffer clears the z-buffer
   also while W3D_ZBUFFERUPDATE is off, as Warp3D does; BlitzQuake clears
@@ -52,7 +70,6 @@ What is new in 1.2 beta 1
   the graphics card's maximum).
 - No false FPU warning for programs that set double precision themselves
   (Doom 3) with WinUAE's FPU set to "Host (80-bit)".
-- This is a beta: the last normal release is 1.1.
 
 What was new in 1.1
 -------------------
@@ -234,6 +251,9 @@ Archive contents
 History
 -------
 
+1.2beta2  ogles2/ogles3: glGen* with more than 64 names (Wipeout XL);
+          minigl.library: GLROT_* axes, MiniGL's 16-bit formats, mipmap
+          filters without mipmaps, MGL_FLATFAN (GLQuake).
 1.2beta1  Warp3D z-buffer clear (BlitzQuake); ogles2.library 1.4;
           anisotropic filtering, S3TC textures and multisampling in
           ogles2/ogles3; no false FPU warning.

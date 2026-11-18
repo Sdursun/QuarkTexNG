@@ -1,4 +1,4 @@
-QuarkTex NG 1.2 beta 1
+QuarkTex NG 1.2 beta 2
 ======================
 
 QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA
@@ -9,7 +9,12 @@ ogles2.library and ogles3.library implement the interfaces of the PiStorm
 libraries and SDKs by R-Typer and Ladislawv (github.com/ladislawv/ogles2,
 github.com/ladislawv/ogles2pi3, github.com/ladislawv/ogles3).
 
-New in 1.2 beta 1 (README.md has the details): BlitzQuake draws again
+New in 1.2 beta 2 (README.md has the details): Wipeout XL's track has its
+textures in ogles3 (glGenTextures with more than 64 names); GLQuake for
+minigl.library is drawn right (glRotatefEXT's axes, MiniGL's 16-bit
+texture formats, mipmap filters without mipmaps, MGL_FLATFAN).
+
+New in 1.2 beta 1: BlitzQuake draws again
 (Warp3D's z-buffer clear), ogles2.library 1.4, anisotropic filtering and
 S3TC textures and multisampling (SetEnv OGLES2/MSAA 4) in ogles2 and
 ogles3, no false FPU warning.
