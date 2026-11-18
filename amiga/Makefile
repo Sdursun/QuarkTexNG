@@ -17,7 +17,7 @@ LIBS    = -lgcc
 
 # The product and its version, in the libraries' id strings and in what
 # Warp3D, agl and minigl report as their driver or renderer (QT_PRODUCT).
-PRODUCT  = QuarkTex NG 1.2
+PRODUCT  = QuarkTex NG 1.2 beta 1
 
 VERSION  = 4
 REVISION = 2

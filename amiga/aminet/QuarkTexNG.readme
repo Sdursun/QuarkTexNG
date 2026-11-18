@@ -2,13 +2,13 @@ Short:        WinUAE HW 3D: Warp3D/MiniGL/GLES2/GLES3
 Author:       Serkan DURSUN, based on QuarkTex by Robert Konrad
 Uploader:     Serkan DURSUN <blasterreal@gmail.com>
 Type:         driver/video
-Version:      1.1
+Version:      1.2beta1
 Architecture: m68k-amigaos >= 3.0
 Distribution: Aminet
 Requires:     WinUAE with native code, Picasso96 RTG, 68020+ with FPU
 
-QuarkTex NG 1.1
-===============
+QuarkTex NG 1.2 beta 1
+======================
 
 QuarkTex NG gives AmigaOS in WinUAE hardware accelerated 3D: Warp3D,
 StormMESA (agl.library), MiniGL, OpenGL ES 2.0 (ogles2.library) and
@@ -26,15 +26,36 @@ ogles2.library and ogles3.library implement the interfaces of the PiStorm
 ogles2.library and ogles3.library and their SDKs, made by R-Typer and
 Ladislawv for the PiStorm with a Raspberry Pi 4:
 
-  ogles2  OpenGL ES 2.0  https://github.com/ladislawv/ogles2  (SDK 1.3)
+  ogles2  OpenGL ES 2.0  https://github.com/ladislawv/ogles2  (1.3) and
+                         https://github.com/ladislawv/ogles2pi3 (1.4)
   ogles3  OpenGL ES 3.1  https://github.com/ladislawv/ogles3  (release 1.0)
 
 QuarkTex NG's libraries are built against their SDKs' headers and tested
 with their examples and demos, so programs written for their libraries
 also run in WinUAE. Many thanks to both of them.
 
-What is new in 1.1
-------------------
+What is new in 1.2 beta 1
+-------------------------
+
+- Warp3D: BlitzQuake draws again. W3D_ClearZBuffer clears the z-buffer
+  also while W3D_ZBUFFERUPDATE is off, as Warp3D does; BlitzQuake clears
+  it in that state, so nothing was cleared and the picture stayed as
+  stripes of one colour. Thanks to Lucas "Ponki" for the report.
+- ogles2.library 1.4: the version of the PiStorm ogles2.library 1.4 by
+  R-Typer and Ladislawv, built with its 1.4 beta 2 SDK (the interface is
+  1.3's). Programs that bring a 1.4 library in their drawer, as Doom 3
+  does, use the installed one.
+- ogles2/ogles3: anisotropic filtering and S3TC textures (DXT1, DXT3,
+  DXT5). Doom 3's timedemo: 55 fps against 45 fps without them.
+- ogles2/ogles3: multisampling as the PiStorm 1.4 library has it, by the
+  context tag OGLES2_CCT_PISTORM_MSAA or "SetEnv OGLES2/MSAA 4" (2 up to
+  the graphics card's maximum).
+- No false FPU warning for programs that set double precision themselves
+  (Doom 3) with WinUAE's FPU set to "Host (80-bit)".
+- This is a beta: the last normal release is 1.1.
+
+What was new in 1.1
+-------------------
 
 - New ogles3.library: OpenGL ES 3.0 and 3.1, the interface of the PiStorm
   ogles3.library 1.0 by R-Typer and Ladislawv, on the PC's OpenGL 4.3.
@@ -213,6 +234,9 @@ Archive contents
 History
 -------
 
+1.2beta1  Warp3D z-buffer clear (BlitzQuake); ogles2.library 1.4;
+          anisotropic filtering, S3TC textures and multisampling in
+          ogles2/ogles3; no false FPU warning.
 1.1       New ogles3.library (OpenGL ES 3.0/3.1); faster ogles2 buffers,
           every ogles2 entry, shared contexts, bitmap contexts;
           minigl.library 30.0; agl rastport contexts; windows in front of

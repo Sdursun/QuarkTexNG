@@ -1,5 +1,5 @@
-QuarkTex NG 1.1
-===============
+QuarkTex NG 1.2 beta 1
+======================
 
 QuarkTex NG brings hardware 3D to AmigaOS in WinUAE: Warp3D, StormMESA
 (agl), MiniGL, OpenGL ES 2.0 (ogles2) and OpenGL ES 3.0/3.1 (ogles3)
@@ -7,7 +7,12 @@ programs inside the emulated Amiga draw with the host's OpenGL on Windows.
 
 ogles2.library and ogles3.library implement the interfaces of the PiStorm
 libraries and SDKs by R-Typer and Ladislawv (github.com/ladislawv/ogles2,
-github.com/ladislawv/ogles3).
+github.com/ladislawv/ogles2pi3, github.com/ladislawv/ogles3).
+
+New in 1.2 beta 1 (README.md has the details): BlitzQuake draws again
+(Warp3D's z-buffer clear), ogles2.library 1.4, anisotropic filtering and
+S3TC textures and multisampling (SetEnv OGLES2/MSAA 4) in ogles2 and
+ogles3, no false FPU warning.
 
 It is an independent continuation of QuarkTex, the 3D graphics
 virtualization solution Robert Konrad first released in 2003.

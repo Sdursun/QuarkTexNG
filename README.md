@@ -14,9 +14,37 @@ OpenGL function, a modern OpenGL renderer for Warp3D, a new
 minigl.library, ogles2.library and ogles3.library, and frames written into
 Amiga display memory so they show in fullscreen too.
 
-Current release: **1.1**.
+Current release: **1.2 beta 1** (a beta; the last normal release is 1.1).
 
-## What's new in 1.1
+## What's new in 1.2 beta 1
+
+- **Warp3D: BlitzQuake draws again.** `W3D_ClearZBuffer` now clears the
+  z-buffer also while `W3D_ZBUFFERUPDATE` is off, as Warp3D does. BlitzQuake
+  (GLQuake on MiniGL/Warp3D) clears it in that state, so nothing was
+  cleared and the picture stayed as stripes of one colour. Thanks to Lucas
+  "Ponki" for the report. Only the host DLLs changed for this.
+- **ogles2.library 1.4**: the version of the PiStorm ogles2.library 1.4 by
+  **R-Typer and Ladislawv**
+  ([github.com/ladislawv/ogles2pi3](https://github.com/ladislawv/ogles2pi3)),
+  built with its 1.4 beta 2 SDK (the interface is 1.3's). Programs that
+  bring a 1.4 library in their drawer, as Doom 3 does, now use the
+  installed one. `GL_VERSION` reads "OpenGL ES 2.0 ogles2.library 1.4".
+- **ogles2/ogles3: anisotropic filtering and S3TC textures**
+  (`GL_EXT_texture_filter_anisotropic`, `GL_EXT_texture_compression_s3tc`,
+  `GL_EXT_texture_compression_dxt1`: DXT1, DXT3, DXT5). Doom 3's timedemo
+  went from 45 to 55 fps with them (same PC, runs alternated).
+- **ogles2/ogles3: multisampling** as the PiStorm 1.4 library has it: the
+  context tag `OGLES2_CCT_PISTORM_MSAA`, or without it the environment
+  variable `OGLES2/MSAA` (2 up to the graphics card's maximum; `SetEnv
+  OGLES2/MSAA 4`). The window's picture and the program's own framebuffers
+  with a depth buffer are antialiased.
+- **No false FPU warning**: the check of the FPU precision measured the
+  calling program's own rounding precision and warned of "64 bits" for
+  programs that set double precision themselves (Doom 3), with WinUAE set
+  to "Host (80-bit)".
+- Install the libraries and DLLs of this release together.
+
+## What was new in 1.1
 
 - **ogles3.library (new)**: OpenGL ES 3.0 and 3.1, the API of the PiStorm
   ogles3.library and its SDK (release 1.0) by **R-Typer and Ladislawv**
@@ -89,7 +117,7 @@ Current release: **1.1**.
 
 ## What's new compared to QuarkTex 0.53
 
-| | QuarkTex 0.53 (2003) | QuarkTex NG 1.1 |
+| | QuarkTex 0.53 (2003) | QuarkTex NG 1.2 |
 | --- | --- | --- |
 | WinUAE | 32-bit only (old uaelib traps) | 32-bit and **64-bit** (native code interface) |
 | Host communication | one emulator call per OpenGL function | commands batched in a buffer |
