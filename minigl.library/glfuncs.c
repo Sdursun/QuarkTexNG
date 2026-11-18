@@ -17,10 +17,16 @@ static ULONG swap32(ULONG v) {
 	return (v >> 24) | ((v >> 8) & 0xFF00) | ((v << 8) & 0xFF0000) | (v << 24);
 }
 
+/* The words of floats and doubles: read and written through a type that
+ * may alias them. With plain ULONG the compiler may drop a caller's float
+ * stores that only these functions read (it did, inlined into
+ * mgl_GLRotatefEXTs: a matrix of zeros). */
+typedef ULONG __attribute__((__may_alias__)) AliasedULONG;
+
 /* count 32-bit values into dest, turned around. */
 static void copySwapped32(void *dest, const void *src, int count) {
-	const ULONG *s = (const ULONG *) src;
-	ULONG *d = (ULONG *) dest;
+	const AliasedULONG *s = (const AliasedULONG *) src;
+	AliasedULONG *d = (AliasedULONG *) dest;
 	while (count-- > 0) *d++ = swap32(*s++);
 }
 
@@ -30,8 +36,8 @@ static void swapInPlace32(void *data, int count) {
 
 /* count doubles, each turned around as a whole. */
 static void copySwapped64(void *dest, const void *src, int count) {
-	const ULONG *s = (const ULONG *) src;
-	ULONG *d = (ULONG *) dest;
+	const AliasedULONG *s = (const AliasedULONG *) src;
+	AliasedULONG *d = (AliasedULONG *) dest;
 	for (; count > 0; --count, s += 2, d += 2) {
 		ULONG high = s[0], low = s[1];
 		d[0] = swap32(low);
@@ -180,20 +186,43 @@ void mgl_GLULookAt(GLfloat ex, GLfloat ey, GLfloat ez, GLfloat cx, GLfloat cy, G
 	_glTranslatef(-ex, -ey, -ez);
 }
 
-/* MiniGL's rotation about one axis: xyz 0 = x, 1 = y, 2 = z. */
-void mgl_GLRotatefEXT(GLcontext context, GLfloat angle, const GLint xyz) {
-	_glRotatef(angle, xyz == 0, xyz == 1, xyz == 2);
+/* MiniGL's rotation about an axis named by one of mgl/gl.h's GLROT_*
+ * (GLROT_100 = x, GLROT_010 = y, GLROT_001 = z, GLROT_011 ... GLROT_111 the
+ * diagonals): the axis, not normalised; 0 for another value. (Up to 1.2
+ * beta 1 the value was taken as 0, 1 or 2, so every such rotation had no
+ * axis: GLQuake's view, which is made of them, was wrong.) */
+static int rotAxis(GLint xyz, GLfloat *v) {
+	static const struct { GLint name; GLfloat x, y, z; } axes[] = {
+		{0x2000, 1, 0, 0}, {0x1000, 0, 1, 0}, {0x800, 0, 0, 1},
+		{0x4000, 0, 1, 1}, {0x8000, 1, 0, 1}, {0x10000, 1, 1, 0}, {0x20000, 1, 1, 1}};
+	int i;
+	for (i = 0; i < 7; ++i) {
+		if (axes[i].name == xyz) {
+			v[0] = axes[i].x; v[1] = axes[i].y; v[2] = axes[i].z;
+			return 1;
+		}
+	}
+	return 0;
 }
 
-/* The same with the angle given as its sine and cosine. */
+void mgl_GLRotatefEXT(GLcontext context, GLfloat angle, const GLint xyz) {
+	GLfloat v[3];
+	if (rotAxis(xyz, v)) _glRotatef(angle, v[0], v[1], v[2]);
+}
+
+/* The same with the angle given as its sine and cosine: glRotatef's matrix. */
 void mgl_GLRotatefEXTs(GLcontext context, GLfloat sin_an, GLfloat cos_an, const GLint xyz) {
-	GLfloat m[16];
-	int i, a = xyz == 0 ? 1 : 0, b = xyz == 2 ? 1 : 2;
-	for (i = 0; i < 16; ++i) m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-	m[a * 4 + a] = cos_an;
-	m[b * 4 + b] = cos_an;
-	m[a * 4 + b] = sin_an;
-	m[b * 4 + a] = -sin_an;
+	GLfloat m[16], v[3], n, x, y, z, t = 1.0f - cos_an;
+	int i;
+	if (!rotAxis(xyz, v)) return;
+	n = v[0] + v[1] + v[2]; /* 1, 2 or 3 components of 1 */
+	n = n == 1.0f ? 1.0f : n == 2.0f ? 0.70710678f : 0.57735027f;
+	x = v[0] * n; y = v[1] * n; z = v[2] * n;
+	for (i = 0; i < 16; ++i) m[i] = 0.0f;
+	m[0] = x * x * t + cos_an;      m[4] = x * y * t - z * sin_an;  m[8] = x * z * t + y * sin_an;
+	m[1] = y * x * t + z * sin_an;  m[5] = y * y * t + cos_an;      m[9] = y * z * t - x * sin_an;
+	m[2] = z * x * t - y * sin_an;  m[6] = z * y * t + x * sin_an;  m[10] = z * z * t + cos_an;
+	m[15] = 1.0f;
 	mgl_GLMultMatrixf(context, m);
 }
 
