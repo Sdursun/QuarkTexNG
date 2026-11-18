@@ -491,7 +491,20 @@ bool decode(const Command& c, int32_t& result) {
 
 	case QT_W3D_CLEAR_Z:
 		if (c.words != 1) return false;
-		QT_GL(Clear)(GL_DEPTH_BUFFER_BIT);
+		{
+			// Warp3D clears whatever W3D_ZBUFFERUPDATE says; glClear obeys the
+			// depth mask. BlitzQuake ends its frame with the update off and
+			// clears at the start of the next: nothing was cleared, and the
+			// first frame's depths hid every later one. (0.53 never switched
+			// the mask.)
+			GLboolean writes = GL_TRUE;
+#ifndef QT_TEST
+			glGetBooleanv(GL_DEPTH_WRITEMASK, &writes);
+#endif
+			if (!writes) QT_GL(DepthMask)(GL_TRUE);
+			QT_GL(Clear)(GL_DEPTH_BUFFER_BIT);
+			if (!writes) QT_GL(DepthMask)(GL_FALSE);
+		}
 		return true;
 
 	case QT_W3D_TEX_ALLOC: {
